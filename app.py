@@ -109,9 +109,20 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # Maksymalny rozmiar załą
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Inicjalizacja Google Cloud Storage
-storage_client = storage.Client()
 GCS_BUCKET = os.getenv('GCS_BUCKET_NAME')  # Upewnij się, że masz zmienną środowiskową z nazwą bucketu
+
+# Pobierz dane uwierzytelniające z JSON w zmiennej środowiskowej
+credentials_json = os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON')
+if not credentials_json:
+    raise Exception("Brak zmiennej środowiskowej GOOGLE_APPLICATION_CREDENTIALS_JSON")
+
+credentials_info = json.loads(credentials_json)
+credentials = service_account.Credentials.from_service_account_info(credentials_info)
+
+# Inicjalizuj klienta z poświadczeniami
+storage_client = storage.Client(credentials=credentials, project=credentials.project_id)
 bucket = storage_client.bucket(GCS_BUCKET)
+
 
 # Dozwolone typy plików
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'zip'}

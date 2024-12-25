@@ -852,7 +852,13 @@ def send_message_ajax():
     if not subject or not message or not language:
         return jsonify({'success': False, 'message': 'Wypełnij wszystkie wymagane pola.'}), 400
 
-    valid_emails = [email.strip() for email in recipients.split(',') if email.strip()]
+    valid_emails = []
+    raw_recipients = recipients.replace(';', ',')
+    for email in raw_recipients.split(','):
+        clean = email.strip()
+        if clean:
+        valid_emails.append(clean)
+
     if not valid_emails:
         return jsonify({'success': False, 'message': 'Proszę wybrać przynajmniej jeden adres e-mail.'}), 400
 

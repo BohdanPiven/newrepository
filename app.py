@@ -100,6 +100,10 @@ mail = Mail(app)
 # **Globalny słownik do śledzenia postępu wysyłania e-maili**
 email_sending_progress = {}
 
+# **Nowy słownik do przechowywania obiektów typu threading.Event umożliwiających zatrzymanie wysyłki**
+email_sending_stop_events = {}
+
+
 # Konfiguracja katalogu do przechowywania załączników
 UPLOAD_FOLDER = os.path.join(app.root_path, 'uploads')
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -109,20 +113,9 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # Maksymalny rozmiar załą
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Inicjalizacja Google Cloud Storage
+storage_client = storage.Client()
 GCS_BUCKET = os.getenv('GCS_BUCKET_NAME')  # Upewnij się, że masz zmienną środowiskową z nazwą bucketu
-
-# Pobierz dane uwierzytelniające z JSON w zmiennej środowiskowej
-credentials_json = os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON')
-if not credentials_json:
-    raise Exception("Brak zmiennej środowiskowej GOOGLE_APPLICATION_CREDENTIALS_JSON")
-
-credentials_info = json.loads(credentials_json)
-credentials = service_account.Credentials.from_service_account_info(credentials_info)
-
-# Inicjalizuj klienta z poświadczeniami
-storage_client = storage.Client(credentials=credentials, project=credentials.project_id)
 bucket = storage_client.bucket(GCS_BUCKET)
-
 
 # Dozwolone typy plików
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'zip'}
@@ -132,7 +125,7 @@ app.config['MAX_ATTACHMENTS'] = 5
 # Konfiguracja Google Sheets API
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
 SPREADSHEET_ID = os.getenv('SPREADSHEET_ID')  # Umieść w zmiennych środowiskowych
-RANGE_NAME = 'data!A1:AA3000'
+RANGE_NAME = 'A1:AH'  # WAŻNE: Pobranie danych do kolumny AH
 
 
 def is_allowed_file(file):
@@ -250,10 +243,6 @@ EMAIL_SIGNATURE_TEMPLATE = """
 
 # Funkcja pobierająca dane z Google Sheets
 def get_data_from_sheet():
-    """
-    Pobiera dane z arkusza Google Sheets w zakresie A1:AH.
-    """
-    # Pobierz zawartość JSON z zakodowanej zmiennej środowiskowej
     credentials_b64 = os.getenv('GOOGLE_CREDENTIALS_BASE64')
     if credentials_b64:
         credentials_json = base64.b64decode(credentials_b64).decode('utf-8')
@@ -265,8 +254,7 @@ def get_data_from_sheet():
     service = build('sheets', 'v4', credentials=credentials)
     sheet = service.spreadsheets()
 
-    # Ustaw zakres danych na A1:AH, aby obejmować wszystkie kolumny od A do AH
-    RANGE_NAME = 'A1:AH'
+    RANGE_NAME = 'A1:AX'  # Zmieniono zakres na A1:AX (50 kolumny)
 
     result = sheet.values().get(
         spreadsheetId=SPREADSHEET_ID,
@@ -274,13 +262,15 @@ def get_data_from_sheet():
     ).execute()
     data = result.get('values', [])
 
-    # Dodaj wypełnienie brakujących kolumn w każdym wierszu
+    # Uzupełnianie brakujących kolumn do 50
     for i, row in enumerate(data):
-        if len(row) < 34:  # AH to 34 kolumny
-            row.extend([''] * (34 - len(row)))
+        if len(row) < 50:  # AX to 50 kolumny
+            row.extend([''] * (50 - len(row)))
         print(f"Wiersz {i+1} ma {len(row)} kolumn")
-
+    
     return data
+
+
 
 
 # Funkcja zwracająca listę segmentów
@@ -293,26 +283,27 @@ def get_segments():
         "TSL West / East without BY&RU", "OTKPMM FCL / combi FTL",
         "OTKPLSH FCL / combi FTL", "OTKPS", "OTKPT", "OTKPB",
         "OKW", "OKW 20'", "Containers PL / non-normative",
-        "WT Premium", "WT Premium / Rail", "Foreign EU / FCL, LCL",
+        "WT Premium", "WT Premium / Sea", "WT Premium / Rail", "Foreign EU / FCL, LCL",
         "Foreign EU / LCL / FCL / REF",
-        "FCL / West / South", "FCL / LCL / FTL / LTL / BALKANS / South",
+        "FCL / West / South", "FCL / LCL / FTL / LTL / BALKANS / South", "OTKPMM FCL heavy",
         "Foreign EU / FTL, LTL, FCL, LCL",
         "Foreign EU / FTL, LTL, FCL, LCL no UA,BY,RU",
         "Foreign EU / FTL, LTL, FCL, LCL from/to UA",
         "Foreign EU / FTL, LTL, FCL, LCL, ADR no UA,BY,RU",
         "Foreign EU / FTL, LTL, FCL, LCL no FR",
         "Foreign EU / FTL, LTL, FCL, LCL + REF",
-        "Foreign EU + Scandinavie / FTL, LTL, FCL, LCL",
+        "Foreign EU + Scandinavie / FTL, LTL, FCL, LCL", "Ukraine - Europe - Ukraine",
         "Foreign EU / FTL, LTL", "Foreign EU / FTL, LTL, REF",
         "Foreign EU / FTL +REF +ADR",
         "Foreign EU / FTL, LTL from PL to CZ & EE",
         "FTL / LTL + ADR Poland & Switzerland", "FLT / LTL with lift",
-        "FTL K", "LTL", "FTL / LTL K", "LTL K",
+        "FTL K", "Only REF", "LTL", "FTL / LTL K", "LTL K",
         "LTL East Europe", "KOPER", "Only start from Koper",
         "Turkey carriers TIMOKOM", "double-deck car carrier",
         "CARGO Europe / Russia, Turkey, Asia",
         "Foreign EU / only open trailers", "Central Europe",
-        "PL REF", "Agency", "DLG", "NON"
+        "PL REF", "Central Europe only FTL", "Agency", "Rail Global", "DLG", "NON", "NEW1", 
+        "NEW2","NEW3","NEW2025_1", "NEW2025_2", "NEW2025_3", "NEW2025_4", "NEW2025_5"
     ]
 
 # Funkcja licząca unikalne segmenty
@@ -362,24 +353,17 @@ def get_email_company_pairs_for_segment(data, segment, subsegment):
 
 # Funkcja do uzyskania unikalnych możliwości z firmami
 def get_unique_possibilities_with_companies(data):
-    """
-    Zwraca słownik, gdzie kluczem jest opis możliwości transportowej,
-    a wartością lista firm posiadających tę możliwość.
-    """
     possibilities = {}
     for row_index, row in enumerate(data):
-        # Zakładamy, że nazwa firmy znajduje się w kolumnie U (indeks 20)
-        company = row[20].strip() if row[20] else "Nieznana Firma"
-        # Zakładamy, że adres e-mail znajduje się w kolumnie R (indeks 17)
-        email = row[17].strip() if row[17] else ""
+        company = row[20].strip() if len(row) > 20 and row[20] else "Nieznana Firma"
+        email = row[17].strip() if len(row) > 17 and row[17] else ""
 
-        # Upewnij się, że każdy wiersz ma dokładnie 34 elementy (A1:AH)
-        if len(row) != 34:
+        if len(row) != 50:
             print(f"Wiersz {row_index+1} ma niepoprawną liczbę kolumn: {len(row)}")
-            continue  # Pomijamy wiersze z niepoprawną liczbą kolumn
+            continue
 
-        # Iteracja przez kolumny możliwości (Z do AH, indeksy 25 do 33)
-        for i in range(25, 34):  # Indeksy 25 do 33 w Pythonie
+        # Iteracja przez kolumny Z do AH (indeksy 25 do 33)
+        for i in range(25, 34):
             possibility = row[i].strip() if row[i] else ''
             if possibility:
                 if possibility not in possibilities:
@@ -387,6 +371,54 @@ def get_unique_possibilities_with_companies(data):
                 possibilities[possibility].append({'email': email, 'company': company})
                 print(f"Znaleziona możliwość '{possibility}' w wierszu {row_index+1} dla firmy '{company}'")
     return possibilities
+
+
+
+
+
+def get_potential_clients(data):
+    """
+    Pobiera potencjalnych klientów z danych arkusza.
+
+    Kolumny:
+        - AT: Nazwa firmy (45)
+        - AU: Adres email (46)
+        - AV: Grupa (47)
+        - AX: Język (49)
+
+    Zwraca:
+        Słownik z grupami jako kluczami, a listami klientów jako wartościami.
+    """
+    potential_clients = {}
+    for idx, row in enumerate(data):
+        print(f"Wiersz {idx} ma długość {len(row)}")
+        if len(row) > 49:
+            group = row[47]  # AV
+            email = row[46]  # AU
+            company = row[45]  # AT
+            language = row[49]  # AX
+            print(f"Wiersz {idx}: group='{group}', email='{email}', company='{company}', language='{language}'")
+            if group and email and company and language:
+                group = group.strip()
+                email = email.strip()
+                company = company.strip()
+                language = language.strip()
+                if group not in potential_clients:
+                    potential_clients[group] = []
+                potential_clients[group].append({
+                    'email': email,
+                    'company': company,
+                    'language': language
+                })
+            else:
+                print(f"Wiersz {idx} pominięty z powodu brakujących danych.")
+        else:
+            print(f"Wiersz {idx} pominięty z powodu niewystarczającej długości.")
+    # Logowanie liczby grup i klientów
+    print(f"Pobrano {len(potential_clients)} grup potencjalnych klientów.")
+    total_clients = sum(len(clients) for clients in potential_clients.values())
+    print(f"Pobrano {total_clients} potencjalnych klientów.")
+    return potential_clients
 
 
 
@@ -612,11 +644,17 @@ def send_emails_async(emails, subject, body, user, attachment_paths=None, task_i
         task_id (str, optional): Unikalny identyfikator zadania. Defaults to None.
     """
     with app.app_context():
+        stop_event = email_sending_stop_events.get(task_id)
         try:
             app.logger.debug(f"Rozpoczęcie wysyłania e-maili do: {emails}")
             total = len(emails)
             sent = 0
             for email in emails:
+                # Sprawdź, czy otrzymaliśmy sygnał do zatrzymania
+                if stop_event and stop_event.is_set():
+                    app.logger.info(f"Zatrzymano wysyłanie e-maili dla task_id: {task_id}")
+                    break
+                
                 send_email(email, subject, body, user, attachments=attachment_paths)
                 sent += 1
                 # Aktualizacja postępu
@@ -629,7 +667,7 @@ def send_emails_async(emails, subject, body, user, attachment_paths=None, task_i
         finally:
             # Usunięcie postępu po zakończeniu
             email_sending_progress.pop(task_id, None)
-            # Usuwanie załączników po wysłaniu wszystkich e-maili
+            # Usuwanie załączników po wysłaniu wszystkich lub zatrzymaniu e-maili
             if attachment_paths:
                 for file_path in attachment_paths:
                     try:
@@ -640,6 +678,19 @@ def send_emails_async(emails, subject, body, user, attachment_paths=None, task_i
                             app.logger.error(f"Nie udało się usunąć załącznika {file_path}: Plik nie istnieje.")
                     except Exception as e:
                         app.logger.error(f"Nie udało się usunąć załącznika {file_path}: {e}")
+
+
+@app.route('/stop_sending/<task_id>', methods=['POST'])
+def stop_sending(task_id):
+    """
+    Endpoint do zatrzymania wysyłania e-maili dla danego task_id.
+    """
+    stop_event = email_sending_stop_events.get(task_id)
+    if stop_event:
+        stop_event.set()
+        return jsonify({'success': True, 'message': 'Proces wysyłania został zatrzymany.'}), 200
+    else:
+        return jsonify({'success': False, 'message': 'Nie znaleziono zadania o podanym ID.'}), 404
 
 @app.route('/email_progress/<task_id>')
 def email_progress(task_id):
@@ -793,22 +844,19 @@ def send_message_ajax():
     if not user:
         return jsonify({'success': False, 'message': 'Użytkownik nie istnieje.'}), 404
 
-    # Pobranie danych z formularza
     subject = request.form.get('subject')
     message = request.form.get('message')
     language = request.form.get('language')
-    segments_selected = request.form.getlist('segments')
-    include_emails = request.form.getlist('include_emails')
+    recipients = request.form.get('recipients', '')
     attachments = request.files.getlist('attachments')
 
-    # Walidacja wymaganych pól
     if not subject or not message or not language:
-        return jsonify({'success': False, 'message': 'Proszę wypełnić wszystkie wymagane pola.'}), 400
+        return jsonify({'success': False, 'message': 'Wypełnij wszystkie wymagane pola.'}), 400
 
-    if not include_emails:
+    valid_emails = [email.strip() for email in recipients.split(',') if email.strip()]
+    if not valid_emails:
         return jsonify({'success': False, 'message': 'Proszę wybrać przynajmniej jeden adres e-mail.'}), 400
 
-    # Obsługa załączników
     attachment_filenames = []
     for file in attachments:
         if file and allowed_file(file.filename):
@@ -820,40 +868,28 @@ def send_message_ajax():
         elif file.filename != '':
             return jsonify({'success': False, 'message': f'Nieprawidłowy typ pliku: {file.filename}'}), 400
 
-    # **Nowe: Pobierz dane z arkusza i utwórz mapę adresów e-mail do podsegmentów**
     data = get_data_from_sheet()
     email_subsegment = get_email_subsegment_mapping(data)
-
-    # **Filtruj adresy e-mail zgodnie z wybranym językiem**
-    filtered_emails = [email for email in include_emails if email_subsegment.get(email) == language]
+    filtered_emails = [email for email in valid_emails if email_subsegment.get(email) == language]
 
     if not filtered_emails:
         return jsonify({'success': False, 'message': 'Brak adresów e-mail zgodnych z wybranym językiem.'}), 400
 
     try:
-        # Wysyłanie e-maili do wybranych adresów
-        for email in filtered_emails:
-            send_email(
-                to_email=email,
-                subject=subject,
-                body=message,
-                user=user,
-                attachments=attachment_filenames
-            )
+        import uuid
+        task_id = str(uuid.uuid4())
+        stop_event = threading.Event()
+        email_sending_stop_events[task_id] = stop_event
+        thread = threading.Thread(
+            target=send_emails_async,
+            args=(filtered_emails, subject, message, user, attachment_filenames, task_id)
+        )
+        thread.start()
 
-        # Usunięcie załączników po wysłaniu
-        for filepath in attachment_filenames:
-            try:
-                os.remove(filepath)
-            except Exception as e:
-                app.logger.error(f'Nie udało się usunąć załącznika {filepath}: {e}')
-
-        return jsonify({'success': True, 'message': 'Wiadomość została wysłana pomyślnie.'}), 200
-
+        return jsonify({'success': True, 'message': 'Rozpoczęto wysyłanie wiadomości.', 'task_id': task_id}), 200
     except Exception as e:
-        app.logger.error(f'Błąd podczas wysyłania emaila: {e}')
-        return jsonify({'success': False, 'message': 'Wystąpił błąd podczas wysyłania wiadomości.'}), 500
-
+        app.logger.error(f'Błąd: {e}')
+        return jsonify({'success': False, 'message': 'Błąd podczas wysyłania.'}), 500
 
 
 @app.route('/add_note_ajax', methods=['POST'])
@@ -863,72 +899,35 @@ def add_note_ajax():
 
     data = request.get_json()
     note_content = data.get('note') if data else None
-    user_id = session['user_id']
 
+    user_id = session['user_id']
     if note_content and note_content.strip():
         new_note = Note(content=note_content.strip(), user_id=user_id)
         db.session.add(new_note)
         try:
             db.session.commit()
             notes = Note.query.filter_by(user_id=user_id).all()
-            notes_data = [{'id': note.id, 'content': note.content} for note in notes]
-            return jsonify({'success': True, 'message': 'Notatka została dodana.', 'notes': notes_data})
+            notes_data = [
+                {
+                    'id': note.id,
+                    'content': note.content,
+                    'user': {
+                        'first_name': note.user.first_name,
+                        'last_name': note.user.last_name,
+                        'color': note.user.color,
+                        'email': note.user.email_address
+                    }
+                } for note in notes
+            ]
+            return jsonify({'success': True, 'message': 'Notatka została dodana.', 'notes': notes_data}), 200
         except Exception as e:
             db.session.rollback()
-            app.logger.error(f"Nie udało się dodać notatki: {e}")
-            return jsonify({'success': False, 'message': 'Wystąpił błąd podczas dodawania notatki.'}), 500
+            app.logger.error(f"Błąd: {e}")
+            return jsonify({'success': False, 'message': f'Błąd podczas dodawania notatki: {e}'}), 500
     else:
         return jsonify({'success': False, 'message': 'Nie można dodać pustej notatki.'}), 400
 
 
-
-@app.route('/delete_note_ajax', methods=['POST'])
-def delete_note_ajax():
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'message': 'Nie jesteś zalogowany.'}), 401
-
-    data = request.get_json()
-    note_id = data.get('note_id')
-    user_id = session['user_id']
-
-    note = Note.query.get(note_id)
-    if note and note.user_id == user_id:
-        db.session.delete(note)
-        try:
-            db.session.commit()
-            # Pobranie zaktualizowanej listy notatek
-            notes = Note.query.filter_by(user_id=user_id).all()
-            notes_data = [{'id': note.id, 'content': note.content} for note in notes]
-            return jsonify({'success': True, 'message': 'Notatka została usunięta.', 'notes': notes_data})
-        except Exception as e:
-            db.session.rollback()
-            app.logger.error(f"Nie udało się usunąć notatki: {e}")
-            return jsonify({'success': False, 'message': 'Wystąpił błąd podczas usuwania notatki.'}), 500
-    else:
-        return jsonify({'success': False, 'message': 'Notatka nie została znaleziona lub nie masz do niej dostępu.'}), 404
-
-
-
-@app.route('/delete_all_notes_ajax', methods=['POST'])
-def delete_all_notes_ajax():
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'message': 'Nie jesteś zalogowany.'}), 401
-
-    user_id = session['user_id']
-    try:
-        # Usunięcie wszystkich notatek użytkownika
-        deleted_count = Note.query.filter_by(user_id=user_id).delete()
-        db.session.commit()
-        # Pobranie zaktualizowanej listy notatek (powinna być pusta)
-        notes = Note.query.filter_by(user_id=user_id).all()
-        notes_data = [{'id': note.id, 'content': note.content} for note in notes]
-        return jsonify({'success': True, 'message': f'Usunięto {deleted_count} notatek.', 'notes': notes_data})
-    except Exception as e:
-        db.session.rollback()
-        app.logger.error(f"Błąd podczas usuwania wszystkich notatek: {e}")
-        return jsonify({'success': False, 'message': 'Wystąpił błąd podczas usuwania notatek.'}), 500
-
-from flask import jsonify
 
 @app.route('/edit_note_ajax', methods=['POST'])
 def edit_note_ajax():
@@ -949,314 +948,346 @@ def edit_note_ajax():
 
     note = Note.query.get(note_id)
     if not note or note.user_id != user_id:
-        return jsonify({'success': False, 'message': 'Notatka nie została znaleziona lub nie masz do niej dostępu.'}), 404
+        return jsonify({'success': False, 'message': 'Notatka nie istnieje lub brak dostępu.'}), 404
 
     try:
         note.content = new_content.strip()
         db.session.commit()
-        return jsonify({'success': True, 'message': 'Notatka została zaktualizowana.', 'note': {'id': note.id, 'content': note.content}})
+        return jsonify({'success': True, 'message': 'Notatka zaktualizowana.', 'note': {'id': note.id, 'content': note.content}})
     except Exception as e:
         db.session.rollback()
-        app.logger.error(f"Nie udało się zaktualizować notatki: {e}")
-        return jsonify({'success': False, 'message': 'Wystąpił błąd podczas aktualizacji notatki.'}), 500
+        app.logger.error(f"Błąd: {e}")
+        return jsonify({'success': False, 'message': 'Błąd podczas aktualizacji notatki.'}), 500
+
+
+@app.route('/delete_note_ajax', methods=['POST'])
+def delete_note_ajax():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Nie jesteś zalogowany.'}), 401
+
+    data = request.get_json()
+    note_id = data.get('note_id')
+
+    user_id = session['user_id']
+    note = Note.query.get(note_id)
+    if note and note.user_id == user_id:
+        db.session.delete(note)
+        try:
+            db.session.commit()
+            notes = Note.query.filter_by(user_id=user_id).all()
+            notes_data = [
+                {
+                    'id': n.id,
+                    'content': n.content,
+                    'user': {
+                        'first_name': n.user.first_name,
+                        'last_name': n.user.last_name,
+                        'color': n.user.color,
+                        'email': n.user.email_address
+                    }
+                } for n in notes
+            ]
+            return jsonify({'success': True, 'message': 'Notatka została usunięta.', 'notes': notes_data})
+        except Exception as e:
+            db.session.rollback()
+            app.logger.error(f"Błąd: {e}")
+            return jsonify({'success': False, 'message': 'Błąd podczas usuwania notatki.'}), 500
+    else:
+        return jsonify({'success': False, 'message': 'Notatka nie istnieje lub brak dostępu.'}), 404
 
 
 
-# Trasa "Zapomniałeś hasła"
+@app.route('/delete_all_notes_ajax', methods=['POST'])
+def delete_all_notes_ajax():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Nie jesteś zalogowany.'}), 401
+
+    user_id = session['user_id']
+    try:
+        deleted_count = Note.query.filter_by(user_id=user_id).delete()
+        db.session.commit()
+        notes = Note.query.filter_by(user_id=user_id).all()
+        notes_data = [{'id': note.id, 'content': note.content} for note in notes]
+        return jsonify({'success': True, 'message': f'Usunięto {deleted_count} notatek.', 'notes': notes_data})
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Błąd: {e}")
+        return jsonify({'success': False, 'message': 'Błąd podczas usuwania notatek.'}), 500
+
+
+# Dodanie funkcji list_routes
+@app.route('/routes')
+def list_routes():
+    import urllib
+    output = []
+    for rule in app.url_map.iter_rules():
+        methods = ','.join(sorted(rule.methods))
+        line = urllib.parse.unquote("{:50s} {:20s} {}".format(rule.endpoint, methods, rule))
+        output.append(line)
+    return "<br>".join(output)
+
+
+# Trasa "Zapomniałeś hasła" - zmieniona logika
+forgot_password_template = '''
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Odzyskiwanie hasła - Ranges</title>
+    <link rel="icon" type="image/vnd.microsoft.icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <style>
+        body {
+            font-family: 'Quantico', sans-serif;
+            background-color: #f2f2f2;
+            color: #333;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            position: relative;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            width: 100%;
+            max-width: 500px;
+            position: relative;
+        }
+        h2 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        input, button {
+            margin: 10px 0;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            transition: 0.3s ease;
+            font-size: 16px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        input:focus {
+            outline: none;
+            box-shadow: 0 0 5px #1f8ef1;
+        }
+        button {
+            background-color: #1f8ef1;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            border: 1px solid #1f8ef1;
+        }
+        button:hover {
+            background-color: #0a6db9;
+            transform: scale(1.05);
+        }
+        .flash-message {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            text-align: center;
+        }
+        .flash-message.success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .flash-message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        a {
+            color: #1f8ef1;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .footer {
+            color: #888888;
+            text-align: center;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Odzyskiwanie hasła</h2>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash-message {{ category }}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        <form method="post">
+            <label>Nazwa użytkownika:</label>
+            <input type="text" name="username" required>
+            <label>Klucz licencyjny:</label>
+            <input type="text" name="license_key" required>
+            <button type="submit">Weryfikuj</button>
+        </form>
+        <p><a href="{{ url_for('login') }}">Powrót do logowania</a></p>
+        <div class="footer">
+            &copy; DigitDrago
+        </div>
+    </div>
+</body>
+</html>
+'''
+
 @app.route('/forgot_password', methods=['GET', 'POST'])
 def forgot_password():
     if request.method == 'POST':
         username = request.form.get('username')
+        license_key_input = request.form.get('license_key')
+
         user = User.query.filter_by(username=username).first()
-        if user:
-            # Generowanie 6-cyfrowego kodu
-            code = f"{randint(100000, 999999)}"
-            expiration_time = datetime.utcnow() + timedelta(minutes=15)
-
-            # Zapisanie kodu w bazie danych
-            verification_code = VerificationCode(user_id=user.id, code=code, expiration_time=expiration_time)
-            db.session.add(verification_code)
-            db.session.commit()
-
-            # Wysłanie e-maila z kodem weryfikacyjnym
-            if send_verification_email(user, code):
-                flash('Kod weryfikacyjny został wysłany na Twój adres e-mail.', 'success')
-                session['reset_user_id'] = user.id
-                return redirect(url_for('verify_email_code'))
-            else:
-                flash('Wystąpił błąd podczas wysyłania e-maila. Skontaktuj się z administratorem.', 'error')
+        if user and user.license_key and user.license_key.key == license_key_input:
+            # Sprawdzenie czy klucz licencyjny jest ważny i nie wygasł
+            license_key = user.license_key
+            if license_key.is_revoked:
+                flash('Twój klucz licencyjny został unieważniony.', 'error')
                 return redirect(url_for('forgot_password'))
+            elif license_key.expiration_date < datetime.utcnow():
+                flash('Twój klucz licencyjny wygasł.', 'error')
+                return redirect(url_for('forgot_password'))
+            else:
+                # Klucz jest poprawny i aktualny - ustaw verified_user_id i przejdź do resetu hasła
+                session['verified_user_id'] = user.id
+                return redirect(url_for('reset_password'))
         else:
-            flash('Użytkownik o podanej nazwie nie istnieje.', 'error')
+            flash('Niepoprawny użytkownik lub klucz licencyjny.', 'error')
             return redirect(url_for('forgot_password'))
 
-    # Szablon "Zapomniałeś hasła"
-    forgot_password_template = '''
-    <!DOCTYPE html>
-    <html lang="pl">
-    <head>
-        <meta charset="UTF-8">
-        <title>Odzyskiwanie hasła - Ranges</title>
-        <link rel="icon" type="image/vnd.microsoft.icon" href="{{ url_for('static', filename='favicon.ico') }}">
-        <style>
-            /* Dodaj swoje style CSS tutaj */
-            body {
-                font-family: 'Quantico', sans-serif;
-                background-color: #f2f2f2;
-                color: #333;
-                padding: 20px;
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                height: 100vh;
-                position: relative;
-            }
-            .container {
-                background-color: #ffffff;
-                padding: 30px;
-                border-radius: 10px;
-                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-                width: 100%;
-                max-width: 500px;
-                position: relative;
-            }
-            h2 {
-                text-align: center;
-                margin-bottom: 20px;
-            }
-            input, button {
-                margin: 10px 0;
-                padding: 10px;
-                border: none;
-                border-radius: 5px;
-                transition: 0.3s ease;
-                font-size: 16px;
-                width: 100%;
-                box-sizing: border-box;
-            }
-            input:focus {
-                outline: none;
-                box-shadow: 0 0 5px #1f8ef1;
-            }
-            button {
-                background-color: #1f8ef1;
-                color: white;
-                cursor: pointer;
-                transition: background-color 0.3s, transform 0.2s;
-                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-                border: 1px solid #1f8ef1;
-            }
-            button:hover {
-                background-color: #0a6db9;
-                transform: scale(1.05);
-                box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
-            }
-            .flash-message {
-                background-color: #f8d7da;
-                color: #721c24;
-                padding: 10px;
-                border-radius: 5px;
-                margin: 10px 0;
-                text-align: center;
-            }
-            .flash-message.success {
-                background-color: #d4edda;
-                color: #155724;
-            }
-            .flash-message.error {
-                background-color: #f8d7da;
-                color: #721c24;
-            }
-            a {
-                color: #1f8ef1;
-                text-decoration: none;
-            }
-            a:hover {
-                text-decoration: underline;
-            }
-            .footer {
-                color: #888888;
-                text-align: center;
-                margin-top: 20px;
-                font-size: 14px;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h2>Odzyskiwanie hasła</h2>
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                        <div class="flash-message {{ category }}">
-                            {{ message }}
-                        </div>
-                    {% endfor %}
-                {% endif %}
-            {% endwith %}
-            <form method="post">
-                <label>Nazwa użytkownika:</label>
-                <input type="text" name="username" required>
-                <button type="submit">Wyślij kod weryfikacyjny</button>
-            </form>
-            <p><a href="{{ url_for('login') }}">Powrót do logowania</a></p>
-            <div class="footer">
-                &copy; DigitDrago
-            </div>
-        </div>
-    </body>
-    </html>
-    '''
     return render_template_string(forgot_password_template)
 
 
-
-# Trasa weryfikacji kodu e-mail
-@app.route('/verify_email_code', methods=['GET', 'POST'])
-def verify_email_code():
-    if 'reset_user_id' not in session:
-        flash('Brak autoryzowanego żądania resetu hasła.', 'error')
-        return redirect(url_for('login'))
-
-    if request.method == 'POST':
-        code = request.form.get('code')
-        user_id = session['reset_user_id']
-        verification_code = VerificationCode.query.filter_by(user_id=user_id, code=code).first()
-        if verification_code and verification_code.expiration_time >= datetime.utcnow():
-            # Kod jest poprawny i nie wygasł
-            session['verified_user_id'] = user_id
-            # Usunięcie kodu z bazy danych
-            db.session.delete(verification_code)
-            db.session.commit()
-            return redirect(url_for('reset_password'))
-        else:
-            flash('Niepoprawny lub wygasły kod weryfikacyjny.', 'error')
-            return redirect(url_for('verify_email_code'))
-
-    # Szablon wprowadzania kodu weryfikacyjnego z e-maila
-    verify_email_code_template = '''
-    <!DOCTYPE html>
-    <html lang="pl">
-    <head>
-        <meta charset="UTF-8">
-        <title>Weryfikacja kodu E-mail - Ranges</title>
-        <link rel="icon" type="image/vnd.microsoft.icon" href="{{ url_for('static', filename='favicon.ico') }}">
-        <style>
-            /* Dodaj swoje style CSS tutaj */
-            body {
-                font-family: 'Quantico', sans-serif;
-                background-color: #f2f2f2;
-                color: #333;
-                padding: 20px;
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                height: 100vh;
-                position: relative;
-            }
-            .container {
-                background-color: #ffffff;
-                padding: 30px;
-                border-radius: 10px;
-                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-                width: 100%;
-                max-width: 500px;
-                position: relative;
-            }
-            h2 {
-                text-align: center;
-                margin-bottom: 20px;
-            }
-            input, button {
-                margin: 10px 0;
-                padding: 10px;
-                border: none;
-                border-radius: 5px;
-                transition: 0.3s ease;
-                font-size: 16px;
-                width: 100%;
-                box-sizing: border-box;
-            }
-            input:focus {
-                outline: none;
-                box-shadow: 0 0 5px #1f8ef1;
-            }
-            button {
-                background-color: #1f8ef1;
-                color: white;
-                cursor: pointer;
-                transition: background-color 0.3s, transform 0.2s;
-                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-                border: 1px solid #1f8ef1;
-            }
-            button:hover {
-                background-color: #0a6db9;
-                transform: scale(1.05);
-                box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
-            }
-            .flash-message {
-                background-color: #f8d7da;
-                color: #721c24;
-                padding: 10px;
-                border-radius: 5px;
-                margin: 10px 0;
-                text-align: center;
-            }
-            .flash-message.success {
-                background-color: #d4edda;
-                color: #155724;
-            }
-            .flash-message.error {
-                background-color: #f8d7da;
-                color: #721c24;
-            }
-            a {
-                color: #1f8ef1;
-                text-decoration: none;
-            }
-            a:hover {
-                text-decoration: underline;
-            }
-            .footer {
-                color: #888888;
-                text-align: center;
-                margin-top: 20px;
-                font-size: 14px;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h2>Weryfikacja kodu E-mail</h2>
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                        <div class="flash-message {{ category }}">
-                            {{ message }}
-                        </div>
-                    {% endfor %}
-                {% endif %}
-            {% endwith %}
-            <form method="post">
-                <label>Wprowadź kod weryfikacyjny:</label>
-                <input type="text" name="code" required>
-                <button type="submit">Zweryfikuj kod</button>
-            </form>
-            <p><a href="{{ url_for('login') }}">Powrót do logowania</a></p>
-            <div class="footer">
-                &copy; DigitDrago
-            </div>
+# Szablon resetowania hasła
+reset_password_template = '''
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Resetowanie hasła - Ranges</title>
+    <link rel="icon" type="image/vnd.microsoft.icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <style>
+        body {
+            font-family: 'Quantico', sans-serif;
+            background-color: #f2f2f2;
+            color: #333;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            position: relative;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            width: 100%;
+            max-width: 500px;
+            position: relative;
+        }
+        h2 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        input, button {
+            margin: 10px 0;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            transition: 0.3s ease;
+            font-size: 16px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        input:focus {
+            outline: none;
+            box-shadow: 0 0 5px #1f8ef1;
+        }
+        button {
+            background-color: #1f8ef1;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            border: 1px solid #1f8ef1;
+        }
+        button:hover {
+            background-color: #0a6db9;
+            transform: scale(1.05);
+        }
+        .flash-message {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            text-align: center;
+        }
+        .flash-message.success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .flash-message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        a {
+            color: #1f8ef1;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .footer {
+            color: #888888;
+            text-align: center;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Resetowanie hasła</h2>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash-message {{ category }}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        <form method="post">
+            <label>Nowe hasło:</label>
+            <input type="password" name="new_password" required>
+            <button type="submit">Zresetuj hasło</button>
+        </form>
+        <p><a href="{{ url_for('login') }}">Powrót do logowania</a></p>
+        <div class="footer">
+            &copy; DigitDrago
         </div>
-    </body>
-    </html>
-    '''
-    return render_template_string(verify_email_code_template)
+    </div>
+</body>
+</html>
+'''
 
-@app.route('/favicon.ico')
-def favicon():
-    return send_from_directory(os.path.join(app.root_path, 'static'),
-                               'favicon.ico', mimetype='image/vnd.microsoft.icon')
-# Trasa resetowania hasła
 @app.route('/reset_password', methods=['GET', 'POST'])
 def reset_password():
     if 'verified_user_id' not in session:
@@ -1271,132 +1302,20 @@ def reset_password():
             user.set_app_password(new_password)
             db.session.commit()
             flash('Twoje hasło zostało zresetowane. Możesz się teraz zalogować.', 'success')
-            # Usunięcie sesji resetu
-            session.pop('reset_user_id', None)
             session.pop('verified_user_id', None)
             return redirect(url_for('login'))
         else:
             flash('Wystąpił błąd. Spróbuj ponownie.', 'error')
             return redirect(url_for('reset_password'))
 
-    # Szablon resetowania hasła
-    reset_password_template = '''
-    <!DOCTYPE html>
-    <html lang="pl">
-    <head>
-        <meta charset="UTF-8">
-        <title>Resetowanie hasła - Ranges</title>
-        <link rel="icon" type="image/vnd.microsoft.icon" href="{{ url_for('static', filename='favicon.ico') }}">
-        <style>
-            /* Dodaj swoje style CSS tutaj */
-            body {
-                font-family: 'Quantico', sans-serif;
-                background-color: #f2f2f2;
-                color: #333;
-                padding: 20px;
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                height: 100vh;
-                position: relative;
-            }
-            .container {
-                background-color: #ffffff;
-                padding: 30px;
-                border-radius: 10px;
-                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-                width: 100%;
-                max-width: 500px;
-                position: relative;
-            }
-            h2 {
-                text-align: center;
-                margin-bottom: 20px;
-            }
-            input, button {
-                margin: 10px 0;
-                padding: 10px;
-                border: none;
-                border-radius: 5px;
-                transition: 0.3s ease;
-                font-size: 16px;
-                width: 100%;
-                box-sizing: border-box;
-            }
-            input:focus {
-                outline: none;
-                box-shadow: 0 0 5px #1f8ef1;
-            }
-            button {
-                background-color: #1f8ef1;
-                color: white;
-                cursor: pointer;
-                transition: background-color 0.3s, transform 0.2s;
-                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-                border: 1px solid #1f8ef1;
-            }
-            button:hover {
-                background-color: #0a6db9;
-                transform: scale(1.05);
-                box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
-            }
-            .flash-message {
-                background-color: #f8d7da;
-                color: #721c24;
-                padding: 10px;
-                border-radius: 5px;
-                margin: 10px 0;
-                text-align: center;
-            }
-            .flash-message.success {
-                background-color: #d4edda;
-                color: #155724;
-            }
-            .flash-message.error {
-                background-color: #f8d7da;
-                color: #721c24;
-            }
-            a {
-                color: #1f8ef1;
-                text-decoration: none;
-            }
-            a:hover {
-                text-decoration: underline;
-            }
-            .footer {
-                color: #888888;
-                text-align: center;
-                margin-top: 20px;
-                font-size: 14px;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h2>Resetowanie hasła</h2>
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                        <div class="flash-message {{ category }}">
-                            {{ message }}
-                        </div>
-                    {% endfor %}
-                {% endif %}
-            {% endwith %}
-            <form method="post">
-                <label>Nowe hasło:</label>
-                <input type="password" name="new_password" required>
-                <button type="submit">Zresetuj hasło</button>
-            </form>
-            <p><a href="{{ url_for('login') }}">Powrót do logowania</a></p>
-            <div class="footer">
-                &copy; DigitDrago
-            </div>
-        </div>
-    </body>
-    </html>
-    '''
     return render_template_string(reset_password_template)
+
+
+
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(os.path.join(app.root_path, 'static'),
+                               'favicon.ico', mimetype='image/vnd.microsoft.icon')
 
 
 
@@ -1472,6 +1391,16 @@ def register():
                 flash('Użytkownik z tym adresem e-mail już istnieje.', 'error')
                 return redirect(url_for('register'))
             else:
+                # Przypisanie koloru użytkownikowi
+                used_colors = [user.color for user in User.query.all()]
+                available_colors = [color for color in PASTEL_COLORS if color not in used_colors]
+                if available_colors:
+                    assigned_color = available_colors[0]
+                else:
+                    # Jeśli wszystkie kolory są użyte, przypisz losowy kolor z listy
+                    import random
+                    assigned_color = random.choice(PASTEL_COLORS)
+
                 # Szyfrowanie hasła SMTP
                 encrypted_password = fernet.encrypt(email_password.encode()).decode()
                 # Haszowanie hasła aplikacyjnego
@@ -1485,7 +1414,8 @@ def register():
                     email_password=encrypted_password,
                     app_password_hash=hashed_app_password,
                     phone_number=phone_number,
-                    license_key=license_key
+                    license_key=license_key,
+                    color=assigned_color  # Przypisanie koloru
                 )
                 db.session.add(new_user)
                 db.session.commit()
@@ -1497,7 +1427,7 @@ def register():
             flash('Wystąpił błąd podczas rejestracji. Spróbuj ponownie.', 'error')
             return redirect(url_for('register'))
 
-    # Szablon rejestracji
+    # Szablon rejestracji (pozostaje bez zmian)
     register_template = r'''
     <!DOCTYPE html>
     <html lang="pl">
@@ -2120,6 +2050,7 @@ def allowed_file(filename):
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if 'user_id' not in session:
+        flash('Nie jesteś zalogowany.', 'error')
         return redirect(url_for('login'))
 
     user_id = session['user_id']
@@ -2130,12 +2061,10 @@ def index():
 
     data = get_data_from_sheet()
     segments = get_unique_segments_with_counts(data)
-    notes = Note.query.filter_by(user_id=user_id).all()
-
-    # Pobranie możliwości transportowych z informacją o języku
+    notes = Note.query.order_by(Note.id.desc()).all()  # Pobranie wszystkich notatek, najnowsze na górze
     possibilities = get_unique_possibilities_with_companies(data)
+    potential_clients = get_potential_clients(data)
 
-    # Szablon główny z obsługą AJAX dla notatek i wysyłania emaili
     index_template = '''
     <!DOCTYPE html>
     <html lang="pl">
@@ -2233,8 +2162,8 @@ def index():
                 position: fixed;
                 top: 60px;
                 bottom: 0;
-                left: -600px; /* Zwiększona szerokość sidebaru */
-                width: 600px; /* Zwiększona szerokość sidebaru */
+                left: -600px;
+                width: 600px;
                 background-color: rgba(44, 62, 80, 0.95);
                 box-shadow: 2px 0 5px rgba(0,0,0,0.1);
                 padding: 20px;
@@ -2263,7 +2192,7 @@ def index():
                 z-index: 1;
             }
             .main-content.sidebar-active {
-                margin-left: 600px; /* Dopasowana do szerokości sidebaru */
+                margin-left: 600px;
             }
             .form-container {
                 display: flex;
@@ -2348,7 +2277,7 @@ def index():
                 transform: scale(0.95);
             }
             .yellow-btn {
-                background-color: #DAA520; /* Ciemnożółty kolor */
+                background-color: #DAA520;
                 color: #ffffff;
                 padding: 8px 12px;
                 border: none;
@@ -2360,13 +2289,12 @@ def index():
                 width: 100%;
             }
             .yellow-btn:hover {
-                background-color: #B8860B; /* Ciemniejszy odcień żółci */
+                background-color: #B8860B;
                 transform: scale(1.05);
             }
             .yellow-btn:active {
                 transform: scale(0.95);
             }
-            /* Styl dla przycisku "Usuń" */
             .delete-btn {
                 background-color: #6c757d;
                 color: #ffffff;
@@ -2384,10 +2312,9 @@ def index():
             .delete-btn:active {
                 transform: scale(0.95);
             }
-            /* Styl dla przycisku "Edytuj" */
             .edit-btn {
-                background-color: #17a2b8; /* Ciemnoniebieski */
-                color: #ffffff; /* Biały tekst */
+                background-color: #17a2b8;
+                color: #ffffff;
                 padding: 5px 10px;
                 border: none;
                 border-radius: 5px;
@@ -2396,7 +2323,7 @@ def index():
                 font-size: 14px;
             }
             .edit-btn:hover {
-                background-color: #138496; /* Jaśniejszy niebieski */
+                background-color: #138496;
                 transform: scale(1.05);
             }
             .edit-btn:active {
@@ -2417,12 +2344,37 @@ def index():
             .note {
                 background-color: #f8f9fa;
                 margin: 10px 0;
-                padding: 10px;
+                padding: 15px;
                 border-radius: 5px;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                position: relative;
+            }
+            .note-content {
+                margin-bottom: 10px;
+                white-space: pre-wrap;
+                flex: 1;
+            }
+            .note-footer {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                margin-top: 10px;
+            }
+            .user-name {
+                padding: 5px 10px;
+                border-radius: 5px;
+                color: #333333;
+                font-weight: bold;
+                background-color: #e2e6ea;
+                display: inline-block;
+                cursor: pointer;
+                transition: background-color 0.3s;
+            }
+            .user-name:hover {
+                background-color: #c8d6e5;
             }
             .note-actions {
                 display: flex;
@@ -2461,22 +2413,25 @@ def index():
             .delete-all-notes-form button:active {
                 transform: scale(0.95);
             }
-            .segment-list {
+            .segment-list, .possibility-list, .potential-clients-list {
                 list-style: none;
-                padding: 0;
+                padding-left: 0;
                 margin: 0;
             }
-            .segment-item {
+            .segment-item, .possibility-item, .potential-client-group {
                 display: flex;
                 align-items: center;
-                margin-bottom: 8px; /* Umiarkowany odstęp */
+                margin-bottom: 8px;
             }
-            .segment-item input[type="checkbox"] {
+            .segment-item input[type="checkbox"],
+            .possibility-item input[type="checkbox"],
+            .potential-client-group input[type="checkbox"] {
                 margin-right: 10px;
                 transform: scale(1.2);
+                cursor: pointer;
             }
-            .segment-label {
-                font-size: 13px; /* Przywrócenie czytelnego rozmiaru czcionki */
+            .segment-label, .possibility-label, .potential-client-group-label {
+                font-size: 13px;
                 border-bottom: 1px solid rgba(255,255,255,0.2);
                 padding-bottom: 5px;
                 display: flex;
@@ -2487,14 +2442,59 @@ def index():
                 user-select: none;
                 color: #ffffff;
             }
-            /* Container for toggle buttons placed side by side */
+            /* Uniemożliwienie kliknięcia na etykietę zaznaczania checkboxa */
+            .segment-label,
+            .possibility-label,
+            .potential-client-group-label {
+                pointer-events: auto;
+            }
+            .segment-label:hover,
+            .possibility-label:hover,
+            .potential-client-group-label:hover {
+                text-decoration: underline;
+            }
+            .email-item, .company-item, .client-item {
+                display: flex;
+                align-items: center;
+                margin-bottom: 5px;
+            }
+            .email-item input[type="checkbox"],
+            .company-item input[type="checkbox"],
+            .client-item input[type="checkbox"] {
+                margin-right: 10px;
+                transform: scale(1.1);
+                cursor: pointer;
+            }
+            .email-item label,
+            .company-item label,
+            .client-item label {
+                cursor: pointer;
+                color: #ffffff;
+                font-size: 14px;
+                user-select: none;
+            }
+            /* Zwinięte listy domyślnie */
+            .clients-list,
+            .email-list,
+            .company-list {
+                display: none;
+                list-style: none;
+                padding-left: 20px;
+                margin-top: 5px;
+                max-height: 300px;
+                overflow-y: auto;
+            }
+            .clients-list.show,
+            .email-list.show,
+            .company-list.show {
+                display: block;
+            }
             .toggle-buttons-container {
                 display: flex;
                 gap: 10px;
                 margin-bottom: 20px;
             }
-            /* Toggle Segments Button */
-            .toggle-segments-btn, .toggle-possibilities-btn {
+            .toggle-segments-btn, .toggle-possibilities-btn, .toggle-potential-clients-btn {
                 background: none;
                 border: none;
                 cursor: pointer;
@@ -2504,159 +2504,26 @@ def index():
                 justify-content: center;
                 transition: transform 0.3s;
             }
-            .toggle-segments-btn img, .toggle-possibilities-btn img {
+            .toggle-segments-btn img, .toggle-possibilities-btn img, .toggle-potential-clients-btn img {
                 width: 32px;
                 height: 32px;
                 transition: transform 0.3s;
             }
-            .toggle-segments-btn img.rotate, .toggle-possibilities-btn img.rotate {
+            .toggle-segments-btn img.rotate, .toggle-possibilities-btn img.rotate, .toggle-potential-clients-btn img.rotate {
                 transform: rotate(180deg);
             }
-            /* Kontener segmentów */
-            .segments-container {
+            .segments-container,
+            .possibilities-container,
+            .potential-clients-container {
                 display: none;
                 margin-top: 10px;
             }
-            .segments-container.show {
+            .segments-container.show,
+            .possibilities-container.show,
+            .potential-clients-container.show {
                 display: block;
             }
-            /* Kontener możliwości */
-            .possibilities-container {
-                display: none;
-                margin-top: 10px;
-            }
-            .possibilities-container.show {
-                display: block;
-            }
-            /* Lista możliwości */
-            .possibility-list {
-                list-style: none;
-                padding: 0;
-                margin: 0;
-            }
-            .possibility-item {
-                display: flex;
-                align-items: center;
-                margin-bottom: 8px; /* Umiarkowany odstęp */
-            }
-            .possibility-item input[type="checkbox"] {
-                margin-right: 10px;
-                transform: scale(1.2);
-            }
-            .possibility-label {
-                font-size: 13px; /* Przywrócenie czytelnego rozmiaru czcionki */
-                border-bottom: 1px solid rgba(255,255,255,0.2);
-                padding-bottom: 5px;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                cursor: pointer;
-                flex: 1;
-                user-select: none;
-                color: #ffffff;
-            }
-            /* Lista firm w możliwości */
-            .company-list {
-                list-style: none;
-                padding-left: 20px;
-                margin-top: 10px;
-                display: none;
-                max-height: 300px;
-                overflow-y: auto;
-            }
-            .company-list.show {
-                display: block;
-            }
-            .company-item {
-                display: flex;
-                align-items: center;
-                margin-bottom: 5px;
-            }
-            .company-item input[type="checkbox"] {
-                margin-right: 10px;
-                transform: scale(1.1);
-            }
-            .company-item label {
-                flex: 1;
-                cursor: pointer;
-                color: #ffffff;
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                font-size: 12px; /* Umiarkowany rozmiar czcionki */
-            }
-            /* Styl dla przycisku "Zaznacz Wszystkie" w firmach */
-            .select-deselect-companies-btn {
-                background-color: #DAA520; /* Ciemnożółty kolor */
-                color: #ffffff;
-                padding: 5px 10px;
-                border: none;
-                border-radius: 5px;
-                cursor: pointer;
-                font-size: 14px;
-                margin-bottom: 10px;
-                transition: background-color 0.3s, transform 0.2s;
-                width: 100%;
-            }
-            .select-deselect-companies-btn:hover {
-                background-color: #B8860B; /* Ciemniejszy odcień żółci */
-                transform: scale(1.05);
-            }
-            .select-deselect-companies-btn:active {
-                transform: scale(0.95);
-            }
-            /* Styl dla przycisku "Zaznacz Wszystkie" w emailach */
-            .select-deselect-emails-btn {
-                background-color: #DAA520; /* Ciemnożółty kolor */
-                color: #ffffff;
-                padding: 5px 10px;
-                border: none;
-                border-radius: 5px;
-                cursor: pointer;
-                font-size: 14px;
-                margin-bottom: 10px;
-                transition: background-color 0.3s, transform 0.2s;
-                width: 100%;
-            }
-            .select-deselect-emails-btn:hover {
-                background-color: #B8860B; /* Ciemniejszy odcień żółci */
-                transform: scale(1.05);
-            }
-            .select-deselect-emails-btn:active {
-                transform: scale(0.95);
-            }
-            /* Individual segment's email list */
-            .email-list {
-                list-style: none;
-                padding-left: 20px;
-                margin-top: 10px;
-                display: none;
-                max-height: 300px;
-                overflow-y: auto;
-            }
-            .email-list.show {
-                display: block;
-            }
-            .email-item {
-                display: flex;
-                align-items: center;
-                margin-bottom: 5px;
-            }
-            .email-item input[type="checkbox"] {
-                margin-right: 10px;
-                transform: scale(1.1);
-            }
-            .email-item label {
-                flex: 1;
-                cursor: pointer;
-                color: #ffffff;
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                font-size: 12px; /* Umiarkowany rozmiar czcionki */
-            }
-            /* Styl dla listy wybranych segmentów i możliwości */
-            #selected-segments, #selected-possibilities {
+            #selected-segments, #selected-possibilities, #selected-potential-clients, #selected-users {
                 margin-left: 10px;
                 font-size: 12px;
                 color: #333333;
@@ -2676,7 +2543,7 @@ def index():
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
-                border: 1px solid #FFD700; /* Match panel color */
+                border: 1px solid #FFD700;
             }
             .selected-item .remove-item {
                 margin-left: 5px;
@@ -2687,24 +2554,23 @@ def index():
             .selected-item:hover {
                 background-color: #34495e;
             }
-            /* Modal Styles */
             .modal {
-                display: none; /* Hidden by default */
-                position: fixed; /* Stay in place */
-                z-index: 1002; /* Sit on top */
+                display: none;
+                position: fixed;
+                z-index: 1002;
                 left: 0;
                 top: 0;
-                width: 100%; /* Full width */
-                height: 100%; /* Full height */
-                overflow: auto; /* Enable scroll if needed */
-                background-color: rgba(0,0,0,0.5); /* Black w/ opacity */
+                width: 100%;
+                height: 100%;
+                overflow: auto;
+                background-color: rgba(0,0,0,0.5);
             }
             .modal-content {
                 background-color: #fefefe;
-                margin: 10% auto; /* 10% from the top and centered */
+                margin: 10% auto;
                 padding: 20px;
                 border: 1px solid #888;
-                width: 80%; /* Could be more or less, depending on screen size */
+                width: 80%;
                 max-width: 500px;
                 border-radius: 10px;
                 box-shadow: 0 5px 15px rgba(0,0,0,0.3);
@@ -2762,7 +2628,6 @@ def index():
             .modal-form button:active {
                 transform: scale(0.95);
             }
-            /* Dodatkowe style dla dropzone */
             .dropzone {
                 border: 2px dashed #cccccc;
                 border-radius: 5px;
@@ -2777,7 +2642,6 @@ def index():
                 border-color: #007BFF;
                 color: #333333;
             }
-            /* Styl dla podglądu załączników */
             .attachments-preview {
                 display: flex;
                 flex-wrap: wrap;
@@ -2808,7 +2672,6 @@ def index():
                 font-size: 14px;
                 color: #555555;
             }
-            /* Progress Bar */
             .progress-container {
                 width: 100%;
                 background-color: #f3f3f3;
@@ -2826,7 +2689,6 @@ def index():
                 line-height: 20px;
                 transition: width 0.4s ease;
             }
-            /* Spinner Styles */
             .spinner {
                 border: 4px solid #f3f3f3;
                 border-top: 4px solid #007BFF;
@@ -2841,7 +2703,6 @@ def index():
                 0% { transform: rotate(0deg); }
                 100% { transform: rotate(360deg); }
             }
-            /* Stopka */
             .footer {
                 background-color: transparent;
                 color: #aaaaaa;
@@ -2850,7 +2711,6 @@ def index():
                 font-size: 12px;
                 margin-top: auto;
             }
-            /* Responsive Design */
             @media (max-width: 768px) {
                 .content-wrapper {
                     flex-direction: column;
@@ -2873,13 +2733,13 @@ def index():
                 .top-header {
                     justify-content: space-between;
                 }
-                #selected-segments, #selected-possibilities {
+                #selected-segments, #selected-possibilities, #selected-potential-clients, #selected-users {
                     position: static;
                     margin-top: 10px;
                 }
             }
         </style>
-        <!-- Dodanie CKEditor CDN -->
+        <!-- Dodaj CKEditor -->
         <script src="https://cdn.ckeditor.com/ckeditor5/39.0.1/classic/ckeditor.js"></script>
         <script>
             // Funkcje wspólne
@@ -2889,7 +2749,6 @@ def index():
                     flashMessage.textContent = message;
                     flashMessage.classList.add('show');
 
-                    // Automatyczne ukrywanie po 5 sekundach
                     setTimeout(() => {
                         flashMessage.classList.remove('show');
                     }, 5000);
@@ -2910,31 +2769,37 @@ def index():
                 }
             }
 
-            // Funkcja do aktualizacji listy notatek w interfejsie użytkownika
             function updateNotesList(notes) {
                 const notesList = document.querySelector('.note-section ul');
-                notesList.innerHTML = ''; // Wyczyść istniejącą listę notatek
+                notesList.innerHTML = '';
 
                 notes.forEach(note => {
                     const li = document.createElement('li');
                     li.className = 'note';
                     li.setAttribute('data-note-id', note.id);
                     li.innerHTML = `
-                        <span>${escapeHtml(note.content)}</span>
-                        <div class="note-actions">
-                            <button type="button" class="transfer-note-btn" data-note-content="${escapeHtml(note.content)}">Transfer</button>
-                            <button type="button" class="edit-btn" data-note-id="${note.id}" data-note-content="${escapeHtml(note.content)}">Edytuj</button>
-                            <form class="delete-note-form" data-note-id="${note.id}">
-                                <button type="submit" class="delete-btn">Usuń</button>
-                                <div class="spinner" id="note-spinner-${note.id}" style="display: none;"></div>
-                            </form>
+                        <div class="note-content">${escapeHtml(note.content)}</div>
+                        <div class="note-footer">
+                            <div class="note-actions">
+                                <button type="button" class="transfer-note-btn" data-note-content="${escapeHtml(note.content)}">Transfer</button>
+                                <button type="button" class="edit-btn" data-note-id="${note.id}" data-note-content="${escapeHtml(note.content)}">Edytuj</button>
+                                <form class="delete-note-form" data-note-id="${note.id}">
+                                    <button type="submit" class="delete-btn">Usuń</button>
+                                    <div class="spinner" id="note-spinner-${note.id}" style="display: none;"></div>
+                                </form>
+                            </div>
+                            <span class="user-name" style="background-color: ${note.user.color};" data-email="${escapeHtml(note.user.email)}">
+                                ${escapeHtml(note.user.first_name)} ${escapeHtml(note.user.last_name)}
+                            </span>
                         </div>
                     `;
                     notesList.appendChild(li);
                 });
+
+                // Reattach event listeners for .user-name
+                attachUserNameClickListeners();
             }
 
-            // Escape HTML to prevent XSS in data attributes
             function escapeHtml(text) {
                 var map = {
                     '&': '&amp;',
@@ -2946,7 +2811,6 @@ def index():
                 return text.replace(/[&<>"']/g, function(m) { return map[m]; });
             }
 
-            // Funkcja do przenoszenia treści notatki do pola "Wiadomość"
             function transferToMessageField(content) {
                 console.log('Transferowanie treści:', content);
                 if (window.editor) {
@@ -2958,13 +2822,12 @@ def index():
                 }
             }
 
-            // Funkcja do aktualizacji listy wybranych segmentów i możliwości
             function updateSelectedItems() {
-                // Aktualizacja segmentów
+                // Segmenty
                 const selectedSegments = Array.from(document.querySelectorAll('.segment-item input[type="checkbox"]:checked'))
                     .map(cb => cb.value);
                 const selectedSegmentsDiv = document.getElementById('selected-segments');
-                selectedSegmentsDiv.innerHTML = ''; // Wyczyść istniejącą zawartość
+                selectedSegmentsDiv.innerHTML = '';
 
                 selectedSegments.forEach(segment => {
                     const segmentSpan = document.createElement('span');
@@ -2977,12 +2840,10 @@ def index():
                     removeSpan.setAttribute('data-item', segment);
                     removeSpan.addEventListener('click', function() {
                         const itemToRemove = this.getAttribute('data-item');
-                        // Odznacz checkbox w sidebarze
                         const checkbox = Array.from(document.querySelectorAll('.segment-item input[type="checkbox"]'))
                             .find(cb => cb.value === itemToRemove);
                         if (checkbox) {
                             checkbox.checked = false;
-                            // Odznacz wszystkie e-maile w tym segmencie
                             const segmentIndex = checkbox.id.split('-')[1];
                             const emailList = document.getElementById(`emails-${segmentIndex}`);
                             if (emailList) {
@@ -2992,9 +2853,7 @@ def index():
                                 });
                             }
                         }
-                        // Usuń segment z wyświetlania
                         this.parentElement.remove();
-                        // Aktualizacja listy wybranych segmentów i możliwości
                         updateSelectedItems();
                         updateSelectAllButtons();
                     });
@@ -3003,11 +2862,11 @@ def index():
                     selectedSegmentsDiv.appendChild(segmentSpan);
                 });
 
-                // Aktualizacja możliwości
+                // Możliwości
                 const selectedPossibilities = Array.from(document.querySelectorAll('.possibility-item input[type="checkbox"]:checked'))
                     .map(cb => cb.value);
                 const selectedPossibilitiesDiv = document.getElementById('selected-possibilities');
-                selectedPossibilitiesDiv.innerHTML = ''; // Wyczyść istniejącą zawartość
+                selectedPossibilitiesDiv.innerHTML = '';
 
                 selectedPossibilities.forEach(possibility => {
                     const possibilitySpan = document.createElement('span');
@@ -3020,12 +2879,10 @@ def index():
                     removeSpan.setAttribute('data-item', possibility);
                     removeSpan.addEventListener('click', function() {
                         const itemToRemove = this.getAttribute('data-item');
-                        // Odznacz checkbox w sidebarze
                         const checkbox = Array.from(document.querySelectorAll('.possibility-item input[type="checkbox"]'))
                             .find(cb => cb.value === itemToRemove);
                         if (checkbox) {
                             checkbox.checked = false;
-                            // Odznacz wszystkie firmy w tej możliwości
                             const possibilityIndex = checkbox.id.split('-')[1];
                             const companyList = document.getElementById(`companies-${possibilityIndex}`);
                             if (companyList) {
@@ -3035,150 +2892,278 @@ def index():
                                 });
                             }
                         }
-                        // Usuń możliwość z wyświetlania
                         this.parentElement.remove();
-                        // Aktualizacja listy wybranych segmentów i możliwości
                         updateSelectedItems();
-                        updateSelectAllButtons();
                     });
 
                     possibilitySpan.appendChild(removeSpan);
                     selectedPossibilitiesDiv.appendChild(possibilitySpan);
                 });
 
-                // Aktualizacja tekstu przycisków "Zaznacz/Odznacz Wszystkie"
+                // Potencjalni Klienci
+                const selectedPotentialClients = Array.from(document.querySelectorAll('.potential-clients-list .client-item input[type="checkbox"]:checked'))
+                    .map(cb => {
+                        const label = document.querySelector(`label[for="${cb.id}"]`);
+                        if (label) {
+                            const text = label.textContent;
+                            const companyName = text.split(' (')[0];
+                            return { companyName };
+                        }
+                        return { companyName: cb.value };
+                    });
+
+                const selectedPotentialClientsDiv = document.getElementById('selected-potential-clients');
+                selectedPotentialClientsDiv.innerHTML = '';
+
+                selectedPotentialClients.forEach(client => {
+                    const clientSpan = document.createElement('span');
+                    clientSpan.className = 'selected-item';
+                    clientSpan.textContent = client.companyName;
+
+                    const removeSpan = document.createElement('span');
+                    removeSpan.className = 'remove-item';
+                    removeSpan.textContent = '×';
+                    removeSpan.setAttribute('data-company', client.companyName);
+                    removeSpan.addEventListener('click', function() {
+                        const companyToRemove = this.getAttribute('data-company');
+                        const checkbox = Array.from(document.querySelectorAll('.potential-clients-list .client-item input[type="checkbox"]'))
+                            .find(cb => {
+                                const label = document.querySelector(`label[for="${cb.id}"]`);
+                                return label && label.textContent.split(' (')[0] === companyToRemove;
+                            });
+                        if (checkbox) {
+                            checkbox.checked = false;
+                            // Jeśli wszystkie klienci w grupie są odznaczeni, odznacz również checkbox grupy
+                            const groupIndex = checkbox.id.split('-')[2];
+                            const groupCheckbox = document.getElementById(`potential-group-${groupIndex}`);
+                            const siblingCheckboxes = document.querySelectorAll(`#clients-${groupIndex} .client-item input[type="checkbox"]`);
+                            const allUnchecked = Array.from(siblingCheckboxes).every(cb => !cb.checked);
+                            if (allUnchecked && groupCheckbox) {
+                                groupCheckbox.checked = false;
+                            }
+                        }
+                        this.parentElement.remove();
+                        updateSelectedItems();
+                    });
+
+                    clientSpan.appendChild(removeSpan);
+                    selectedPotentialClientsDiv.appendChild(clientSpan);
+                });
+
+                // Wybrane użytkownicy (nowo dodane)
+                const selectedUsersDiv = document.getElementById('selected-users');
+                selectedUsersDiv.innerHTML = '';
+
                 updateSelectAllButtons();
             }
 
-            // Drag and Drop for File Attachments
+            // Funkcje do togglowania list
+            function toggleSegmentsList(button) {
+                var segmentsContainer = document.getElementById('segments-container');
+                var img = button.querySelector('img');
+                segmentsContainer.classList.toggle('show');
+                img.classList.toggle('rotate');
+            }
+
+            function togglePossibilitiesList(button) {
+                var possibilitiesContainer = document.getElementById('possibilities-container');
+                var img = button.querySelector('img');
+                possibilitiesContainer.classList.toggle('show');
+                img.classList.toggle('rotate');
+            }
+
+            function togglePotentialClientsList(button) {
+                var potentialClientsContainer = document.getElementById('potential-clients-container');
+                var img = button.querySelector('img');
+                potentialClientsContainer.classList.toggle('show');
+                img.classList.toggle('rotate');
+            }
+
+            // Funkcje do zaznaczania/odznaczania wszystkich segmentów
+            function toggleSelectAllSegments(button) {
+                var segmentCheckboxes = document.querySelectorAll('.segment-item input[type="checkbox"]');
+                var allChecked = Array.from(segmentCheckboxes).every(cb => cb.checked);
+
+                segmentCheckboxes.forEach(function(checkbox) {
+                    checkbox.checked = !allChecked;
+                    handleSegmentChange(checkbox);
+                });
+
+                button.textContent = !allChecked ? 'Odznacz wszystkie segmenty' : 'Zaznacz wszystkie segmenty';
+
+                updateSelectedItems();
+            }
+
+            // Funkcje do zaznaczania/odznaczania wszystkich możliwości
+            function toggleSelectAllPossibilities(button) {
+                var possibilityCheckboxes = document.querySelectorAll('.possibility-item input[type="checkbox"]');
+                var allChecked = Array.from(possibilityCheckboxes).every(cb => cb.checked);
+
+                possibilityCheckboxes.forEach(function(checkbox) {
+                    checkbox.checked = !allChecked;
+                    handlePossibilityChange(checkbox);
+                });
+
+                button.textContent = !allChecked ? 'Odznacz wszystkie możliwości' : 'Zaznacz wszystkie możliwości';
+
+                updateSelectedItems();
+            }
+
+            // Funkcje do zaznaczania/odznaczania wszystkich potencjalnych klientów
+            function toggleSelectAllPotentialClients(button) {
+                var groupCheckboxes = document.querySelectorAll('.potential-client-group input[type="checkbox"]');
+                var clientCheckboxes = document.querySelectorAll('.potential-clients-list .client-item input[type="checkbox"]');
+                var allChecked = Array.from(groupCheckboxes).every(cb => cb.checked) && Array.from(clientCheckboxes).every(cb => cb.checked);
+
+                // Zaznacz lub odznacz wszystkie group checkboxes
+                groupCheckboxes.forEach(function(groupCheckbox) {
+                    groupCheckbox.checked = !allChecked;
+                });
+
+                // Zaznacz lub odznacz wszystkie client checkboxes
+                clientCheckboxes.forEach(function(clientCheckbox) {
+                    clientCheckbox.checked = !allChecked;
+                });
+
+                button.textContent = !allChecked ? 'Odznacz wszystkich klientów' : 'Zaznacz wszystkich klientów';
+
+                updateSelectedItems();
+            }
+
+            // Funkcje do zaznaczania/odznaczania wszystkich e-maili w segmencie
+            function toggleSelectAllEmailsInSegment(emailListId) {
+                var emailList = document.getElementById(emailListId);
+                var emailCheckboxes = emailList.querySelectorAll('input[type="checkbox"]');
+                var toggleBtn = emailList.querySelector('.select-deselect-emails-btn');
+
+                var allChecked = Array.from(emailCheckboxes).every(cb => cb.checked);
+
+                emailCheckboxes.forEach(function(checkbox) {
+                    checkbox.checked = !allChecked;
+                });
+
+                toggleBtn.textContent = !allChecked ? 'Odznacz Wszystkie' : 'Zaznacz Wszystkie';
+
+                updateSelectedItems();
+            }
+
+            // Funkcje do zaznaczania/odznaczania wszystkich firm w możliwości
+            function toggleSelectAllCompaniesInPossibility(companyListId) {
+                var companyList = document.getElementById(companyListId);
+                var companyCheckboxes = companyList.querySelectorAll('input[type="checkbox"]');
+                var toggleBtn = companyList.querySelector('.select-deselect-companies-btn');
+
+                var allChecked = Array.from(companyCheckboxes).every(cb => cb.checked);
+
+                companyCheckboxes.forEach(function(checkbox) {
+                    checkbox.checked = !allChecked;
+                });
+
+                toggleBtn.textContent = !allChecked ? 'Odznacz Wszystkie' : 'Zaznacz Wszystkie';
+
+                updateSelectedItems();
+            }
+
+            // Funkcje do rozwijania/zwijania wszystkich list
+            function toggleAllSegmentsExpandCollapse(button) {
+                var emailLists = document.querySelectorAll('.email-list');
+                var allExpanded = Array.from(emailLists).every(list => list.classList.contains('show'));
+
+                emailLists.forEach(list => {
+                    if (allExpanded) {
+                        list.classList.remove('show');
+                    } else {
+                        list.classList.add('show');
+                    }
+                });
+
+                // Zmiana etykiety przycisku w zależności od stanu
+                button.textContent = allExpanded ? 'Rozwiń wszystkie segmenty' : 'Zwiń wszystkie segmenty';
+            }
+
+            function toggleAllPossibilitiesExpandCollapse(button) {
+                var companyLists = document.querySelectorAll('.company-list');
+                var allExpanded = Array.from(companyLists).every(list => list.classList.contains('show'));
+
+                companyLists.forEach(list => {
+                    if (allExpanded) {
+                        list.classList.remove('show');
+                    } else {
+                        list.classList.add('show');
+                    }
+                });
+
+                button.textContent = allExpanded ? 'Rozwiń wszystkie możliwości' : 'Zwiń wszystkie możliwości';
+            }
+
+            function toggleAllPotentialClientsExpandCollapse(button) {
+                var clientLists = document.querySelectorAll('.clients-list');
+                var allExpanded = Array.from(clientLists).every(list => list.classList.contains('show'));
+
+                clientLists.forEach(list => {
+                    if (allExpanded) {
+                        list.classList.remove('show');
+                    } else {
+                        list.classList.add('show');
+                    }
+                });
+
+                button.textContent = allExpanded ? 'Rozwiń wszystkich potencjalnych klientów' : 'Zwiń wszystkich potencjalnych klientów';
+            }
+
+            // Funkcje do obsługi zmian checkboxów
+            function handleSegmentChange(segmentCheckbox) {
+                toggleEmailsInSegment(segmentCheckbox);
+                updateSelectedItems();
+            }
+
+            function handlePossibilityChange(possibilityCheckbox) {
+                toggleCompaniesInPossibility(possibilityCheckbox);
+                updateSelectedItems();
+            }
+
+            function handlePotentialClientGroupChange(groupCheckbox) {
+                toggleClientsInGroup(groupCheckbox);
+                updateSelectedItems();
+            }
+
+            // Funkcje do togglowania e-maili, firm i klientów
+            function toggleEmailsInSegment(segmentCheckbox) {
+                var segmentIndex = segmentCheckbox.id.split('-')[1];
+                var emailList = document.getElementById(`emails-${segmentIndex}`);
+                if (emailList) {
+                    var emailCheckboxes = emailList.querySelectorAll('input[type="checkbox"]');
+                    emailCheckboxes.forEach(function(emailCheckbox) {
+                        emailCheckbox.checked = segmentCheckbox.checked;
+                    });
+                }
+            }
+
+            function toggleCompaniesInPossibility(possibilityCheckbox) {
+                var possibilityIndex = possibilityCheckbox.id.split('-')[1];
+                var companyList = document.getElementById(`companies-${possibilityIndex}`);
+                if (companyList) {
+                    var companyCheckboxes = companyList.querySelectorAll('input[type="checkbox"]');
+                    companyCheckboxes.forEach(function(companyCheckbox) {
+                        companyCheckbox.checked = possibilityCheckbox.checked;
+                    });
+                }
+            }
+
+            function toggleClientsInGroup(groupCheckbox) {
+                var groupIndex = groupCheckbox.id.split('-')[2];
+                var clientsList = document.getElementById(`clients-${groupIndex}`);
+                if (clientsList) {
+                    var clientCheckboxes = clientsList.querySelectorAll('input[type="checkbox"]');
+                    clientCheckboxes.forEach(function(clientCheckbox) {
+                        clientCheckbox.checked = groupCheckbox.checked;
+                    });
+                }
+            }
+
+            // Funkcje do obsługi edycji notatek
             document.addEventListener('DOMContentLoaded', function() {
-                var dropzone = document.getElementById('dropzone');
-                var fileInput = document.getElementById('attachments');
-                var attachmentsPreview = document.getElementById('attachments-preview');
-                var attachmentsCount = document.getElementById('attachments-count');
-                var allFiles = []; // Array to hold all selected files
-
-                // Event listeners for drag and drop
-                dropzone.addEventListener('dragover', function(e) {
-                    e.preventDefault();
-                    dropzone.classList.add('dragover');
-                });
-
-                dropzone.addEventListener('dragleave', function(e) {
-                    e.preventDefault();
-                    dropzone.classList.remove('dragover');
-                });
-
-                dropzone.addEventListener('drop', function(e) {
-                    e.preventDefault();
-                    dropzone.classList.remove('dragover');
-                    if (e.dataTransfer.files.length) {
-                        appendFiles(e.dataTransfer.files);
-                    }
-                });
-
-                dropzone.addEventListener('click', function() {
-                    fileInput.click();
-                });
-
-                // Event listener for file input change
-                fileInput.addEventListener('change', function() {
-                    appendFiles(fileInput.files);
-                });
-
-                function isFileInList(file, fileList) {
-                    for (var i = 0; i < fileList.length; i++) {
-                        if (file.name === fileList[i].name && file.size === fileList[i].size && file.type === fileList[i].type) {
-                            return true;
-                        }
-                    }
-                    return false;
-                }
-
-                function appendFiles(files) {
-                    for (var i = 0; i < files.length; i++) {
-                        var file = files[i];
-                        if (!isFileInList(file, allFiles)) {
-                            if (allFiles.length < {{ max_attachments }}) {
-                                allFiles.push(file);
-                            } else {
-                                showFlashMessage('error', "Możesz przesłać maksymalnie {{ max_attachments }} załączników.");
-                                break;
-                            }
-                        } else {
-                            showFlashMessage('warning', "Plik " + file.name + " już został dodany.");
-                        }
-                    }
-
-                    // Update the file input
-                    var dataTransfer = new DataTransfer();
-                    for (var i = 0; i < allFiles.length; i++) {
-                        dataTransfer.items.add(allFiles[i]);
-                    }
-                    fileInput.files = dataTransfer.files;
-
-                    // Update the attachments preview and count
-                    updateAttachmentsPreview();
-                    updateAttachmentsCount(allFiles.length);
-                }
-
-                function updateAttachmentsPreview() {
-                    attachmentsPreview.innerHTML = ''; // Clear existing previews
-                    for (var i = 0; i < allFiles.length; i++) {
-                        var file = allFiles[i];
-                        var fileName = file.name;
-                        if (fileName.length > 15) {
-                            fileName = fileName.substring(0, 12) + '...';
-                        }
-
-                        var attachmentItem = document.createElement('div');
-                        attachmentItem.classList.add('attachment-item');
-
-                        var fileIcon = document.createElement('span');
-                        fileIcon.textContent = '📎'; // Paperclip icon
-                        attachmentItem.appendChild(fileIcon);
-
-                        var fileNameSpan = document.createElement('span');
-                        fileNameSpan.textContent = fileName;
-                        attachmentItem.appendChild(fileNameSpan);
-
-                        var removeButton = document.createElement('button');
-                        removeButton.type = 'button';
-                        removeButton.innerHTML = '&times;'; // '×' symbol
-                        removeButton.dataset.index = i;
-                        removeButton.addEventListener('click', function() {
-                            removeFile(this.dataset.index);
-                        });
-                        attachmentItem.appendChild(removeButton);
-
-                        attachmentsPreview.appendChild(attachmentItem);
-                    }
-                }
-
-                function removeFile(index) {
-                    allFiles.splice(index, 1);
-
-                    // Update the file input
-                    var dataTransfer = new DataTransfer();
-                    for (var i = 0; i < allFiles.length; i++) {
-                        dataTransfer.items.add(allFiles[i]);
-                    }
-                    fileInput.files = dataTransfer.files;
-
-                    updateAttachmentsPreview();
-                    updateAttachmentsCount(allFiles.length);
-                }
-
-                function updateAttachmentsCount(count) {
-                    attachmentsCount.textContent = "Załączników: " + count + "/{{ max_attachments }}";
-                }
-
-                // Initialize attachments count
-                updateAttachmentsCount(0);
-            });
-
-            // Inicjalizacja CKEditor z synchronizacją danych i walidacją
-            document.addEventListener('DOMContentLoaded', function() {
+                // Inicjalizacja CKEditor
                 ClassicEditor
                     .create(document.querySelector('#message-editor'), {
                         toolbar: ['bold', 'italic', 'underline', 'bulletedList', 'numberedList', 'link']
@@ -3187,50 +3172,59 @@ def index():
                         window.editor = editor;
                         console.log('CKEditor został zainicjalizowany.');
 
-                        // Synchronizacja danych CKEditor z textarea przed wysłaniem formularza
                         const form = document.getElementById('main-form');
                         form.addEventListener('submit', (event) => {
-                            event.preventDefault(); // Zapobiegaj tradycyjnemu przesłaniu formularza
+                            event.preventDefault();
 
+                            // Pobieranie treści edytora
                             const data = editor.getData();
                             document.querySelector('#message').value = data;
 
-                            // Walidacja, czy pole message nie jest puste
+                            // Sprawdzanie czy pole wiadomości jest puste
                             const tempElement = document.createElement('div');
                             tempElement.innerHTML = data;
                             const textContent = tempElement.textContent || tempElement.innerText || '';
                             if (textContent.trim() === '') {
                                 showFlashMessage('error', 'Pole "Wiadomość" nie może być puste.');
-                                // Ustaw fokus na edytor CKEditor
                                 editor.editing.view.focus();
                                 return;
                             }
 
-                            // Pokazanie spinnera
-                            showSpinner('spinner');
+                            // Walidacja zaznaczeń segmentów, możliwości i potencjalnych klientów
+                            if (!validateParentChildSelection()) {
+                                // Jeśli walidacja nie przeszła, to wyświetlamy komunikat (już wyświetlony w funkcji) i nie wysyłamy
+                                return;
+                            }
 
-                            // Pobranie danych formularza
+                            showSpinner('spinner');
                             const formData = new FormData(form);
 
-                            // Wysyłanie danych przez AJAX do send_message_ajax
+                            // Pobieranie zaznaczonych adresów e-mail
+                            const emailCheckboxes = document.querySelectorAll('input[name="include_emails"]:checked, input[name="include_potential_emails"]:checked');
+                            const emails = Array.from(emailCheckboxes).map(cb => cb.value);
+
+                            // Pobieranie wybranych użytkowników
+                            const selectedUserEmails = Array.from(document.querySelectorAll('input[name="selected_users"]'))
+                                .map(input => input.value);
+                            
+                            // Łączenie wszystkich odbiorców
+                            const allRecipients = emails.concat(selectedUserEmails);
+                            formData.set('recipients', allRecipients.join(','));
+
                             fetch('{{ url_for("send_message_ajax") }}', {
                                 method: 'POST',
                                 body: formData,
-                                credentials: 'same-origin' // Umożliwia przesyłanie ciasteczek sesji
+                                credentials: 'same-origin'
                             })
                             .then(response => response.json())
                             .then(data => {
-                                // Ukrycie spinnera
                                 hideSpinner('spinner');
-
                                 if (data.success) {
                                     showFlashMessage('success', data.message);
-                                    // Opcjonalnie: Zresetowanie formularza po sukcesie
                                     form.reset();
                                     document.getElementById('attachments-preview').innerHTML = '';
                                     document.getElementById('attachments-count').textContent = `Załączników: 0/{{ max_attachments }}`;
                                     editor.setData('');
-                                    // Aktualizacja wyświetlanych segmentów i możliwości
                                     updateSelectedItems();
                                 } else {
                                     showFlashMessage('error', data.message);
@@ -3246,388 +3240,165 @@ def index():
                     .catch(error => {
                         console.error('Błąd inicjalizacji CKEditor:', error);
                     });
-            });
 
-            // Funkcje Toggle Segments i Possibilities
-            function toggleSegmentsList(button) {
-                var segmentsContainer = document.getElementById('segments-container');
-                var img = button.querySelector('img');
-                segmentsContainer.classList.toggle('show');
-                img.classList.toggle('rotate');
-            }
-
-            function togglePossibilitiesList(button) {
-                var possibilitiesContainer = document.getElementById('possibilities-container');
-                var img = button.querySelector('img');
-                possibilitiesContainer.classList.toggle('show');
-                img.classList.toggle('rotate');
-            }
-
-            // Toggle Select All Checkboxes for Segments
-            function toggleSelectAllSegments(button) {
-                var segmentCheckboxes = document.querySelectorAll('.segment-item input[type="checkbox"]');
-                var allChecked = Array.from(segmentCheckboxes).every(cb => cb.checked);
-
-                segmentCheckboxes.forEach(function(checkbox) {
-                    checkbox.checked = !allChecked;
-                    handleSegmentChange(checkbox);
+                // Obsługa kliknięć na etykiety możliwości
+                document.querySelectorAll('.possibility-label').forEach(function(label) {
+                    label.addEventListener('click', function(event) {
+                        var index = this.getAttribute('data-index');
+                        toggleCompanyList(index);
+                        event.stopPropagation(); // Zapobiega zaznaczeniu checkboxa
+                    });
                 });
 
-                // Aktualizacja tekstu przycisku
-                button.textContent = !allChecked ? 'Odznacz wszystkie segmenty' : 'Zaznacz wszystkie segmenty';
-
-                // Aktualizacja listy wybranych segmentów i możliwości
-                updateSelectedItems();
-            }
-
-            // Toggle Select All Checkboxes for Possibilities
-            function toggleSelectAllPossibilities(button) {
-                var possibilityCheckboxes = document.querySelectorAll('.possibility-item input[type="checkbox"]');
-                var allChecked = Array.from(possibilityCheckboxes).every(cb => cb.checked);
-
-                possibilityCheckboxes.forEach(function(checkbox) {
-                    checkbox.checked = !allChecked;
-                    handlePossibilityChange(checkbox);
+                // Obsługa kliknięć na etykiety segmentów
+                document.querySelectorAll('.segment-label').forEach(function(label) {
+                    label.addEventListener('click', function(event) {
+                        var index = this.getAttribute('data-index');
+                        toggleEmailsList(index);
+                        event.stopPropagation();
+                    });
                 });
 
-                // Aktualizacja tekstu przycisku
-                button.textContent = !allChecked ? 'Odznacz wszystkie możliwości' : 'Zaznacz wszystkie możliwości';
-
-                // Aktualizacja listy wybranych segmentów i możliwości
-                updateSelectedItems();
-            }
-
-            // Toggle Select All Emails in a Segment
-            function toggleSelectAllEmailsInSegment(emailListId) {
-                var emailList = document.getElementById(emailListId);
-                var emailCheckboxes = emailList.querySelectorAll('input[type="checkbox"]');
-                var toggleBtn = emailList.querySelector('.select-deselect-emails-btn');
-
-                var allChecked = Array.from(emailCheckboxes).every(cb => cb.checked);
-
-                emailCheckboxes.forEach(function(checkbox) {
-                    checkbox.checked = !allChecked;
+                // Obsługa kliknięć na etykiety potencjalnych klientów
+                document.querySelectorAll('.potential-client-group-label').forEach(function(label) {
+                    label.addEventListener('click', function(event) {
+                        var index = this.getAttribute('data-index');
+                        toggleClientsList(index);
+                        event.stopPropagation();
+                    });
                 });
 
-                // Aktualizuj przycisk
-                toggleBtn.textContent = !allChecked ? 'Odznacz Wszystkie' : 'Zaznacz Wszystkie';
-
-                // Zmień kolor przycisku
-                toggleBtn.style.backgroundColor = '#DAA520'; // Ciemnożółty kolor
-
-                // Aktualizacja listy wybranych segmentów i możliwości
-                updateSelectedItems();
-            }
-
-            // Toggle Select All Companies in a Possibility
-            function toggleSelectAllCompaniesInPossibility(companyListId) {
-                var companyList = document.getElementById(companyListId);
-                var companyCheckboxes = companyList.querySelectorAll('input[type="checkbox"]');
-                var toggleBtn = companyList.querySelector('.select-deselect-companies-btn');
-
-                var allChecked = Array.from(companyCheckboxes).every(cb => cb.checked);
-
-                companyCheckboxes.forEach(function(checkbox) {
-                    checkbox.checked = !allChecked;
-                });
-
-                // Aktualizuj przycisk
-                toggleBtn.textContent = !allChecked ? 'Odznacz Wszystkie' : 'Zaznacz Wszystkie';
-
-                // Zmień kolor przycisku
-                toggleBtn.style.backgroundColor = '#DAA520'; // Ciemnożółty kolor
-
-                // Aktualizacja listy wybranych segmentów i możliwości
-                updateSelectedItems();
-            }
-
-            // Toggle All Segments (Expand/Collapse)
-            function toggleAllSegmentsExpandCollapse(button) {
-                var emailLists = document.querySelectorAll('.email-list');
-                var allExpanded = Array.from(emailLists).every(el => el.classList.contains('show'));
-
-                emailLists.forEach(function(emailList) {
-                    if (allExpanded) {
-                        emailList.classList.remove('show');
-                    } else {
-                        emailList.classList.add('show');
+                // Obsługa otwierania edycji notatek
+                document.addEventListener('click', function(event) {
+                    if (event.target && event.target.classList.contains('edit-btn')) {
+                        const noteId = event.target.getAttribute('data-note-id');
+                        const noteContent = event.target.getAttribute('data-note-content');
+                        console.log('Kliknięto przycisk Edytuj dla notatki:', noteId);
+                        openEditModal(noteId, noteContent);
                     }
                 });
 
-                // Aktualizuj przycisk
-                button.textContent = allExpanded ? 'Rozwiń wszystkie segmenty' : 'Zwiń wszystkie segmenty';
-
-                // Zmień kolor przycisku
-                button.style.backgroundColor = '#DAA520'; // Ciemnożółty kolor
-            }
-
-            // Toggle All Possibilities (Expand/Collapse)
-            function toggleAllPossibilitiesExpandCollapse(button) {
-                var companyLists = document.querySelectorAll('.company-list');
-                var allExpanded = Array.from(companyLists).every(el => el.classList.contains('show'));
-
-                companyLists.forEach(function(companyList) {
-                    if (allExpanded) {
-                        companyList.classList.remove('show');
-                    } else {
-                        companyList.classList.add('show');
+                // Obsługa transferu notatek do pola wiadomości
+                document.addEventListener('click', function(event) {
+                    if (event.target && event.target.classList.contains('transfer-note-btn')) {
+                        const noteContent = event.target.getAttribute('data-note-content');
+                        console.log('Kliknięto przycisk Transfer. Treść notatki:', noteContent);
+                        transferToMessageField(noteContent);
+                        showFlashMessage('success', 'Treść notatki została przeniesiona do pola "Wiadomość".');
                     }
                 });
 
-                // Aktualizuj przycisk
-                button.textContent = allExpanded ? 'Rozwiń wszystkie możliwości' : 'Zwiń wszystkie możliwości';
-
-                // Zmień kolor przycisku
-                button.style.backgroundColor = '#DAA520'; // Ciemnożółty kolor
-            }
-
-            // Funkcja do zaznaczania/odznaczania emaili w segmencie
-            function toggleEmailsInSegment(segmentCheckbox) {
-                var segmentIndex = segmentCheckbox.id.split('-')[1];
-                var emailList = document.getElementById('emails-' + segmentIndex);
-                if (emailList) {
-                    var emailCheckboxes = emailList.querySelectorAll('input[type="checkbox"]');
-                    emailCheckboxes.forEach(function(emailCheckbox) {
-                        emailCheckbox.checked = segmentCheckbox.checked;
+                // Obsługa otwierania edycji notatki
+                document.querySelectorAll('.edit-btn').forEach(function(button) {
+                    button.addEventListener('click', function() {
+                        const noteId = this.getAttribute('data-note-id');
+                        const noteContent = this.getAttribute('data-note-content');
+                        openEditModal(noteId, noteContent);
                     });
-                }
-            }
-
-            // Funkcja do zaznaczania/odznaczania firm w możliwości
-            function toggleCompaniesInPossibility(possibilityCheckbox) {
-                var possibilityIndex = possibilityCheckbox.id.split('-')[1];
-                var companyList = document.getElementById('companies-' + possibilityIndex);
-                if (companyList) {
-                    var companyCheckboxes = companyList.querySelectorAll('input[type="checkbox"]');
-                    companyCheckboxes.forEach(function(companyCheckbox) {
-                        companyCheckbox.checked = possibilityCheckbox.checked;
-                    });
-                }
-            }
-
-            // Funkcje handleSegmentChange i handlePossibilityChange
-            function handleSegmentChange(segmentCheckbox) {
-                toggleEmailsInSegment(segmentCheckbox);
-                updateSelectedItems();
-            }
-
-            function handlePossibilityChange(possibilityCheckbox) {
-                toggleCompaniesInPossibility(possibilityCheckbox);
-                updateSelectedItems();
-            }
-
-            // Funkcja toggleEmailList
-            function toggleEmailList(segmentIndex) {
-                var emailList = document.getElementById('emails-' + segmentIndex);
-                if (emailList) {
-                    emailList.classList.toggle('show');
-                }
-            }
-
-            // Funkcja toggleCompanyList
-            function toggleCompanyList(possibilityIndex) {
-                var companyList = document.getElementById('companies-' + possibilityIndex);
-                if (companyList) {
-                    companyList.classList.toggle('show');
-                }
-            }
-
-            // Funkcja do aktualizacji przycisków "Zaznacz/Odznacz Wszystkie" po zmianie stanu checkboxów
-            function updateSelectAllButtonsOnChange() {
-                updateSelectAllButtons();
-                updateEmailToggleButtons();
-                updateCompanyToggleButtons();
-            }
-
-            // Funkcja do aktualizacji przycisków "Zaznacz/Odznacz Wszystkie"
-            function updateSelectAllButtons() {
-                var selectAllSegmentsButton = document.getElementById('select-all-segments-btn');
-                var segmentCheckboxes = document.querySelectorAll('.segment-item input[type="checkbox"]');
-                var allSegmentsChecked = Array.from(segmentCheckboxes).every(cb => cb.checked);
-                selectAllSegmentsButton.textContent = allSegmentsChecked ? 'Odznacz wszystkie segmenty' : 'Zaznacz wszystkie segmenty';
-                selectAllSegmentsButton.style.backgroundColor = '#DAA520'; // Ciemnożółty kolor
-
-                var selectAllPossibilitiesButton = document.getElementById('select-all-possibilities-btn');
-                var possibilityCheckboxes = document.querySelectorAll('.possibility-item input[type="checkbox"]');
-                var allPossibilitiesChecked = Array.from(possibilityCheckboxes).every(cb => cb.checked);
-                selectAllPossibilitiesButton.textContent = allPossibilitiesChecked ? 'Odznacz wszystkie możliwości' : 'Zaznacz wszystkie możliwości';
-                selectAllPossibilitiesButton.style.backgroundColor = '#DAA520'; // Ciemnożółty kolor
-            }
-
-            // Funkcja do aktualizacji przycisków toggle dla emaili
-            function updateEmailToggleButtons() {
-                var emailLists = document.querySelectorAll('.email-list');
-                emailLists.forEach(function(emailList) {
-                    var emailCheckboxes = emailList.querySelectorAll('input[type="checkbox"]');
-                    var toggleBtn = emailList.querySelector('.select-deselect-emails-btn');
-
-                    var allChecked = Array.from(emailCheckboxes).every(cb => cb.checked);
-
-                    toggleBtn.textContent = allChecked ? 'Odznacz Wszystkie' : 'Zaznacz Wszystkie';
-                    toggleBtn.style.backgroundColor = '#DAA520'; // Ciemnożółty kolor
                 });
-            }
 
-            // Funkcja do aktualizacji przycisków toggle dla firm
-            function updateCompanyToggleButtons() {
-                var companyLists = document.querySelectorAll('.company-list');
-                companyLists.forEach(function(companyList) {
-                    var companyCheckboxes = companyList.querySelectorAll('input[type="checkbox"]');
-                    var toggleBtn = companyList.querySelector('.select-deselect-companies-btn');
+                // Obsługa kliknięć na imię i nazwisko użytkownika w notatkach
+                document.querySelector('.note-section').addEventListener('click', function(event) {
+                    if (event.target && event.target.classList.contains('user-name')) {
+                        const userName = event.target.textContent.trim();
+                        const userEmail = event.target.getAttribute('data-email');
 
-                    var allChecked = Array.from(companyCheckboxes).every(cb => cb.checked);
+                        // Sprawdzenie, czy użytkownik jest już dodany
+                        const alreadySelected = Array.from(document.querySelectorAll('#selected-users .selected-item'))
+                            .some(item => item.getAttribute('data-email') === userEmail);
 
-                    toggleBtn.textContent = allChecked ? 'Odznacz Wszystkie' : 'Zaznacz Wszystkie';
-                    toggleBtn.style.backgroundColor = '#DAA520'; // Ciemnożółty kolor
+                        if (!alreadySelected) {
+                            // Tworzenie elementu tagu użytkownika
+                            const userSpan = document.createElement('span');
+                            userSpan.className = 'selected-item';
+                            userSpan.setAttribute('data-email', userEmail);
+                            userSpan.textContent = userName;
+
+                            // Dodanie przycisku usuwania
+                            const removeBtn = document.createElement('span');
+                            removeBtn.className = 'remove-item';
+                            removeBtn.textContent = '×';
+                            removeBtn.addEventListener('click', function() {
+                                userSpan.remove();
+                            });
+                            userSpan.appendChild(removeBtn);
+
+                            // Dodanie ukrytego inputa do formularza
+                            const hiddenInput = document.createElement('input');
+                            hiddenInput.type = 'hidden';
+                            hiddenInput.name = 'selected_users';
+                            hiddenInput.value = userEmail;
+                            userSpan.appendChild(hiddenInput);
+
+                            // Dodanie tagu do kontenera
+                            document.getElementById('selected-users').appendChild(userSpan);
+                        }
+                    }
                 });
-            }
 
-            // Delegacja zdarzeń dla usuwania pojedynczych notatek
-            document.addEventListener('submit', function(event) {
-                if (event.target && event.target.classList.contains('delete-note-form')) {
-                    event.preventDefault();
-                    const noteId = event.target.getAttribute('data-note-id');
-                    const spinnerId = `note-spinner-${noteId}`;
+                // Obsługa submit dla formularza dodawania notatki
+                const addNoteForm = document.getElementById('add-note-form');
+                addNoteForm.addEventListener('submit', function(event) {
+                    event.preventDefault(); // Zapobiega tradycyjnemu wysłaniu formularza
 
-                    // Wyświetlenie spinnera
-                    showSpinner(spinnerId);
-
-                    fetch('{{ url_for("delete_note_ajax") }}', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ note_id: noteId }),
-                        credentials: 'same-origin'
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        // Ukrycie spinnera
-                        hideSpinner(spinnerId);
-
-                        if (data.success) {
-                            showFlashMessage('success', data.message);
-                            // Aktualizacja listy notatek
-                            updateNotesList(data.notes);
-                        } else {
-                            showFlashMessage('error', data.message);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Błąd:', error);
-                        hideSpinner(spinnerId);
-                        showFlashMessage('error', 'Wystąpił błąd podczas usuwania notatki.');
-                    });
-                }
-            });
-
-            // Delegacja zdarzeń dla usuwania wszystkich notatek
-            document.addEventListener('submit', function(event) {
-                if (event.target && event.target.id === 'delete-all-notes-form') {
-                    event.preventDefault();
-                    const spinnerId = 'delete-all-spinner';
-
-                    // Wyświetlenie spinnera
-                    showSpinner(spinnerId);
-
-                    fetch('{{ url_for("delete_all_notes_ajax") }}', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({}), // Nie potrzeba danych
-                        credentials: 'same-origin'
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        // Ukrycie spinnera
-                        hideSpinner(spinnerId);
-
-                        if (data.success) {
-                            showFlashMessage('success', data.message);
-                            // Aktualizacja listy notatek
-                            updateNotesList(data.notes);
-                        } else {
-                            showFlashMessage('error', data.message);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Błąd:', error);
-                        hideSpinner(spinnerId);
-                        showFlashMessage('error', 'Wystąpił błąd podczas usuwania notatek.');
-                    });
-                }
-            });
-
-            // Delegacja zdarzeń dla dodawania notatki
-            document.addEventListener('submit', function(event) {
-                if (event.target && event.target.id === 'add-note-form') {
-                    event.preventDefault();
-                    const form = event.target;
-                    const noteInput = form.querySelector('input[name="note"]');
+                    const noteInput = this.querySelector('input[name="note"]');
                     const noteContent = noteInput.value.trim();
-                    const spinnerId = 'note-spinner';
 
                     if (noteContent === '') {
                         showFlashMessage('error', 'Nie można dodać pustej notatki.');
                         return;
                     }
 
-                    // Wyświetlenie spinnera
-                    showSpinner(spinnerId);
+                    // Pokaż spinner
+                    showSpinner('note-spinner');
 
-                    fetch('{{ url_for("add_note_ajax") }}', {
+                    // Wyślij AJAX POST request
+                    fetch('{{ url_for("add_note_ajax") }}', { // Upewnij się, że używasz url_for dla odpowiedniej ścieżki
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({ note: noteContent }),
-                        credentials: 'same-origin'
+                        credentials: 'same-origin' // Umożliwia wysyłanie cookies, jeśli są potrzebne
                     })
                     .then(response => response.json())
                     .then(data => {
-                        // Ukrycie spinnera
-                        hideSpinner(spinnerId);
-
+                        hideSpinner('note-spinner');
                         if (data.success) {
                             showFlashMessage('success', data.message);
-                            // Aktualizacja listy notatek
-                            updateNotesList(data.notes);
-                            // Wyczyść pole notatki
-                            noteInput.value = '';
+                            updateNotesList(data.notes); // Aktualizuj listę notatek
+                            noteInput.value = ''; // Wyczyść pole input
                         } else {
                             showFlashMessage('error', data.message);
                         }
                     })
                     .catch(error => {
                         console.error('Błąd:', error);
-                        hideSpinner(spinnerId);
+                        hideSpinner('note-spinner');
                         showFlashMessage('error', 'Wystąpił błąd podczas dodawania notatki.');
                     });
-                }
+                });
+
+                // Obsługa otwierania edycji notatki
+                // (dublowanie z wcześniejszego event listener jest usunięte)
             });
 
-            // Funkcja do otwierania modalnego okna edycji notatki
+            // Funkcje do obsługi edycji notatek
             function openEditModal(noteId, currentContent) {
                 const modal = document.getElementById('editModal');
                 const editForm = document.getElementById('edit-note-form');
                 const editInput = document.getElementById('edit-note-input');
                 const closeModalBtn = document.getElementById('closeEditModal');
 
-                // Ustawienie obecnej treści notatki w polu edycji
                 editInput.value = currentContent;
-                // Przechowywanie ID notatki w formularzu
                 editForm.setAttribute('data-note-id', noteId);
 
-                // Wyświetlenie modalnego okna
                 modal.style.display = 'block';
 
-                // Obsługa zamykania modala po kliknięciu na przycisk zamknięcia
                 closeModalBtn.onclick = function() {
                     closeEditModal();
                 }
 
-                // Zamknięcie modalnego okna po kliknięciu poza treścią modala
                 window.onclick = function(event) {
                     if (event.target == modal) {
                         closeEditModal();
@@ -3635,18 +3406,14 @@ def index():
                 }
             }
 
-            // Zamknięcie modalnego okna
             function closeEditModal() {
                 const modal = document.getElementById('editModal');
                 modal.style.display = 'none';
             }
 
-            // Funkcja do edycji notatki
             function editNote(noteId, newContent) {
-                // Pokazanie spinnera
-                showSpinner(`edit-spinner-${noteId}`);
+                showSpinner(`edit-spinner`);
 
-                // Wysłanie żądania AJAX do edycji notatki
                 fetch('{{ url_for("edit_note_ajax") }}', {
                     method: 'POST',
                     headers: {
@@ -3660,17 +3427,14 @@ def index():
                 })
                 .then(response => response.json())
                 .then(data => {
-                    // Ukrycie spinnera
-                    hideSpinner(`edit-spinner-${noteId}`);
+                    hideSpinner(`edit-spinner`);
 
                     if (data.success) {
                         showFlashMessage('success', data.message);
-                        // Aktualizacja treści notatki w interfejsie użytkownika
-                        const noteSpan = document.querySelector(`.note[data-note-id="${noteId}"] span`);
+                        const noteSpan = document.querySelector(`.note[data-note-id="${noteId}"] .note-content`);
                         if (noteSpan) {
                             noteSpan.textContent = data.note.content;
                         }
-                        // Aktualizacja atrybutów data-note-content
                         const editBtn = document.querySelector(`.note[data-note-id="${noteId}"] .edit-btn`);
                         if (editBtn) {
                             editBtn.setAttribute('data-note-content', data.note.content);
@@ -3683,82 +3447,278 @@ def index():
                         showFlashMessage('error', data.message);
                     }
 
-                    // Zamknięcie modalnego okna
                     closeEditModal();
                 })
                 .catch(error => {
-                    console.error('Błąd:', error);
-                    hideSpinner(`edit-spinner-${noteId}`);
-                    showFlashMessage('error', 'Wystąpił błąd podczas edycji notatki.');
+                    console.error('Błąd podczas edytowania notatki:', error);
+                    hideSpinner(`edit-spinner`);
+                    showFlashMessage('error', 'Wystąpił błąd podczas edytowania notatki.');
                 });
             }
 
-            // Delegacja zdarzeń dla przycisków "Edytuj"
-            document.addEventListener('click', function(event) {
-                if (event.target && event.target.classList.contains('edit-btn')) {
-                    const noteId = event.target.getAttribute('data-note-id');
-                    const noteContent = event.target.getAttribute('data-note-content');
-                    console.log('Kliknięto przycisk Edytuj dla notatki:', noteId);
-                    openEditModal(noteId, noteContent);
-                }
-            });
-
-            // Delegacja zdarzeń dla formularza edycji notatki
+            // Obsługa submit form do edytowania notatki
             document.addEventListener('submit', function(event) {
                 if (event.target && event.target.id === 'edit-note-form') {
                     event.preventDefault();
                     const form = event.target;
                     const noteId = form.getAttribute('data-note-id');
                     const newContent = document.getElementById('edit-note-input').value.trim();
-                    const spinnerId = `edit-spinner-${noteId}`;
+                    const spinnerId = `edit-spinner`;
 
                     if (newContent === '') {
                         showFlashMessage('error', 'Nowa treść notatki nie może być pusta.');
                         return;
                     }
 
-                    // Wywołanie funkcji edytującej notatkę
                     editNote(noteId, newContent);
                 }
             });
 
-            // Funkcja do obsługi transferowania notatek
-            document.addEventListener('click', function(event) {
-                if (event.target && event.target.classList.contains('transfer-note-btn')) {
-                    const noteContent = event.target.getAttribute('data-note-content');
-                    console.log('Kliknięto przycisk Transfer. Treść notatki:', noteContent);
-                    transferToMessageField(noteContent);
-                    showFlashMessage('success', 'Treść notatki została przeniesiona do pola "Wiadomość".');
+            // Obsługa submit form do usuwania notatek
+            document.addEventListener('submit', function(event) {
+                if (event.target && event.target.classList.contains('delete-note-form')) {
+                    event.preventDefault();
+                    const noteId = event.target.getAttribute('data-note-id');
+                    const spinnerId = `note-spinner-${noteId}`;
+
+                    showSpinner(spinnerId);
+
+                    fetch('{{ url_for("delete_note_ajax") }}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ note_id: noteId }),
+                        credentials: 'same-origin'
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        hideSpinner(spinnerId);
+
+                        if (data.success) {
+                            showFlashMessage('success', data.message);
+                            updateNotesList(data.notes);
+                            updateSelectedItems();
+                        } else {
+                            showFlashMessage('error', data.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Błąd podczas usuwania notatki:', error);
+                        hideSpinner(spinnerId);
+                        showFlashMessage('error', 'Wystąpił błąd podczas usuwania notatki.');
+                    });
                 }
             });
 
-            // Aktualizacja wyświetlanych segmentów i możliwości przy załadowaniu strony
-            document.addEventListener('DOMContentLoaded', function() {
-                updateSelectedItems();
-                updateSelectAllButtons();
-                updateEmailToggleButtons();
-                updateCompanyToggleButtons();
+            // Obsługa submit form do usuwania wszystkich notatek
+            document.addEventListener('submit', function(event) {
+                if (event.target && event.target.id === 'delete-all-notes-form') {
+                    event.preventDefault();
+                    const spinnerId = 'delete-all-spinner';
+
+                    showSpinner(spinnerId);
+
+                    fetch('{{ url_for("delete_all_notes_ajax") }}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({}),
+                        credentials: 'same-origin'
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        hideSpinner(spinnerId);
+
+                        if (data.success) {
+                            showFlashMessage('success', data.message);
+                            updateNotesList(data.notes);
+                            updateSelectedItems();
+                        } else {
+                            showFlashMessage('error', data.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Błąd podczas usuwania wszystkich notatek:', error);
+                        hideSpinner(spinnerId);
+                        showFlashMessage('error', 'Wystąpił błąd podczas usuwania notatek.');
+                    });
+                }
             });
 
-            // Dodanie funkcji toggle dla panelu bocznego
-            document.addEventListener('DOMContentLoaded', function() {
-                const sidebarToggleBtn = document.getElementById('sidebar-toggle');
-                const sidebar = document.querySelector('.sidebar');
-                const mainContent = document.querySelector('.main-content');
+            // Funkcje do zarządzania przyciskami "Zaznacz Wszystkie"
+            function updateSelectAllButtons() {
+                // Aktualizacja przycisków "Zaznacz Wszystkie" dla segmentów
+                var selectAllSegmentsBtn = document.getElementById('select-all-segments-btn');
+                var segmentCheckboxes = document.querySelectorAll('.segment-item input[type="checkbox"]');
+                var allSegmentsChecked = Array.from(segmentCheckboxes).every(cb => cb.checked);
+                selectAllSegmentsBtn.textContent = allSegmentsChecked ? 'Odznacz wszystkie segmenty' : 'Zaznacz wszystkie segmenty';
 
-                sidebarToggleBtn.addEventListener('click', function() {
-                    sidebar.classList.toggle('active');
-                    mainContent.classList.toggle('sidebar-active');
+                // Aktualizacja przycisków "Zaznacz Wszystkie" dla możliwości
+                var selectAllPossibilitiesBtn = document.getElementById('select-all-possibilities-btn');
+                var possibilityCheckboxes = document.querySelectorAll('.possibility-item input[type="checkbox"]');
+                var allPossibilitiesChecked = Array.from(possibilityCheckboxes).every(cb => cb.checked);
+                selectAllPossibilitiesBtn.textContent = allPossibilitiesChecked ? 'Odznacz wszystkie możliwości' : 'Zaznacz wszystkie możliwości';
+
+                // Aktualizacja przycisków "Zaznacz Wszystkich" dla potencjalnych klientów
+                var selectAllPotentialClientsBtn = document.querySelector('.select-deselect-potential-clients-btn');
+                var groupCheckboxes = document.querySelectorAll('.potential-client-group input[type="checkbox"]');
+                var clientCheckboxes = document.querySelectorAll('.potential-clients-list .client-item input[type="checkbox"]');
+                var allPotentialClientsChecked = Array.from(groupCheckboxes).every(cb => cb.checked) && Array.from(clientCheckboxes).every(cb => cb.checked);
+                selectAllPotentialClientsBtn.textContent = allPotentialClientsChecked ? 'Odznacz wszystkich klientów' : 'Zaznacz wszystkich klientów';
+            }
+
+            function updateEmailToggleButtons() {
+                // Aktualizacja przycisków togglingu e-maili w segmentach
+                var emailLists = document.querySelectorAll('.email-list');
+                emailLists.forEach(function(emailList) {
+                    var toggleBtn = emailList.querySelector('.select-deselect-emails-btn');
+                    var emailCheckboxes = emailList.querySelectorAll('input[type="checkbox"]');
+                    var allChecked = Array.from(emailCheckboxes).every(cb => cb.checked);
+                    toggleBtn.textContent = allChecked ? 'Odznacz Wszystkie' : 'Zaznacz Wszystkie';
                 });
-            });
+            }
+
+            function updateCompanyToggleButtons() {
+                // Aktualizacja przycisków togglingu firm w możliwościach
+                var companyLists = document.querySelectorAll('.company-list');
+                companyLists.forEach(function(companyList) {
+                    var toggleBtn = companyList.querySelector('.select-deselect-companies-btn');
+                    var companyCheckboxes = companyList.querySelectorAll('input[type="checkbox"]');
+                    var allChecked = Array.from(companyCheckboxes).every(cb => cb.checked);
+                    toggleBtn.textContent = allChecked ? 'Odznacz Wszystkie' : 'Zaznacz Wszystkie';
+                });
+            }
+
+            // Funkcja do toggle panelu bocznego
+            function toggleSidebar(button) {
+                var sidebar = document.querySelector('.sidebar');
+                sidebar.classList.toggle('active');
+                var mainContent = document.querySelector('.main-content');
+                mainContent.classList.toggle('sidebar-active');
+            }
+
+            // Funkcje do togglowania list e-maili, firm i klientów
+            function toggleEmailsList(segmentIndex) {
+                var emailList = document.getElementById(`emails-${segmentIndex}`);
+                if (emailList) {
+                    emailList.classList.toggle('show');
+                }
+            }
+
+            function toggleCompanyList(possibilityIndex) {
+                var companyList = document.getElementById(`companies-${possibilityIndex}`);
+                if (companyList) {
+                    companyList.classList.toggle('show');
+                }
+            }
+
+            function toggleClientsList(groupIndex) {
+                var clientsList = document.getElementById(`clients-${groupIndex}`);
+                if (clientsList) {
+                    clientsList.classList.toggle('show');
+                }
+            }
+
+            // Funkcja walidująca zaznaczenia rodzic-dziecko
+            function validateParentChildSelection() {
+                // Sprawdzanie segmentów
+                const segmentCheckboxes = document.querySelectorAll('.segment-item input[type="checkbox"]');
+                for (const segment of segmentCheckboxes) {
+                    const segmentIndex = segment.id.split('-')[1];
+                    const emailList = document.getElementById(`emails-${segmentIndex}`);
+                    if (emailList) {
+                        const childEmails = emailList.querySelectorAll('input[type="checkbox"]:checked');
+                        // Jeśli są zaznaczone maile, a segment nie jest zaznaczony – błąd
+                        if (childEmails.length > 0 && !segment.checked) {
+                            showFlashMessage('error', 'Zaznacz etykiety (segmenty)!');
+                            return false;
+                        }
+                    }
+                }
+
+                // Sprawdzanie możliwości
+                const possibilityCheckboxes = document.querySelectorAll('.possibility-item input[type="checkbox"]');
+                for (const possibility of possibilityCheckboxes) {
+                    const possibilityIndex = possibility.id.split('-')[1];
+                    const companyList = document.getElementById(`companies-${possibilityIndex}`);
+                    if (companyList) {
+                        const childCompanies = companyList.querySelectorAll('input[type="checkbox"]:checked');
+                        // Jeśli są zaznaczone firmy, a możliwość nie jest zaznaczona – błąd
+                        if (childCompanies.length > 0 && !possibility.checked) {
+                            showFlashMessage('error', 'Zaznacz etykiety (możliwości)!');
+                            return false;
+                        }
+                    }
+                }
+
+                // Sprawdzanie potencjalnych klientów
+                const groupCheckboxes = document.querySelectorAll('.potential-client-group input[type="checkbox"]');
+                for (const group of groupCheckboxes) {
+                    const groupIndex = group.id.split('-')[2];
+                    const clientsList = document.getElementById(`clients-${groupIndex}`);
+                    if (clientsList) {
+                        const childClients = clientsList.querySelectorAll('input[type="checkbox"]:checked');
+                        // Jeśli są zaznaczeni klienci, a grupa nie jest zaznaczona – błąd
+                        if (childClients.length > 0 && !group.checked) {
+                            showFlashMessage('error', 'Zaznacz etykiety (potencjalni klienci)!');
+                            return false;
+                        }
+                    }
+                }
+
+                return true;
+            }
+
+            // Funkcja do obsługi kliknięć na imię i nazwisko użytkownika w notatkach
+            function attachUserNameClickListeners() {
+                document.querySelectorAll('.user-name').forEach(function(userNameSpan) {
+                    userNameSpan.style.cursor = 'pointer';
+                    userNameSpan.addEventListener('click', function() {
+                        const userName = this.textContent.trim();
+                        const userEmail = this.getAttribute('data-email');
+
+                        // Sprawdzenie, czy użytkownik jest już dodany
+                        const alreadySelected = Array.from(document.querySelectorAll('#selected-users .selected-item'))
+                            .some(item => item.getAttribute('data-email') === userEmail);
+
+                        if (!alreadySelected) {
+                            // Tworzenie elementu tagu użytkownika
+                            const userSpan = document.createElement('span');
+                            userSpan.className = 'selected-item';
+                            userSpan.setAttribute('data-email', userEmail);
+                            userSpan.textContent = userName;
+
+                            // Dodanie przycisku usuwania
+                            const removeBtn = document.createElement('span');
+                            removeBtn.className = 'remove-item';
+                            removeBtn.textContent = '×';
+                            removeBtn.addEventListener('click', function() {
+                                userSpan.remove();
+                            });
+                            userSpan.appendChild(removeBtn);
+
+                            // Dodanie ukrytego inputa do formularza
+                            const hiddenInput = document.createElement('input');
+                            hiddenInput.type = 'hidden';
+                            hiddenInput.name = 'selected_users';
+                            hiddenInput.value = userEmail;
+                            userSpan.appendChild(hiddenInput);
+
+                            // Dodanie tagu do kontenera
+                            document.getElementById('selected-users').appendChild(userSpan);
+                        }
+                    });
+                });
+            }
         </script>
     </head>
     <body>
-        <!-- Nowy Header -->
+        <!-- Nagłówek -->
         <header class="top-header">
             <div class="header-left">
-                <!-- Przycisk toggle sidebar -->
-                <button id="sidebar-toggle" class="sidebar-toggle-btn">&#9776;</button>
+                <button id="sidebar-toggle" class="sidebar-toggle-btn" onclick="toggleSidebar(this)">&#9776;</button>
                 <span class="header-title">Ranges</span>
             </div>
             <div class="header-right">
@@ -3770,21 +3730,24 @@ def index():
             </div>
         </header>
         
-        <!-- Wrapper na zawartość z formularzem email -->
+        <!-- Formularz główny -->
         <form id="main-form" class="main-form" enctype="multipart/form-data">
             <div class="content-wrapper">
-                <!-- Sidebar dla zarządzania segmentami i możliwościami -->
+                <!-- Panel boczny -->
                 <div class="sidebar">
-                    <!-- Container for toggle buttons placed side by side -->
                     <div class="toggle-buttons-container">
-                        <!-- Przycisk do toggle segmentów -->
+                        <!-- Przyciski toggle -->
                         <button type="button" class="toggle-segments-btn" onclick="toggleSegmentsList(this)">
                             <img src="{{ url_for('static', filename='hammer.png') }}" alt="Toggle Segments">
                         </button>
 
-                        <!-- Przycisk do toggle możliwości transportowych zastąpiony obrazkiem greek_key.png -->
                         <button type="button" class="toggle-possibilities-btn" onclick="togglePossibilitiesList(this)">
                             <img src="{{ url_for('static', filename='greek_key.png') }}" alt="Toggle Possibilities">
+                        </button>
+                        
+                        <!-- Zmiana obrazka na 'money.png' i zmiana etykiety -->
+                        <button type="button" class="toggle-potential-clients-btn" onclick="togglePotentialClientsList(this)">
+                            <img src="{{ url_for('static', filename='money.png') }}" alt="Toggle Potential Clients">
                         </button>
                     </div>
 
@@ -3802,9 +3765,9 @@ def index():
                                 {% set segment_index = loop.index %}
                                 <li class="segment-item">
                                     <input type="checkbox" name="segments" value="{{ segment }}" id="segment-{{ segment_index }}" onchange="handleSegmentChange(this)">
-                                    <label class="segment-label" onclick="toggleEmailList({{ segment_index }})">
+                                    <span class="segment-label" data-index="{{ segment_index }}">
                                         {{ segment }} <span class="segment-count">(Polski: {{ counts['Polski'] }}, Zagraniczny: {{ counts['Zagraniczny'] }})</span>
-                                    </label>
+                                    </span>
                                 </li>
                                 <ul class="email-list" id="emails-{{ segment_index }}">
                                     <!-- Przycisk Zaznacz/Odznacz Wszystkie Adresy w Tym Segmencie -->
@@ -3843,9 +3806,9 @@ def index():
                                 {% set possibility_index = loop.index %}
                                 <li class="possibility-item">
                                     <input type="checkbox" name="possibilities" value="{{ possibility }}" id="possibility-{{ possibility_index }}" onchange="handlePossibilityChange(this)">
-                                    <label class="possibility-label" onclick="toggleCompanyList({{ possibility_index }})">
+                                    <span class="possibility-label" data-index="{{ possibility_index }}">
                                         {{ possibility }} <span class="company-count">({{ companies|length }})</span>
-                                    </label>
+                                    </span>
                                 </li>
                                 <ul class="company-list" id="companies-{{ possibility_index }}">
                                     <!-- Przycisk Zaznacz/Odznacz Wszystkie Firmy w Tej Możliwości -->
@@ -3861,6 +3824,37 @@ def index():
                             {% endfor %}
                         </ul>
                     </div>
+                    
+                    <!-- Kontener potencjalnych klientów -->
+                    <div id="potential-clients-container" class="potential-clients-container">
+                        <!-- Przycisk Zaznacz/Odznacz Wszystkich Potencjalnych Klientów -->
+                        <button type="button" class="yellow-btn select-deselect-potential-clients-btn" onclick="toggleSelectAllPotentialClients(this)">Zaznacz wszystkich klientów</button>
+                        
+                        <!-- Przycisk Rozwiń/Zwiń Wszystkich Potencjalnych Klientów -->
+                        <button type="button" class="yellow-btn" onclick="toggleAllPotentialClientsExpandCollapse(this)">Rozwiń wszystkich potencjalnych klientów</button>
+
+                        <!-- Lista potencjalnych klientów -->
+                        <ul class="potential-clients-list">
+                            {% for group, clients in potential_clients.items() %}
+                                {% set group_index = loop.index %}
+                                <li class="potential-client-group">
+                                    <input type="checkbox" name="potential_clients" value="{{ group }}" id="potential-group-{{ group_index }}" onchange="handlePotentialClientGroupChange(this)">
+                                    <span class="potential-client-group-label" data-index="{{ group_index }}">
+                                        {{ group }}
+                                    </span>
+                                </li>
+                                <ul class="clients-list" id="clients-{{ group_index }}">
+                                    {% for client in clients %}
+                                        <li class="client-item">
+                                            <!-- Wyświetlanie tylko nazwy firmy i języka -->
+                                            <input type="checkbox" name="include_potential_emails" value="{{ client.email }}" id="client-{{ group_index }}-{{ loop.index }}">
+                                            <label for="client-{{ group_index }}-{{ loop.index }}">{{ client.company }} ({{ client.language }})</label>
+                                        </li>
+                                    {% endfor %}
+                                </ul>
+                            {% endfor %}
+                        </ul>
+                    </div>
                 </div>
 
                 <!-- Główna treść strony -->
@@ -3868,12 +3862,10 @@ def index():
                     <div class="form-container">
                         <h1>e-Communicator</h1>
 
-                        <!-- Flash Messages -->
                         <div class="flash-message success"></div>
                         <div class="flash-message error"></div>
                         <div class="flash-message warning"></div>
 
-                        <!-- Formularz wysyłania e-maili -->
                         <label for="subject">Temat:</label>
                         <input type="text" id="subject" name="subject" required>
 
@@ -3881,15 +3873,12 @@ def index():
                         <div id="message-editor"></div>
                         <textarea name="message" id="message" style="display: none;"></textarea>
 
-                        <!-- Pole załączników -->
                         <label for="attachments">Załączniki:</label>
                         <input type="file" name="attachments" id="attachments" multiple style="display: none;">
                         <div id="dropzone" class="dropzone">
                             Przeciągnij i upuść pliki tutaj lub kliknij, aby wybrać.
                         </div>
-                        <!-- Sekcja do wyświetlania podglądu załączników -->
                         <div id="attachments-preview" class="attachments-preview"></div>
-                        <!-- Licznik załączników -->
                         <div id="attachments-count" class="attachments-count">Załączników: 0/{{ max_attachments }}</div>
 
                         <label for="language">Wybierz język:</label>
@@ -3899,27 +3888,22 @@ def index():
                             <option value="Zagraniczny">Zagraniczny</option>
                         </select>
 
-                        <!-- Przycisk "Wyślij" z spinnerem i progress bar -->
                         <div class="button-container" style="display: flex; align-items: flex-start; flex-wrap: wrap; margin-top: 20px;">
                             <button type="submit" id="send-button">Wyślij</button>
                             <div id="selected-segments" style="display: flex; gap: 5px; flex-wrap: wrap;"></div>
                             <div id="selected-possibilities" style="display: flex; gap: 5px; flex-wrap: wrap;"></div>
+                            <div id="selected-potential-clients" style="display: flex; gap: 5px; flex-wrap: wrap; margin-left: 10px;"></div>
+                            <div id="selected-users" style="display: flex; gap: 5px; flex-wrap: wrap;"></div>
                             <div class="spinner" id="spinner" style="display: none;"></div>
-                        </div>
-
-                        <!-- Progress Bar -->
-                        <div class="progress-container" style="display: none;">
-                            <div class="progress-bar">0%</div>
                         </div>
                     </div>
                 </div>
             </div>
         </form>
 
-        <!-- Sekcja Notatek poza głównym formularzem -->
+        <!-- Sekcja notatek i modale -->
         <div class="note-section">
             <h3>Notatki</h3>
-            <!-- Formularz dodawania notatki -->
             <form id="add-note-form">
                 <input type="text" name="note" placeholder="Dodaj notatkę..." required>
                 <button type="submit">Dodaj notatkę</button>
@@ -3928,20 +3912,24 @@ def index():
             <ul>
                 {% for note in notes %}
                     <li class="note" data-note-id="{{ note.id }}">
-                        <span>{{ note.content }}</span>
-                        <div class="note-actions">
-                            <button type="button" class="transfer-note-btn" data-note-content="{{ note.content|e }}">Transfer</button>
-                            <button type="button" class="edit-btn" data-note-id="{{ note.id }}" data-note-content="{{ note.content|e }}">Edytuj</button>
-                            <form class="delete-note-form" data-note-id="{{ note.id }}">
-                                <button type="submit" class="delete-btn">Usuń</button>
-                                <div class="spinner" id="note-spinner-{{ note.id }}" style="display: none;"></div>
-                            </form>
+                        <div class="note-content">{{ note.content }}</div>
+                        <div class="note-footer">
+                            <div class="note-actions">
+                                <button type="button" class="transfer-note-btn" data-note-content="{{ note.content|e }}">Transfer</button>
+                                <button type="button" class="edit-btn" data-note-id="{{ note.id }}" data-note-content="{{ note.content|e }}">Edytuj</button>
+                                <form class="delete-note-form" data-note-id="{{ note.id }}">
+                                    <button type="submit" class="delete-btn">Usuń</button>
+                                    <div class="spinner" id="note-spinner-{{ note.id }}" style="display: none;"></div>
+                                </form>
+                            </div>
+                            <span class="user-name" style="background-color: {{ note.user.color }};" data-email="{{ note.user.email }}">
+                                {{ note.user.first_name }} {{ note.user.last_name }}
+                            </span>
                         </div>
                     </li>
                 {% endfor %}
             </ul>
             {% if notes %}
-                <!-- Formularz usuwania wszystkich notatek -->
                 <form class="delete-all-notes-form" id="delete-all-notes-form">
                     <button type="submit">Usuń wszystkie notatki</button>
                     <div class="spinner" id="delete-all-spinner" style="display: none;"></div>
@@ -3965,7 +3953,7 @@ def index():
 
         <!-- Stopka -->
         <footer class="footer">
-            ©DigitDrago
+            © DigitDrago
         </footer>
     </body>
     </html>
@@ -3977,10 +3965,13 @@ def index():
         segments=segments,
         notes=notes,
         possibilities=possibilities,
+        potential_clients=potential_clients,
         get_email_company_pairs_for_segment=get_email_company_pairs_for_segment,
         data=data,
         max_attachments=app.config['MAX_ATTACHMENTS']
     )
+
+
 
 
 

@@ -5,6 +5,20 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 db = SQLAlchemy()
 
+PASTEL_COLORS = [
+    "#e0f7fa",  # Pastelowy błękit
+    "#f8bbd0",  # Pastelowy róż
+    "#d1c4e9",  # Pastelowy fiolet
+    "#c8e6c9",  # Pastelowa zieleń
+    "#fff9c4",  # Pastelowy żółty
+    "#ffe0b2",  # Pastelowy pomarańcz
+    "#d7ccc8",  # Pastelowy brąz
+    "#c5cae9",  # Pastelowy niebieski
+    "#ffccbc",  # Pastelowy koral
+    "#d1adfc",  # Pastelowy liliowy
+    # Dodaj więcej kolorów według potrzeb
+]
+
 class LicenseKey(db.Model):
     __tablename__ = 'license_key'
     id = db.Column(db.Integer, primary_key=True)
@@ -15,8 +29,7 @@ class LicenseKey(db.Model):
     created_at = db.Column(db.DateTime, nullable=True)
     updated_at = db.Column(db.DateTime, nullable=True)
 
-    # Relacja z użytkownikami (One-to-Many)
-    users = db.relationship('User', backref='license_key', lazy=True)
+    user = db.relationship('User', back_populates='license_key', uselist=False)
 
 class User(db.Model):
     __tablename__ = 'user'
@@ -24,6 +37,7 @@ class User(db.Model):
         sa.UniqueConstraint('username', name='uq_user_username'),
         sa.UniqueConstraint('email_address', name='uq_user_email_address'),
         sa.UniqueConstraint('reset_code', name='uq_user_reset_code'),
+        sa.UniqueConstraint('license_key_id', name='uq_user_license_key_id'),
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -38,8 +52,12 @@ class User(db.Model):
     license_key_id = db.Column(db.Integer, db.ForeignKey('license_key.id'), nullable=False)
     reset_code = db.Column(db.String(6), nullable=True)
     reset_code_expiration = db.Column(db.DateTime, nullable=True)
+    # Najpierw pozwalamy na NULL i ustawiamy domyślną wartość serwerową
+    color = db.Column(db.String(7), nullable=True, server_default="'#e0f7fa'")
 
-    # Relacja z VerificationCode (One-to-Many) z kaskadowym usuwaniem
+
+    license_key = db.relationship('LicenseKey', back_populates='user', cascade='all, delete')
+
     verification_codes = db.relationship(
         'VerificationCode',
         backref='user',
@@ -47,7 +65,6 @@ class User(db.Model):
         lazy=True
     )
 
-    # Relacja z Note (One-to-Many) z kaskadowym usuwaniem
     notes = db.relationship(
         'Note',
         backref='user',

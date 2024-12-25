@@ -537,27 +537,57 @@ def test_email():
 
 def get_email_subsegment_mapping(data):
     email_subsegment = {}
-    for row in data:
-        if len(row) > 17:
-            email = row[17].strip()
+    for i, row in enumerate(data):
+        # Bezpiecznie wyciągamy wartości z poszczególnych kolumn (z usunięciem spacji)
+        col17 = row[17].strip() if len(row) > 17 and row[17] else ""
+        col23 = row[23].strip() if len(row) > 23 and row[23] else ""
+        col49 = row[49].strip() if len(row) > 49 and row[49] else ""
+
+        # DEBUG: Wypisanie wiersza i kluczowych kolumn w konsoli (logach)
+        print(f"[DEBUG] Wiersz {i+1}: col17(R)='{col17}', col23(X)='{col23}', col49(AX)='{col49}'")
+
+        # Następnie implementacja dotychczasowej logiki
+        if col23 in ("Polski","Zagraniczny"):
+            final_lang = col23
+        elif col49 in ("Polski","Zagraniczny"):
+            final_lang = col49
         else:
-            email = ""
+            final_lang = ""
 
-        # Najpierw próbuj w kolumnie 23
-        lang_23 = row[23].strip() if len(row) > 23 else ""
-        # Potem w kolumnie 49
-        lang_49 = row[49].strip() if len(row) > 49 else ""
+        if col17 and final_lang:
+            email_subsegment[col17] = final_lang
 
-        # Logika: jeżeli w kolumnie 23 jest "Polski"/"Zagraniczny" użyj tego
-        # jeśli nie, a w kolumnie 49 jest "Polski"/"Zagraniczny" to użyj kolumny 49
-        final_lang = ""
-        if lang_23 in ["Polski", "Zagraniczny"]:
-            final_lang = lang_23
-        elif lang_49 in ["Polski", "Zagraniczny"]:
-            final_lang = lang_49
+    return email_subsegment
 
-        if email and final_lang:
-            email_subsegment[email] = final_lang
+def get_email_subsegment_mapping(data):
+    email_subsegment = {}
+    for i, row in enumerate(data):
+        # Bezpiecznie wyciągamy wartości z poszczególnych kolumn (z usunięciem spacji i konwersją na odpowiedni format)
+        col17 = row[17].strip() if len(row) > 17 and row[17] else ""
+        col23 = row[23].strip().capitalize() if len(row) > 23 and row[23] else ""
+        col49 = row[49].strip().capitalize() if len(row) > 49 and row[49] else ""
+
+        # DEBUG: Wypisanie wiersza i kluczowych kolumn w logach
+        app.logger.debug(f"Wiersz {i+1}: col17(R)='{col17}', col23(X)='{col23}', col49(AX)='{col49}'")
+
+        # Logika przypisywania języka
+        if col23 in ("Polski", "Zagraniczny"):
+            final_lang = col23
+        elif col49 in ("Polski", "Zagraniczny"):
+            final_lang = col49
+        else:
+            final_lang = ""
+
+        if col17 and final_lang:
+            email_subsegment[col17] = final_lang
+
+    # Dodatkowy debug: Podsumowanie mapowania
+    total_mapped = len(email_subsegment)
+    polski_count = list(email_subsegment.values()).count("Polski")
+    zagraniczny_count = list(email_subsegment.values()).count("Zagraniczny")
+    app.logger.debug(f"Total mapped emails: {total_mapped}")
+    app.logger.debug(f"Polski: {polski_count}, Zagraniczny: {zagraniczny_count}")
+    app.logger.debug(f"Sample mappings: {list(email_subsegment.items())[:10]}")  # Pokaż pierwsze 10 mapowań
 
     return email_subsegment
 
@@ -766,7 +796,7 @@ def send_verification_email(user, code):
         app.logger.error(f"Błąd podczas wysyłania e-maila do {user.email_address}: {e}")
         return False
 
-@app.route('/send_email_ajax', methods=['POST'])
+@app.route('/send_message_ajax', methods=['POST'])
 def send_email_ajax():
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Nie jesteś zalogowany.'}), 401
@@ -793,6 +823,9 @@ def send_email_ajax():
     if not valid_emails:
         return jsonify({'success': False, 'message': 'Proszę wybrać przynajmniej jeden adres e-mail.'}), 400
 
+    # DEBUG: Wypisanie wybranych emaili przed filtrowaniem
+    app.logger.debug(f"Wybrane adresy e-mail przed filtrowaniem: {valid_emails}")
+
     # Obsługa załączników
     attachment_filenames = []
     for file in attachments:
@@ -805,33 +838,31 @@ def send_email_ajax():
         elif file.filename != '':
             return jsonify({'success': False, 'message': f'Nieprawidłowy typ pliku: {file.filename}'}), 400
 
+    # Pobranie danych z arkusza i utworzenie mapy adresów e-mail do podsegmentów
+    data = get_data_from_sheet()
+    email_subsegment = get_email_subsegment_mapping(data)
+
+    # Filtruj adresy e-mail zgodnie z wybranym językiem
+    filtered_emails = [email for email in valid_emails if email_subsegment.get(email) == language]
+
+    # DEBUG: Wypisanie wyników filtrowania
+    app.logger.debug(f"Wybrane język: {language}")
+    app.logger.debug(f"Przefiltrowane adresy e-mail: {filtered_emails}")
+
+    if not filtered_emails:
+        flash('Brak adresów e-mail zgodnych z wybranym językiem.', 'error')
+        return redirect(url_for('index'))
+
     try:
-        # Konfiguracja SMTP
-        smtp_server = 'smtp.example.com'  # Zmień na swój serwer SMTP
-        smtp_port = 587  # Typowy port dla TLS
-        smtp_username = 'your_email@example.com'  # Twoja nazwa użytkownika SMTP
-        smtp_password = 'your_email_password'  # Twoje hasło SMTP
-
-        # Utworzenie wiadomości email
-        msg = EmailMessage()
-        msg['Subject'] = subject
-        msg['From'] = smtp_username
-        msg['To'] = ', '.join(valid_emails)
-        msg.set_content(message, subtype='html')
-
-        # Dodanie załączników
-        for filepath in attachment_filenames:
-            with open(filepath, 'rb') as f:
-                file_data = f.read()
-                file_type = mimetypes.guess_type(filepath)[0] or 'application/octet-stream'
-                maintype, subtype = file_type.split('/', 1)
-                msg.add_attachment(file_data, maintype=maintype, subtype=subtype, filename=os.path.basename(filepath))
-
-        # Wysłanie emaila
-        with smtplib.SMTP(smtp_server, smtp_port) as server:
-            server.starttls()
-            server.login(smtp_username, smtp_password)
-            server.send_message(msg)
+        # Wysyłanie e-maili do wybranych adresów
+        for email in filtered_emails:
+            send_email(
+                to_email=email,
+                subject=subject,
+                body=message,
+                user=user,
+                attachments=attachment_filenames
+            )
 
         # Usunięcie załączników po wysłaniu
         for filepath in attachment_filenames:
@@ -840,11 +871,14 @@ def send_email_ajax():
             except Exception as e:
                 app.logger.error(f'Nie udało się usunąć załącznika {filepath}: {e}')
 
-        return jsonify({'success': True, 'message': 'Wiadomość została wysłana pomyślnie.'}), 200
+        flash('Wiadomość została wysłana pomyślnie.', 'success')
+        return redirect(url_for('index'))
 
     except Exception as e:
         app.logger.error(f'Błąd podczas wysyłania emaila: {e}')
-        return jsonify({'success': False, 'message': 'Wystąpił błąd podczas wysyłania wiadomości.'}), 500
+        flash('Wystąpił błąd podczas wysyłania wiadomości.', 'error')
+        return redirect(url_for('index'))
+
 
 
 @app.route('/send_message_ajax', methods=['POST'])

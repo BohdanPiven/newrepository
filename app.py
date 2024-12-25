@@ -534,17 +534,31 @@ def test_email():
     else:
         flash('Nie znaleziono użytkownika do wysłania testowego e-maila.', 'error')
     return redirect(url_for('index'))
+
 def get_email_subsegment_mapping(data):
-    """
-    Zwraca słownik mapujący adresy e-mail do podsegmentów ('Polski' lub 'Zagraniczny').
-    """
     email_subsegment = {}
     for row in data:
-        if len(row) > 23:
-            email = row[17].strip() if len(row) > 17 else ""
-            subsegment = row[23] if len(row) > 23 else ""
-            if email and subsegment:
-                email_subsegment[email] = subsegment
+        if len(row) > 17:
+            email = row[17].strip()
+        else:
+            email = ""
+
+        # Najpierw próbuj w kolumnie 23
+        lang_23 = row[23].strip() if len(row) > 23 else ""
+        # Potem w kolumnie 49
+        lang_49 = row[49].strip() if len(row) > 49 else ""
+
+        # Logika: jeżeli w kolumnie 23 jest "Polski"/"Zagraniczny" użyj tego
+        # jeśli nie, a w kolumnie 49 jest "Polski"/"Zagraniczny" to użyj kolumny 49
+        final_lang = ""
+        if lang_23 in ["Polski", "Zagraniczny"]:
+            final_lang = lang_23
+        elif lang_49 in ["Polski", "Zagraniczny"]:
+            final_lang = lang_49
+
+        if email and final_lang:
+            email_subsegment[email] = final_lang
+
     return email_subsegment
 
 

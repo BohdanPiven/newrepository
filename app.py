@@ -857,7 +857,7 @@ def send_message_ajax():
     for email in raw_recipients.split(','):
         clean = email.strip()
         if clean:
-        valid_emails.append(clean)
+           valid_emails.append(clean)
 
     if not valid_emails:
         return jsonify({'success': False, 'message': 'Proszę wybrać przynajmniej jeden adres e-mail.'}), 400

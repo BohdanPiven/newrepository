@@ -15,7 +15,7 @@ from googleapiclient.discovery import build
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 from flask_migrate import Migrate
-from google.cloud import storage  # Dodany import
+from google.cloud import storage  # <-- GCS import
 import uuid
 from datetime import datetime, timedelta, timezone
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -34,7 +34,7 @@ import mimetypes
 # Dodaj bieżący katalog do ścieżki Pythona
 sys.path.append(os.path.abspath(os.getcwd()))
 
-# Załaduj zmienne środowiskowe z pliku .env
+# Załaduj zmienne środowiskowe z pliku .env (tylko lokalnie; Heroku wymaga Config Vars)
 load_dotenv()
 
 # Inicjalizacja aplikacji Flask
@@ -60,6 +60,7 @@ if database_url.startswith("sqlite:///"):
 else:
     print(f"Używana baza danych: {database_url}")
 
+# Podstawowa konfiguracja
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default_secret_key')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # Maksymalnie 16 MB na żądanie
 
@@ -68,65 +69,78 @@ app.config['SESSION_COOKIE_SECURE'] = False  # Ustaw na True w produkcji
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
-# Inicjalizacja szyfrowania
-ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY').encode()
-fernet = Fernet(ENCRYPTION_KEY)
+# Inicjalizacja szyfrowania (Fernet)
+ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY')
+if not ENCRYPTION_KEY:
+    raise ValueError("Brak zmiennej ENCRYPTION_KEY w środowisku!")
+fernet = Fernet(ENCRYPTION_KEY.encode())
 
 # Konfiguracja Flask-Mail
 app.config['MAIL_SERVER'] = 'smtp.office365.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
 
-# Pobranie MAIL_USERNAME i MAIL_PASSWORD z .env
 MAIL_USERNAME = os.getenv('MAIL_USERNAME')
 MAIL_PASSWORD_ENCRYPTED = os.getenv('MAIL_PASSWORD')
 
-# Odszyfrowanie MAIL_PASSWORD
+# Odszyfrowanie MAIL_PASSWORD (o ile jest zaszyfrowane)
 try:
     MAIL_PASSWORD = fernet.decrypt(MAIL_PASSWORD_ENCRYPTED.encode()).decode()
 except Exception as e:
     print(f"Błąd odszyfrowywania MAIL_PASSWORD: {e}")
     MAIL_PASSWORD = MAIL_PASSWORD_ENCRYPTED  # Jeśli nie jest szyfrowane
 
-# Ustawienie MAIL_USERNAME i MAIL_PASSWORD w konfiguracji Flask
 app.config['MAIL_USERNAME'] = MAIL_USERNAME
 app.config['MAIL_PASSWORD'] = MAIL_PASSWORD
 
-# Inicjalizacja rozszerzeń
+# Inicjalizacja rozszerzeń Flask
 db.init_app(app)
 migrate = Migrate(app, db)
 mail = Mail(app)
 
-# **Globalny słownik do śledzenia postępu wysyłania e-maili**
+# Globalne słowniki do śledzenia postępu i zatrzymywania wysyłki e-maili
 email_sending_progress = {}
-
-# **Nowy słownik do przechowywania obiektów typu threading.Event umożliwiających zatrzymanie wysyłki**
 email_sending_stop_events = {}
-
 
 # Konfiguracja katalogu do przechowywania załączników
 UPLOAD_FOLDER = os.path.join(app.root_path, 'uploads')
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # Maksymalny rozmiar załącznika: 16MB
-
-# Tworzenie katalogu do przechowywania załączników
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB limit
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Inicjalizacja Google Cloud Storage
-storage_client = storage.Client()
-GCS_BUCKET = os.getenv('GCS_BUCKET_NAME')  # Upewnij się, że masz zmienną środowiskową z nazwą bucketu
+# ------------------------------
+# KONFIGURACJA GOOGLE CLOUD STORAGE (zamiast default credentials)
+# ------------------------------
+creds_b64 = os.getenv("GOOGLE_CREDENTIALS_BASE64")
+if not creds_b64:
+    raise ValueError("Brak zmiennej GOOGLE_CREDENTIALS_BASE64 – nie można zainicjalizować GCS.")
+
+try:
+    creds_json = base64.b64decode(creds_b64).decode("utf-8")
+    creds_info = json.loads(creds_json)
+    credentials = service_account.Credentials.from_service_account_info(creds_info)
+except Exception as e:
+    raise ValueError(f"Nie udało się zdekodować klucza GCP: {e}")
+
+storage_client = storage.Client(credentials=credentials)
+
+GCS_BUCKET = os.getenv('GCS_BUCKET_NAME')
+if not GCS_BUCKET:
+    raise ValueError("Brak zmiennej środowiskowej GCS_BUCKET_NAME!")
+
 bucket = storage_client.bucket(GCS_BUCKET)
 
 # Dozwolone typy plików
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'zip'}
+ALLOWED_EXTENSIONS = {
+    'png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'zip'
+}
 app.config['MAX_ATTACHMENTS'] = 5
-
 
 # Konfiguracja Google Sheets API
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
-SPREADSHEET_ID = os.getenv('SPREADSHEET_ID')  # Umieść w zmiennych środowiskowych
-RANGE_NAME = 'A1:AH'  # WAŻNE: Pobranie danych do kolumny AH
+SPREADSHEET_ID = os.getenv('SPREADSHEET_ID', '')
 
+# ewentualna definicja RANGE_NAME = 'A1:AH'
 
 def is_allowed_file(file):
     """
@@ -138,6 +152,7 @@ def is_allowed_file(file):
     file.seek(0)
     mime_type = magic.from_buffer(file.read(1024), mime=True)
     file.seek(0)
+
     allowed_mime_types = [
         'application/pdf',
         'image/jpeg',
@@ -150,49 +165,33 @@ def is_allowed_file(file):
         'text/plain',
         'application/zip'
     ]
-    if mime_type not in allowed_mime_types:
-        return False
-
-    return True
+    return mime_type in allowed_mime_types
 
 def upload_file_to_gcs(file, expiration=3600):
     """
     Przesyła plik do Google Cloud Storage i zwraca signed URL.
-
-    Args:
-        file (file object): Obiekt pliku otwarty w trybie binarnym.
-        expiration (int, optional): Czas ważności signed URL w sekundach. Domyślnie 3600 sekund (1 godzina).
-
-    Returns:
-        str: Signed URL lub False w przypadku błędu.
     """
     try:
-        # Pobierz nazwę pliku w bezpieczny sposób
         filename = secure_filename(file.filename)
-        
-        # Utwórz blob w GCS
         blob = bucket.blob(filename)
-        
-        # Odczytaj kilka pierwszych bajtów, aby określić typ MIME
+
+        # Odczyt próbki pliku, aby ustalić MIME
         sample = file.read(1024)
         mime_type = magic.from_buffer(sample, mime=True)
-        file.seek(0)  # Resetuj wskaźnik pliku do początku
-        
-        # Prześlij plik z określonym typem MIME
+        file.seek(0)
+
         blob.upload_from_file(file, content_type=mime_type)
-        
-        # Generuj signed URL z określonym czasem wygaśnięcia
         signed_url = blob.generate_signed_url(expiration=timedelta(seconds=expiration))
         return signed_url
     except Exception as e:
         app.logger.error(f"Nie udało się przesłać pliku {file.filename} do GCS: {e}")
         return False
 
-
 @app.errorhandler(RequestEntityTooLarge)
 def handle_file_too_large(e):
     flash('Przesłany plik jest za duży. Maksymalny rozmiar to 16 MB.', 'error')
     return redirect(url_for('index'))
+
 
 
 # Definiowanie szablonu podpisu

@@ -562,12 +562,12 @@ def get_email_subsegment_mapping(data):
 def get_email_subsegment_mapping(data):
     email_subsegment = {}
     for i, row in enumerate(data):
-        # Bezpiecznie wyciągamy wartości z poszczególnych kolumn (z usunięciem spacji i konwersją na odpowiedni format)
-        col17 = row[17].strip() if len(row) > 17 and row[17] else ""
+        # Bezpieczne wyciągnięcie wartości z kolumn 17, 23 i 49
+        col17 = row[17].strip().replace(';', '').lower() if len(row) > 17 and row[17] else ""
         col23 = row[23].strip().capitalize() if len(row) > 23 and row[23] else ""
         col49 = row[49].strip().capitalize() if len(row) > 49 and row[49] else ""
 
-        # DEBUG: Wypisanie wiersza i kluczowych kolumn w logach
+        # DEBUG: Logowanie zawartości kolumn
         app.logger.debug(f"Wiersz {i+1}: col17(R)='{col17}', col23(X)='{col23}', col49(AX)='{col49}'")
 
         # Logika przypisywania języka
@@ -590,6 +590,7 @@ def get_email_subsegment_mapping(data):
     app.logger.debug(f"Sample mappings: {list(email_subsegment.items())[:10]}")  # Pokaż pierwsze 10 mapowań
 
     return email_subsegment
+
 
 
 
@@ -819,7 +820,7 @@ def send_email_ajax():
         return jsonify({'success': False, 'message': 'Proszę wypełnić wszystkie wymagane pola.'}), 400
 
     # Filtracja i walidacja emaili
-    valid_emails = [email.strip() for email in include_emails if email.strip()]
+    valid_emails = [email.strip().replace(';', '') for email in include_emails if email.strip()]
     if not valid_emails:
         return jsonify({'success': False, 'message': 'Proszę wybrać przynajmniej jeden adres e-mail.'}), 400
 
@@ -848,10 +849,10 @@ def send_email_ajax():
     # DEBUG: Wypisanie wyników filtrowania
     app.logger.debug(f"Wybrane język: {language}")
     app.logger.debug(f"Przefiltrowane adresy e-mail: {filtered_emails}")
+    app.logger.debug(f"Liczba przefiltrowanych e-maili: {len(filtered_emails)}")
 
     if not filtered_emails:
-        flash('Brak adresów e-mail zgodnych z wybranym językiem.', 'error')
-        return redirect(url_for('index'))
+        return jsonify({'success': False, 'message': 'Brak adresów e-mail zgodnych z wybranym językiem.'}), 400
 
     try:
         # Wysyłanie e-maili do wybranych adresów
@@ -863,21 +864,21 @@ def send_email_ajax():
                 user=user,
                 attachments=attachment_filenames
             )
+            app.logger.info(f"E-mail wysłany do: {email}")
 
         # Usunięcie załączników po wysłaniu
         for filepath in attachment_filenames:
             try:
                 os.remove(filepath)
+                app.logger.debug(f"Załącznik usunięty: {filepath}")
             except Exception as e:
                 app.logger.error(f'Nie udało się usunąć załącznika {filepath}: {e}')
 
-        flash('Wiadomość została wysłana pomyślnie.', 'success')
-        return redirect(url_for('index'))
+        return jsonify({'success': True, 'message': 'Wiadomość została wysłana pomyślnie.'}), 200
 
     except Exception as e:
         app.logger.error(f'Błąd podczas wysyłania emaila: {e}')
-        flash('Wystąpił błąd podczas wysyłania wiadomości.', 'error')
-        return redirect(url_for('index'))
+        return jsonify({'success': False, 'message': 'Wystąpił błąd podczas wysyłania wiadomości.'}), 500
 
 
 

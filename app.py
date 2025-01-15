@@ -3,7 +3,7 @@ import threading
 import logging
 from dotenv import load_dotenv
 import sys
-from flask import Flask, render_template_string, request, redirect, url_for, flash, session, send_from_directory
+from flask import Flask, render_template_string, request, redirect, url_for, flash, session, send_from_directory, jsonify
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
@@ -27,9 +27,23 @@ from cryptography.fernet import Fernet
 from werkzeug.exceptions import RequestEntityTooLarge
 import magic  # Upewnij się, że ta biblioteka jest zainstalowana
 import bleach
-from flask import jsonify, request
 from email.message import EmailMessage
 import mimetypes
+
+# ------------------------------
+# *** KONFIGURACJA CELERY W TYM SAMYM PLIKU ***
+# ------------------------------
+from celery import Celery
+
+# Zmienna środowiskowa z Heroku z URL do Redis.
+# Po dodaniu "Heroku Redis" zwykle masz REDIS_URL w config vars.
+redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+
+celery_app = Celery(
+    "app",                # Nazwa aplikacji Celery
+    broker=redis_url,     # Adres brokera (Redis)
+    backend=redis_url     # Backend (Redis), by móc śledzić postęp
+)
 
 # Dodaj bieżący katalog do ścieżki Pythona
 sys.path.append(os.path.abspath(os.getcwd()))
@@ -140,7 +154,6 @@ app.config['MAX_ATTACHMENTS'] = 5
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
 SPREADSHEET_ID = os.getenv('SPREADSHEET_ID', '')
 
-# ewentualna definicja RANGE_NAME = 'A1:AH'
 
 def is_allowed_file(file):
     """
@@ -167,6 +180,7 @@ def is_allowed_file(file):
     ]
     return mime_type in allowed_mime_types
 
+
 def upload_file_to_gcs(file, expiration=3600):
     """
     Przesyła plik do Google Cloud Storage i zwraca signed URL.
@@ -187,11 +201,11 @@ def upload_file_to_gcs(file, expiration=3600):
         app.logger.error(f"Nie udało się przesłać pliku {file.filename} do GCS: {e}")
         return False
 
+
 @app.errorhandler(RequestEntityTooLarge)
 def handle_file_too_large(e):
     flash('Przesłany plik jest za duży. Maksymalny rozmiar to 16 MB.', 'error')
     return redirect(url_for('index'))
-
 
 
 # Definiowanie szablonu podpisu
@@ -253,7 +267,7 @@ def get_data_from_sheet():
     service = build('sheets', 'v4', credentials=credentials)
     sheet = service.spreadsheets()
 
-    RANGE_NAME = 'A1:AX'  # Zmieniono zakres na A1:AX (50 kolumny)
+    RANGE_NAME = 'A1:AX'  # Zmieniono zakres na A1:AX (50 kolumn)
 
     result = sheet.values().get(
         spreadsheetId=SPREADSHEET_ID,
@@ -270,9 +284,6 @@ def get_data_from_sheet():
     return data
 
 
-
-
-# Funkcja zwracająca listę segmentów
 def get_segments():
     """
     Zwraca listę segmentów w ustalonej kolejności.
@@ -301,11 +312,11 @@ def get_segments():
         "Turkey carriers TIMOKOM", "double-deck car carrier",
         "CARGO Europe / Russia, Turkey, Asia",
         "Foreign EU / only open trailers", "Central Europe",
-        "PL REF", "Central Europe only FTL", "Agency", "Rail Global", "DLG", "NON", "NEW1", 
+        "PL REF", "Central Europe only FTL", "Agency", "Rail Global", "DLG", "NON", "NEW1",
         "NEW2","NEW3","NEW2025_1", "NEW2025_2", "NEW2025_3", "NEW2025_4", "NEW2025_5"
     ]
 
-# Funkcja licząca unikalne segmenty
+
 def get_unique_segments_with_counts(data):
     """
     Pobiera unikalne segmenty i liczy wystąpienia dla 'Polski' i 'Zagraniczny'.
@@ -324,18 +335,6 @@ def get_unique_segments_with_counts(data):
                     segments[segment]["Zagraniczny"] += 1
     return segments
 
-# Funkcja pobierająca e-maile dla segmentu
-def get_emails_for_segment(data, segment, subsegment):
-    """
-    Pobiera adresy e-mail dla danego segmentu i podsegmentu.
-    """
-    emails = []
-    for row in data:
-        if len(row) > 23 and row[16] == segment and row[23] == subsegment:
-            email = row[17].strip() if len(row) > 17 else ""
-            if email:
-                emails.append(email)
-    return emails
 
 def get_email_company_pairs_for_segment(data, segment, subsegment):
     """
@@ -350,7 +349,7 @@ def get_email_company_pairs_for_segment(data, segment, subsegment):
                 pairs.append({'email': email, 'company': company})
     return pairs
 
-# Funkcja do uzyskania unikalnych możliwości z firmami
+
 def get_unique_possibilities_with_companies(data):
     possibilities = {}
     for row_index, row in enumerate(data):
@@ -370,9 +369,6 @@ def get_unique_possibilities_with_companies(data):
                 possibilities[possibility].append({'email': email, 'company': company})
                 print(f"Znaleziona możliwość '{possibility}' w wierszu {row_index+1} dla firmy '{company}'")
     return possibilities
-
-
-
 
 
 def get_potential_clients(data):
@@ -420,8 +416,6 @@ def get_potential_clients(data):
     return potential_clients
 
 
-
-# Funkcja wysyłająca pojedynczy e-mail
 def send_email(to_email, subject, body, user, attachments=None):
     """
     Wysyła e-mail z dynamicznie przekazanymi danymi użytkownika.
@@ -507,6 +501,16 @@ def send_email(to_email, subject, body, user, attachments=None):
         raise e
 
 
+def format_phone_number(phone_number):
+    """
+    Formatuje numer telefonu, dodając spacje po kodzie kraju i co trzy cyfry.
+    Przykład: '+48786480887' -> '+48 786 480 887'
+    """
+    if phone_number.startswith('+48') and len(phone_number) == 12 and phone_number[3:].isdigit():
+        return f"{phone_number[:3]} {phone_number[3:6]} {phone_number[6:9]} {phone_number[9:]}"
+    else:
+        return phone_number
+
 
 @app.route('/test_email')
 def test_email():
@@ -514,9 +518,7 @@ def test_email():
     if user:
         subject = "Testowy E-mail z Załącznikiem"
         body = "To jest testowy e-mail z załącznikiem."
-        # Ścieżka do testowego pliku, upewnij się, że plik istnieje
         test_attachment = os.path.join(app.config['UPLOAD_FOLDER'], 'test_attachment.pdf')
-        # Utwórz testowy plik, jeśli nie istnieje
         if not os.path.exists(test_attachment):
             try:
                 with open(test_attachment, 'wb') as f:
@@ -535,42 +537,23 @@ def test_email():
         flash('Nie znaleziono użytkownika do wysłania testowego e-maila.', 'error')
     return redirect(url_for('index'))
 
+
+@app.errorhandler(RequestEntityTooLarge)
+def handle_request_entity_too_large(e):
+    flash('Przesłany plik jest za duży. Maksymalny rozmiar to 16 MB.', 'error')
+    return redirect(url_for('index'))
+
+
+# *** Jedna wersja get_email_subsegment_mapping ***
 def get_email_subsegment_mapping(data):
     email_subsegment = {}
     for i, row in enumerate(data):
-        # Bezpiecznie wyciągamy wartości z poszczególnych kolumn (z usunięciem spacji)
-        col17 = row[17].strip() if len(row) > 17 and row[17] else ""
-        col23 = row[23].strip() if len(row) > 23 and row[23] else ""
-        col49 = row[49].strip() if len(row) > 49 and row[49] else ""
-
-        # DEBUG: Wypisanie wiersza i kluczowych kolumn w konsoli (logach)
-        print(f"[DEBUG] Wiersz {i+1}: col17(R)='{col17}', col23(X)='{col23}', col49(AX)='{col49}'")
-
-        # Następnie implementacja dotychczasowej logiki
-        if col23 in ("Polski","Zagraniczny"):
-            final_lang = col23
-        elif col49 in ("Polski","Zagraniczny"):
-            final_lang = col49
-        else:
-            final_lang = ""
-
-        if col17 and final_lang:
-            email_subsegment[col17] = final_lang
-
-    return email_subsegment
-
-def get_email_subsegment_mapping(data):
-    email_subsegment = {}
-    for i, row in enumerate(data):
-        # Bezpieczne wyciągnięcie wartości z kolumn 17, 23 i 49
         col17 = row[17].strip().replace(';', '').lower() if len(row) > 17 and row[17] else ""
         col23 = row[23].strip().capitalize() if len(row) > 23 and row[23] else ""
         col49 = row[49].strip().capitalize() if len(row) > 49 and row[49] else ""
 
-        # DEBUG: Logowanie zawartości kolumn
         app.logger.debug(f"Wiersz {i+1}: col17(R)='{col17}', col23(X)='{col23}', col49(AX)='{col49}'")
 
-        # Logika przypisywania języka
         if col23 in ("Polski", "Zagraniczny"):
             final_lang = col23
         elif col49 in ("Polski", "Zagraniczny"):
@@ -581,17 +564,50 @@ def get_email_subsegment_mapping(data):
         if col17 and final_lang:
             email_subsegment[col17] = final_lang
 
-    # Dodatkowy debug: Podsumowanie mapowania
     total_mapped = len(email_subsegment)
     polski_count = list(email_subsegment.values()).count("Polski")
     zagraniczny_count = list(email_subsegment.values()).count("Zagraniczny")
     app.logger.debug(f"Total mapped emails: {total_mapped}")
     app.logger.debug(f"Polski: {polski_count}, Zagraniczny: {zagraniczny_count}")
-    app.logger.debug(f"Sample mappings: {list(email_subsegment.items())[:10]}")  # Pokaż pierwsze 10 mapowań
-
     return email_subsegment
 
 
+# *** Zadanie Celery do asynchronicznej wysyłki ***
+@celery_app.task
+def send_bulk_emails(emails, subject, body, user_id, attachment_paths=None):
+    with app.app_context():
+        user = db.session.get(User, user_id)
+        
+        sent_count = 0
+        total = len(emails)
+
+        for email in emails:
+            try:
+                send_email(
+                    to_email=email,
+                    subject=subject,
+                    body=body,
+                    user=user,
+                    attachments=attachment_paths
+                )
+                sent_count += 1
+
+                # Raportuj postęp (opcjonalnie)
+                send_bulk_emails.update_state(
+                    state='PROGRESS',
+                    meta={'current': sent_count, 'total': total}
+                )
+
+            except Exception as e:
+                app.logger.error(f"Błąd wysyłania do {email}: {e}")
+                # Nie przerywaj pętli – ewentualnie loguj lub licz błędy
+
+        return {
+            'state': 'SUCCESS',
+            'current': total,
+            'total': total,
+            'status': f'Wysłano {sent_count} / {total} e-maili'
+        }
 
 
 @app.route('/send_message', methods=['POST'])
@@ -614,7 +630,7 @@ def send_message():
     include_emails = request.form.getlist('include_emails')
     attachments = request.files.getlist('attachments')
 
-    # Walidacja danych
+    # Walidacja
     if not subject or not message or not language:
         flash('Proszę wypełnić wszystkie wymagane pola.', 'error')
         return redirect(url_for('index'))
@@ -626,7 +642,7 @@ def send_message():
     # Obsługa załączników
     attachment_filenames = []
     for file in attachments:
-        if file and allowed_file(file.filename):
+        if file and is_allowed_file(file):
             filename = secure_filename(file.filename)
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -636,11 +652,11 @@ def send_message():
             flash(f'Nieprawidłowy typ pliku: {file.filename}', 'error')
             return redirect(url_for('index'))
 
-    # **Nowe: Pobierz dane z arkusza i utwórz mapę adresów e-mail do podsegmentów**
+    # Mapowanie subsegmentów
     data = get_data_from_sheet()
     email_subsegment = get_email_subsegment_mapping(data)
 
-    # **Filtruj adresy e-mail zgodnie z wybranym językiem**
+    # Filtrowanie e-maili pod kątem wybranego języka
     filtered_emails = [email for email in include_emails if email_subsegment.get(email) == language]
 
     if not filtered_emails:
@@ -648,30 +664,23 @@ def send_message():
         return redirect(url_for('index'))
 
     try:
-        # Wysyłanie e-maili do wybranych adresów
-        for email in filtered_emails:
-            send_email(
-                to_email=email,
-                subject=subject,
-                body=message,
-                user=user,
-                attachments=attachment_filenames
-            )
+        # Tu kluczowa zmiana: asynchroniczna wysyłka
+        task = send_bulk_emails.delay(
+            filtered_emails,      # lista docelowych adresów
+            subject,              # temat
+            message,              # treść
+            user_id,              # ID użytkownika
+            attachment_filenames  # ścieżki do załączników
+        )
 
-        # Usunięcie załączników po wysłaniu
-        for filepath in attachment_filenames:
-            try:
-                os.remove(filepath)
-            except Exception as e:
-                app.logger.error(f'Nie udało się usunąć załącznika {filepath}: {e}')
-
-        flash('Wiadomość została wysłana pomyślnie.', 'success')
+        flash('Rozpoczęto asynchroniczną wysyłkę e-maili.', 'success')
         return redirect(url_for('index'))
 
     except Exception as e:
-        app.logger.error(f'Błąd podczas wysyłania emaila: {e}')
+        app.logger.error(f'Błąd podczas inicjowania zadania Celery: {e}')
         flash('Wystąpił błąd podczas wysyłania wiadomości.', 'error')
         return redirect(url_for('index'))
+
 
 
 # Funkcja asynchroniczna do wysyłania e-maili

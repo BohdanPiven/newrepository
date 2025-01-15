@@ -58,17 +58,27 @@ basedir = os.path.abspath(os.path.dirname(__file__))
 # Konfiguracja bazy danych z Heroku (PostgreSQL) lub SQLite
 database_url = os.getenv("DATABASE_URL")
 if database_url:
-    # Heroku automatycznie ustawia DATABASE_URL do Postgresa
+    # Jeśli Heroku ustawiło DATABASE_URL (np. postgres://...)
     if database_url.startswith("postgres://"):
         database_url = database_url.replace("postgres://", "postgresql://", 1)
     print(f"Używana baza danych (Heroku/Postgres): {database_url}")
 else:
-    # Jeżeli nie ma DATABASE_URL, np. lokalnie:
+    # Jeśli lokalnie nie ma DATABASE_URL -> użyj pliku SQLite
     database_url = 'sqlite:///' + os.path.join(basedir, 'users.db')
     print(f"Używana baza danych (lokalny SQLite): {database_url}")
 
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# (Opcjonalnie) Jeśli chcesz jeszcze wyróżnić w logu ścieżkę do pliku SQLite,
+# możesz zostawić coś takiego:
+# if database_url.startswith("sqlite:///"):
+#     db_path = database_url.replace("sqlite:///", "")
+#     print(f"Using database at: {db_path}")
+
+# Podstawowa konfiguracja
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default_secret_key')
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # Maksymalnie 16 MB na żądanie
 
 
 # Bezpieczne ustawienia ciasteczek sesji

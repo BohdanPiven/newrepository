@@ -425,6 +425,87 @@ def get_potential_clients(data):
     return potential_clients
 
 
+# Funkcja: Wysyłanie pojedynczego e-maila
+def send_email(to_email, subject, body, user, attachments=None):
+    """
+    Wysyła e-mail za pomocą indywidualnego hasła usera (odszyfrowanego).
+    """
+    try:
+        # Odszyfruj hasło z bazy (kolumna user.email_password)
+        email_password_encrypted = user.email_password
+        email_password = fernet.decrypt(email_password_encrypted.encode()).decode()
+
+        # Formatowanie nr telefonu
+        formatted_phone_number = format_phone_number(user.phone_number)
+
+        # Podpis (signature)
+        signature = EMAIL_SIGNATURE_TEMPLATE.format(
+            first_name=user.first_name,
+            last_name=user.last_name,
+            position=user.position,
+            phone_number=formatted_phone_number,
+            email_address=user.email_address
+        )
+
+        # Treść wiadomości (HTML + styl akapitów)
+        message_body = f'''
+        <div style="font-family: Calibri, sans-serif; font-size: 11pt;">
+            <style>
+                p {{
+                    margin: 0;
+                    line-height: 1.2;
+                }}
+                p + p {{
+                    margin-top: 10px;
+                }}
+            </style>
+            {body}
+        </div>
+        '''
+
+        # Połączenie treści z podpisem
+        body_with_signature = f'''
+        {message_body}
+        {signature}
+        '''
+
+        # Tworzenie wiadomości MIME
+        msg = MIMEMultipart()
+        msg['Subject'] = subject
+        msg['From'] = user.email_address
+        msg['To'] = to_email
+        msg['Reply-To'] = user.email_address
+        msg.attach(MIMEText(body_with_signature, 'html'))
+
+        # Dodawanie załączników
+        if attachments:
+            for file_path in attachments:
+                if not os.path.exists(file_path):
+                    app.logger.error(f"Załącznik nie istnieje: {file_path}")
+                    continue
+                try:
+                    with open(file_path, 'rb') as f:
+                        part = MIMEApplication(f.read(), Name=os.path.basename(file_path))
+                        part['Content-Disposition'] = f'attachment; filename="{os.path.basename(file_path)}"'
+                        msg.attach(part)
+                except Exception as e:
+                    app.logger.error(f"Nie udało się dołączyć załącznika {file_path}: {e}")
+
+        # Wysłanie maila
+        smtp_server = app.config['MAIL_SERVER']
+        smtp_port = app.config['MAIL_PORT']
+        smtp_use_tls = app.config['MAIL_USE_TLS']
+
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            if smtp_use_tls:
+                server.starttls()
+            server.login(user.email_address, email_password)
+            server.send_message(msg)
+            app.logger.info(f"E-mail wysłany do: {to_email}")
+
+    except Exception as e:
+        app.logger.error(f"Błąd wysyłania e-maila do {to_email}: {str(e)}")
+        raise e
 
 
 def format_phone_number(phone_number):

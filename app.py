@@ -385,23 +385,28 @@ def get_potential_clients(data):
     Pobiera potencjalnych klientów z danych arkusza.
 
     Kolumny:
-        - AT: Nazwa firmy (indeks 45)
-        - AU: Adres email (indeks 46)
-        - AV: Grupa (indeks 47)
-        - AX: Język (indeks 49)
+        - AT: Nazwa firmy (45)
+        - AU: Adres email (46)
+        - AV: Grupa (47)
+        - AX: Język (49)
 
     Zwraca:
         Słownik z grupami jako kluczami, a listami klientów jako wartościami.
     """
     potential_clients = {}
     for idx, row in enumerate(data):
+        print(f"Wiersz {idx} ma długość {len(row)}")
         if len(row) > 49:
-            group = row[47].strip() if row[47] else ""
-            email = row[46].strip() if row[46] else ""
-            company = row[45].strip() if row[45] else ""
-            language = row[49].strip() if row[49] else ""
-
-            if group and email and company and language in ["Polski", "Zagraniczny"]:
+            group = row[47]  # AV
+            email = row[46]  # AU
+            company = row[45]  # AT
+            language = row[49]  # AX
+            print(f"Wiersz {idx}: group='{group}', email='{email}', company='{company}', language='{language}'")
+            if group and email and company and language:
+                group = group.strip()
+                email = email.strip()
+                company = company.strip()
+                language = language.strip()
                 if group not in potential_clients:
                     potential_clients[group] = []
                 potential_clients[group].append({
@@ -409,10 +414,15 @@ def get_potential_clients(data):
                     'company': company,
                     'language': language
                 })
+            else:
+                print(f"Wiersz {idx} pominięty z powodu brakujących danych.")
         else:
-            app.logger.warning(f"Wiersz {idx+1} pominięty z powodu niewystarczającej długości ({len(row)} kolumn).")
+            print(f"Wiersz {idx} pominięty z powodu niewystarczającej długości.")
+    # Logowanie liczby grup i klientów
+    print(f"Pobrano {len(potential_clients)} grup potencjalnych klientów.")
+    total_clients = sum(len(clients) for clients in potential_clients.values())
+    print(f"Pobrano {total_clients} potencjalnych klientów.")
     return potential_clients
-
 
 
 # Funkcja: Wysyłanie pojedynczego e-maila
@@ -592,18 +602,15 @@ def test_email():
 def get_email_subsegment_mapping(data):
     """
     Zwraca słownik mapujący adresy e-mail do podsegmentów ('Polski' lub 'Zagraniczny').
-    Przypisuje tylko jeden subsegment per e-mail, na podstawie pierwszego wystąpienia w kolumnie 24.
     """
     email_subsegment = {}
     for row in data:
         if len(row) > 23:
             email = row[17].strip() if len(row) > 17 else ""
-            subsegment = row[23].strip() if len(row) > 23 else ""
-            if email and subsegment in ["Polski", "Zagraniczny"]:
-                if email not in email_subsegment:
-                    email_subsegment[email] = subsegment
+            subsegment = row[23] if len(row) > 23 else ""
+            if email and subsegment:
+                email_subsegment[email] = subsegment
     return email_subsegment
-
 
 
 @app.route('/send_message', methods=['POST'])
@@ -663,54 +670,6 @@ def send_message():
         flash('Wystąpił błąd podczas wysyłania wiadomości.', 'error')
         return redirect(url_for('index'))
 
-# Funkcja asynchroniczna do wysyłania e-maili
-def send_emails_async(emails, subject, body, user, attachment_paths=None, task_id=None):
-    """
-    Funkcja wysyłająca e-maile w tle.
-    
-    Args:
-        emails (list): Lista adresów e-mail do wysłania.
-        subject (str): Temat wiadomości.
-        body (str): Treść wiadomości w formacie HTML.
-        user (User): Obiekt użytkownika wysyłającego wiadomość.
-        attachment_paths (list, optional): Lista ścieżek do załączników. Defaults to None.
-        task_id (str, optional): Unikalny identyfikator zadania. Defaults to None.
-    """
-    with app.app_context():
-        stop_event = email_sending_stop_events.get(task_id)
-        try:
-            app.logger.debug(f"Rozpoczęcie wysyłania e-maili do: {emails}")
-            total = len(emails)
-            sent = 0
-            for email in emails:
-                # Sprawdź, czy otrzymaliśmy sygnał do zatrzymania
-                if stop_event and stop_event.is_set():
-                    app.logger.info(f"Zatrzymano wysyłanie e-maili dla task_id: {task_id}")
-                    break
-                
-                send_email(email, subject, body, user, attachments=attachment_paths)
-                sent += 1
-                # Aktualizacja postępu
-                email_sending_progress[task_id] = {
-                    'total': total,
-                    'sent': sent
-                }
-        except Exception as e:
-            app.logger.error(f"Błąd podczas wysyłania e-maili: {str(e)}")
-        finally:
-            # Usunięcie postępu po zakończeniu
-            email_sending_progress.pop(task_id, None)
-            # Usuwanie załączników po wysłaniu wszystkich lub zatrzymaniu e-maili
-            if attachment_paths:
-                for file_path in attachment_paths:
-                    try:
-                        if os.path.exists(file_path):
-                            os.remove(file_path)
-                            app.logger.info(f"Usunięto załącznik: {file_path}")
-                        else:
-                            app.logger.error(f"Nie udało się usunąć załącznika {file_path}: Plik nie istnieje.")
-                    except Exception as e:
-                        app.logger.error(f"Nie udało się usunąć załącznika {file_path}: {e}")
 
 @app.errorhandler(RequestEntityTooLarge)
 def handle_request_entity_too_large(e):

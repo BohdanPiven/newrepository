@@ -37,7 +37,6 @@ import ssl
 from celery import Celery
 
 # Zmienna środowiskowa z Heroku z URL do Redis.
-# Po dodaniu "Heroku Redis" zwykle masz REDIS_URL w config vars.
 redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
 
 # Tworzymy obiekt Celery wraz z parametrami SSL
@@ -45,15 +44,16 @@ celery_app = Celery(
     "app",
     broker=redis_url,
     backend=redis_url,
-    # Dla nowszych Celery (5.3+), parametry SSL ustawia się przez transport_options:
     broker_transport_options={
         'visibility_timeout': 3600,  # (opcjonalnie) czas rezerwacji zadań w sekundach
         'ssl': {
-            'ssl_cert_reqs': ssl.CERT_NONE
+            'ssl_cert_reqs': ssl.CERT_NONE  # Poprawiona nazwa parametru
         }
     },
     result_backend_transport_options={
-        'ssl_cert_reqs': ssl.CERT_NONE
+        'ssl': {
+            'ssl_cert_reqs': ssl.CERT_NONE  # Poprawiona nazwa parametru
+        }
     }
 )
 
@@ -170,7 +170,6 @@ app.config['MAX_ATTACHMENTS'] = 5
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
 SPREADSHEET_ID = os.getenv('SPREADSHEET_ID', '')
 
-
 def is_allowed_file(file):
     """
     Sprawdza, czy plik ma dozwolone rozszerzenie i prawidłowy typ MIME.
@@ -196,7 +195,6 @@ def is_allowed_file(file):
     ]
     return mime_type in allowed_mime_types
 
-
 def upload_file_to_gcs(file, expiration=3600):
     """
     Przesyła plik do Google Cloud Storage i zwraca signed URL.
@@ -217,12 +215,10 @@ def upload_file_to_gcs(file, expiration=3600):
         app.logger.error(f"Nie udało się przesłać pliku {file.filename} do GCS: {e}")
         return False
 
-
 @app.errorhandler(RequestEntityTooLarge)
 def handle_file_too_large(e):
     flash('Przesłany plik jest za duży. Maksymalny rozmiar to 16 MB.', 'error')
     return redirect(url_for('index'))
-
 
 # Definiowanie szablonu podpisu
 EMAIL_SIGNATURE_TEMPLATE = """
@@ -269,7 +265,6 @@ EMAIL_SIGNATURE_TEMPLATE = """
 </table>
 """
 
-
 # Funkcja pobierająca dane z Google Sheets
 def get_data_from_sheet():
     credentials_b64 = os.getenv('GOOGLE_CREDENTIALS_BASE64')
@@ -298,7 +293,6 @@ def get_data_from_sheet():
         print(f"Wiersz {i+1} ma {len(row)} kolumn")
 
     return data
-
 
 def get_segments():
     """
@@ -332,7 +326,6 @@ def get_segments():
         "NEW2","NEW3","NEW2025_1", "NEW2025_2", "NEW2025_3", "NEW2025_4", "NEW2025_5"
     ]
 
-
 def get_unique_segments_with_counts(data):
     """
     Pobiera unikalne segmenty i liczy wystąpienia dla 'Polski' i 'Zagraniczny'.
@@ -351,7 +344,6 @@ def get_unique_segments_with_counts(data):
                     segments[segment]["Zagraniczny"] += 1
     return segments
 
-
 def get_email_company_pairs_for_segment(data, segment, subsegment):
     """
     Pobiera pary adres e-mail i nazwa firmy dla danego segmentu i podsegmentu.
@@ -364,7 +356,6 @@ def get_email_company_pairs_for_segment(data, segment, subsegment):
             if email and company:
                 pairs.append({'email': email, 'company': company})
     return pairs
-
 
 def get_unique_possibilities_with_companies(data):
     """
@@ -388,7 +379,6 @@ def get_unique_possibilities_with_companies(data):
                 possibilities[possibility].append({'email': email, 'company': company})
                 print(f"Znaleziona możliwość '{possibility}' w wierszu {row_index+1} dla firmy '{company}'")
     return possibilities
-
 
 def get_potential_clients(data):
     """
@@ -433,7 +423,6 @@ def get_potential_clients(data):
     total_clients = sum(len(clients) for clients in potential_clients.values())
     print(f"Pobrano {total_clients} potencjalnych klientów.")
     return potential_clients
-
 
 def send_email(to_email, subject, body, user, attachments=None):
     """
@@ -519,7 +508,6 @@ def send_email(to_email, subject, body, user, attachments=None):
         app.logger.error(f"Błąd wysyłania e-maila do {to_email}: {str(e)}")
         raise e
 
-
 def format_phone_number(phone_number):
     """
     Formatuje numer telefonu, dodając spacje po kodzie kraju i co trzy cyfry.
@@ -531,7 +519,6 @@ def format_phone_number(phone_number):
     else:
         # Jeśli numer nie pasuje do oczekiwanego formatu, zwróć go bez zmian
         return phone_number
-
 
 def send_verification_email(user, code):
     """
@@ -559,53 +546,6 @@ def send_verification_email(user, code):
         app.logger.error(f"Błąd podczas wysyłania e-maila do {user.email_address}: {e}")
         return False
 
-
-# Definiowanie szablonu podpisu
-EMAIL_SIGNATURE_TEMPLATE = """
-<br><br>
-<table cellpadding="0" cellspacing="0" border="0" style="font-family: Calibri, sans-serif; font-size: 16px;">
-    <tr>
-        <td>
-            <!-- Powitanie -->
-            <p style="margin: 0 0 10px 0; color: #000000;">Best regards, Mit freundlichen Grüßen, 谨致问候</p>
-            
-            <!-- Imię, Nazwisko i Stanowisko -->
-            <p style="margin: 0 0 5px 0; font-weight: bold; color: #003366;">{first_name} {last_name}<br>{position}</p>
-            
-            <!-- Informacje o firmie -->
-            <p style="margin: 0 0 10px 0; color: #3399FF;">DLG Logistics Poland sp. z o.o.<br>Wioślarska 8, 00-411 Warszawa</p>
-            
-            <!-- Dane kontaktowe -->
-            <p style="margin: 0 0 10px 0; color: #3399FF;">
-                {phone_number}<br>
-                <a href="mailto:{email_address}" style="color: #3399FF; text-decoration: underline;">{email_address}</a><br>
-                <a href="http://www.dlglogistics.pl" style="color: #3399FF; text-decoration: underline;">www.dlglogistics.pl</a>
-            </p>
-            
-            <!-- Logo DLG i LOGISTICS GROUP umieszczone jeden pod drugim -->
-            <table cellpadding="0" cellspacing="0" border="0" style="margin: 0; line-height: 1; font-family: Arial, sans-serif;">
-                <tr>
-                    <td style="font-size: 48px; font-weight: bold; color: #003366; padding: 0; text-align: left;">
-                        <a href="http://www.dlglogistics.pl" style="text-decoration: none; color: #003366;">DLG</a>
-                    </td>
-                </tr>
-                <tr>
-                    <td style="font-size: 12px; color: #003366; padding: 0; text-align: left;">
-                        <a href="http://www.dlglogistics.pl" style="text-decoration: none; color: #003366;">LOGISTICS GROUP</a>
-                    </td>
-                </tr>
-            </table>
-            
-            <!-- Tekst prawny -->
-            <p style="margin: 20px 0 0 0; font-size: 9.5px; color: #888888;">
-                This e-mail is intended solely for the person to whom it is addressed. The contents of this e-mail and any of its attachments contain confidential information, the use or disclosure of which may be restricted. If you are not the addressee of this e-mail or you have received this e-mail by mistake, you may not disclose to other persons, copy or otherwise distribute the contents of this e-mail or its attachments. Please immediately notify the sender of the received e-mail and delete this e-mail and any of its attachments without saving any copies and without disclosing the contents of the e-mail.
-            </p>
-        </td>
-    </tr>
-</table>
-"""
-
-
 # *** Jedna wersja get_email_subsegment_mapping ***
 def get_email_subsegment_mapping(data):
     email_subsegment = {}
@@ -632,7 +572,6 @@ def get_email_subsegment_mapping(data):
     app.logger.debug(f"Total mapped emails: {total_mapped}")
     app.logger.debug(f"Polski: {polski_count}, Zagraniczny: {zagraniczny_count}")
     return email_subsegment
-
 
 # *** Zadanie Celery do asynchronicznej wysyłki ***
 @celery_app.task(bind=True)
@@ -669,7 +608,6 @@ def send_bulk_emails(self, emails, subject, body, user_id, attachment_paths=None
             'total': total,
             'status': f'Wysłano {sent_count} / {total} e-maili'
         }
-
 
 @app.route('/send_message', methods=['POST'])
 def send_message():
@@ -728,11 +666,11 @@ def send_message():
         # Wywołanie asynchronicznego zadania Celery
         task = send_bulk_emails.apply_async(
             args=[
-                filtered_emails,  # lista docelowych adresów
-                subject,          # temat
-                message,          # treść
-                user_id,          # ID użytkownika
-                attachment_filenames  # ścieżki do załączników
+                filtered_emails,        # lista docelowych adresów
+                subject,                # temat
+                message,                # treść
+                user_id,                # ID użytkownika
+                attachment_filenames    # ścieżki do załączników
             ]
         )
 
@@ -743,7 +681,6 @@ def send_message():
         app.logger.error(f'Błąd podczas inicjowania zadania Celery: {e}')
         flash('Wystąpił błąd podczas wysyłania wiadomości.', 'error')
         return redirect(url_for('index'))
-
 
 @app.route('/send_message_ajax', methods=['POST'])
 def send_email_ajax():
@@ -799,11 +736,11 @@ def send_email_ajax():
         # Wywołanie asynchronicznego zadania Celery
         task = send_bulk_emails.apply_async(
             args=[
-                filtered_emails,  # lista docelowych adresów
-                subject,          # temat
-                message,          # treść
-                user_id,          # ID użytkownika
-                attachment_filenames  # ścieżki do załączników
+                filtered_emails,        # lista docelowych adresów
+                subject,                # temat
+                message,                # treść
+                user_id,                # ID użytkownika
+                attachment_filenames    # ścieżki do załączników
             ]
         )
 
@@ -818,7 +755,6 @@ def send_email_ajax():
         app.logger.error(f'Błąd podczas wysyłania zadań Celery: {e}')
         return jsonify({'success': False, 'message': 'Wystąpił błąd podczas inicjowania wysyłki.'}), 500
 
-
 @app.route('/stop_sending/<task_id>', methods=['POST'])
 def stop_sending(task_id):
     """
@@ -830,7 +766,6 @@ def stop_sending(task_id):
         return jsonify({'success': True, 'message': 'Proces wysyłania został zatrzymany.'}), 200
     else:
         return jsonify({'success': False, 'message': 'Nie znaleziono zadania o podanym ID.'}), 404
-
 
 @app.route('/email_progress/<task_id>')
 def email_progress(task_id):
@@ -850,7 +785,6 @@ def email_progress(task_id):
         return jsonify({'percentage': 100})
     else:
         return jsonify({'percentage': 0})
-
 
 # Funkcja wysyłająca e-maile z kodem weryfikacyjnym
 def send_verification_email(user, code):
@@ -878,7 +812,6 @@ def send_verification_email(user, code):
     except Exception as e:
         app.logger.error(f"Błąd podczas wysyłania e-maila do {user.email_address}: {e}")
         return False
-
 
 # Funkcja asynchroniczna do wysyłania e-maili
 def send_emails_async(emails, subject, body, user, attachment_paths=None, task_id=None):
@@ -928,7 +861,6 @@ def send_emails_async(emails, subject, body, user, attachment_paths=None, task_i
                             app.logger.error(f"Nie udało się usunąć załącznika {file_path}: Plik nie istnieje.")
                     except Exception as e:
                         app.logger.error(f"Nie udało się usunąć załącznika {file_path}: {e}")
-
 
 @app.route('/test_email')
 def test_email():

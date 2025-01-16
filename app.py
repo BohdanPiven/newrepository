@@ -40,24 +40,26 @@ from celery import Celery
 # Po dodaniu "Heroku Redis" zwykle masz REDIS_URL w config vars.
 redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
 
-# Tworzymy obiekt Celery wraz z parametrami SSL
 celery_app = Celery(
     "app",
     broker=redis_url,
-    backend=redis_url,
-    # Dla nowszych Celery (5.3+), parametry SSL ustawia się przez transport_options:
-    broker_transport_options={
-        'visibility_timeout': 3600,  # (opcjonalnie) czas rezerwacji zadań w sekundach
-        'ssl': {
-            'ssl_cert_reqs': ssl.CERT_NONE
-        }
-    },
-    result_backend_transport_options={
-        'ssl_cert_reqs': ssl.CERT_NONE
-    }
+    backend=redis_url
 )
 
-   
+# Dla nowszych Celery (5.3+), ustawiamy transport_options zamiast broker_use_ssl
+if redis_url.startswith("rediss://"):
+    celery_app.conf.update(
+        broker_transport_options={
+            'visibility_timeout': 3600,  # opcjonalnie, np. 1 godz. rezerwacji zadań
+            'ssl': {
+                'ssl_cert_reqs': ssl.CERT_NONE
+            }
+        },
+        result_backend_transport_options={
+            'ssl_cert_reqs': ssl.CERT_NONE
+        }
+    )
+
 # Dodaj bieżący katalog do ścieżki Pythona
 sys.path.append(os.path.abspath(os.getcwd()))
 

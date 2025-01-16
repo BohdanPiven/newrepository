@@ -566,6 +566,7 @@ def send_bulk_emails(self, emails, subject, body, user_id, attachment_paths=None
 # -------------
 # TRASY
 # -------------
+
 @app.route('/test_email')
 def test_email():
     """
@@ -596,6 +597,19 @@ def test_email():
         flash(f'Błąd wysyłania testowego e-maila: {e}', 'error')
 
     return redirect(url_for('index'))
+
+def get_email_subsegment_mapping(data):
+    """
+    Zwraca słownik mapujący adresy e-mail do podsegmentów ('Polski' lub 'Zagraniczny').
+    """
+    email_subsegment = {}
+    for row in data:
+        if len(row) > 23:
+            email = row[17].strip() if len(row) > 17 else ""
+            subsegment = row[23] if len(row) > 23 else ""
+            if email and subsegment:
+                email_subsegment[email] = subsegment
+    return email_subsegment
 
 
 @app.route('/send_message', methods=['POST'])

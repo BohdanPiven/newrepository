@@ -21,7 +21,7 @@ from datetime import datetime, timedelta, timezone
 from werkzeug.security import generate_password_hash, check_password_hash
 import re
 from random import randint
-from flask_mail import Mail, Message
+# from flask_mail import Mail, Message
 from models import db, User, LicenseKey, Note, VerificationCode
 from cryptography.fernet import Fernet
 from werkzeug.exceptions import RequestEntityTooLarge
@@ -115,7 +115,7 @@ app.config['MAIL_USE_TLS'] = True
 
 db.init_app(app)
 migrate = Migrate(app, db)
-mail = Mail(app)
+# mail = Mail(app)
 
 # Globalne słowniki do śledzenia postępu i zatrzymywania wysyłki e-maili (opcjonalnie)
 email_sending_progress = {}
@@ -607,22 +607,15 @@ def email_progress(task_id):
 
 # Przykład wysyłania kodu weryfikacyjnego (opcjonalnie)
 def send_verification_email(user, code):
-    subject = "Kod weryfikacyjny do resetowania hasła"
-    sender = app.config['MAIL_SERVER']  # można ustawić np. to samo co user.email_address
-    recipients = [user.email_address]
-
-    body = f"""
-    <div style="line-height: 0.8; font-family: Arial, sans-serif;">
-        <p style="margin: 2px 0;">Cześć {user.first_name},</p>
-        <p style="margin: 2px 0;">Twój kod weryfikacyjny to: <strong>{code}</strong></p>
-        <p style="margin: 2px 0;">Kod jest ważny przez 15 minut.</p>
-        <p style="margin: 2px 0;">Pozdrawiam,<br>Zespół Ranges</p>
-    </div>
-    """
-
-    msg = Message(subject=subject, sender=sender, recipients=recipients, html=body)
+    subject = "Kod weryfikacyjny..."
+    body = f"..."
     try:
-        mail.send(msg)
+        send_email(
+            to_email=user.email_address,
+            subject=subject,
+            body=body,
+            user=user  # i ewentualnie attachments, jeśli chcesz
+        )
         app.logger.info(f"E-mail weryfikacyjny wysłany do {user.email_address}.")
         return True
     except Exception as e:

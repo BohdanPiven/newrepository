@@ -281,88 +281,150 @@ def get_data_from_sheet():
     
     return data
 
-
-# Funkcja: Wysyłanie pojedynczego e-maila
-def send_email(to_email, subject, body, user, attachments=None):
+# Funkcja zwracająca listę segmentów
+def get_segments():
     """
-    Wysyła e-mail za pomocą indywidualnego hasła usera (odszyfrowanego).
+    Zwraca listę segmentów w ustalonej kolejności.
     """
-    try:
-        # Odszyfruj hasło z bazy (kolumna user.email_password)
-        email_password_encrypted = user.email_password
-        email_password = fernet.decrypt(email_password_encrypted.encode()).decode()
+    return [
+        "TSL World", "TSL EU", "TSL - World; West / East without BY&RU; EU",
+        "TSL West / East without BY&RU", "OTKPMM FCL / combi FTL",
+        "OTKPLSH FCL / combi FTL", "OTKPS", "OTKPT", "OTKPB",
+        "OKW", "OKW 20'", "Containers PL / non-normative",
+        "WT Premium", "WT Premium / Sea", "WT Premium / Rail", "Foreign EU / FCL, LCL",
+        "Foreign EU / LCL / FCL / REF",
+        "FCL / West / South", "FCL / LCL / FTL / LTL / BALKANS / South", "OTKPMM FCL heavy",
+        "Foreign EU / FTL, LTL, FCL, LCL",
+        "Foreign EU / FTL, LTL, FCL, LCL no UA,BY,RU",
+        "Foreign EU / FTL, LTL, FCL, LCL from/to UA",
+        "Foreign EU / FTL, LTL, FCL, LCL, ADR no UA,BY,RU",
+        "Foreign EU / FTL, LTL, FCL, LCL no FR",
+        "Foreign EU / FTL, LTL, FCL, LCL + REF",
+        "Foreign EU + Scandinavie / FTL, LTL, FCL, LCL", "Ukraine - Europe - Ukraine",
+        "Foreign EU / FTL, LTL", "Foreign EU / FTL, LTL, REF",
+        "Foreign EU / FTL +REF +ADR",
+        "Foreign EU / FTL, LTL from PL to CZ & EE",
+        "FTL / LTL + ADR Poland & Switzerland", "FLT / LTL with lift",
+        "FTL K", "Only REF", "LTL", "FTL / LTL K", "LTL K",
+        "LTL East Europe", "KOPER", "Only start from Koper",
+        "Turkey carriers TIMOKOM", "double-deck car carrier",
+        "CARGO Europe / Russia, Turkey, Asia",
+        "Foreign EU / only open trailers", "Central Europe",
+        "PL REF", "Central Europe only FTL", "Agency", "Rail Global", "DLG", "NON", "NEW1", 
+        "NEW2","NEW3","NEW2025_1", "NEW2025_2", "NEW2025_3", "NEW2025_4", "NEW2025_5"
+    ]
 
-        # Formatowanie nr telefonu
-        formatted_phone_number = format_phone_number(user.phone_number)
+# Funkcja licząca unikalne segmenty
+def get_unique_segments_with_counts(data):
+    """
+    Pobiera unikalne segmenty i liczy wystąpienia dla 'Polski' i 'Zagraniczny'.
+    """
+    ordered_segments = get_segments()
+    segments = {segment: {"Polski": 0, "Zagraniczny": 0} for segment in ordered_segments}
 
-        # Podpis (signature)
-        signature = EMAIL_SIGNATURE_TEMPLATE.format(
-            first_name=user.first_name,
-            last_name=user.last_name,
-            position=user.position,
-            phone_number=formatted_phone_number,
-            email_address=user.email_address
-        )
+    for row in data:
+        if len(row) > 16 and row[16]:
+            segment = row[16]
+            subsegment = row[23] if len(row) > 23 else ""
+            if segment in segments:
+                if subsegment == "Polski":
+                    segments[segment]["Polski"] += 1
+                elif subsegment == "Zagraniczny":
+                    segments[segment]["Zagraniczny"] += 1
+    return segments
 
-        # Treść wiadomości (HTML + styl akapitów)
-        message_body = f'''
-        <div style="font-family: Calibri, sans-serif; font-size: 11pt;">
-            <style>
-                p {{
-                    margin: 0;
-                    line-height: 1.2;
-                }}
-                p + p {{
-                    margin-top: 10px;
-                }}
-            </style>
-            {body}
-        </div>
-        '''
+# Funkcja pobierająca e-maile dla segmentu
+def get_emails_for_segment(data, segment, subsegment):
+    """
+    Pobiera adresy e-mail dla danego segmentu i podsegmentu.
+    """
+    emails = []
+    for row in data:
+        if len(row) > 23 and row[16] == segment and row[23] == subsegment:
+            email = row[17].strip() if len(row) > 17 else ""
+            if email:
+                emails.append(email)
+    return emails
 
-        # Połączenie treści z podpisem
-        body_with_signature = f'''
-        {message_body}
-        {signature}
-        '''
+def get_email_company_pairs_for_segment(data, segment, subsegment):
+    """
+    Pobiera pary adres e-mail i nazwa firmy dla danego segmentu i podsegmentu.
+    """
+    pairs = []
+    for row in data:
+        if len(row) > 23 and row[16] == segment and row[23] == subsegment:
+            email = row[17].strip() if len(row) > 17 else ""
+            company = row[20].strip() if len(row) > 20 else ""
+            if email and company:
+                pairs.append({'email': email, 'company': company})
+    return pairs
 
-        # Tworzenie wiadomości MIME
-        msg = MIMEMultipart()
-        msg['Subject'] = subject
-        msg['From'] = user.email_address
-        msg['To'] = to_email
-        msg['Reply-To'] = user.email_address
-        msg.attach(MIMEText(body_with_signature, 'html'))
+# Funkcja do uzyskania unikalnych możliwości z firmami
+def get_unique_possibilities_with_companies(data):
+    possibilities = {}
+    for row_index, row in enumerate(data):
+        company = row[20].strip() if len(row) > 20 and row[20] else "Nieznana Firma"
+        email = row[17].strip() if len(row) > 17 and row[17] else ""
 
-        # Dodawanie załączników
-        if attachments:
-            for file_path in attachments:
-                if not os.path.exists(file_path):
-                    app.logger.error(f"Załącznik nie istnieje: {file_path}")
-                    continue
-                try:
-                    with open(file_path, 'rb') as f:
-                        part = MIMEApplication(f.read(), Name=os.path.basename(file_path))
-                        part['Content-Disposition'] = f'attachment; filename="{os.path.basename(file_path)}"'
-                        msg.attach(part)
-                except Exception as e:
-                    app.logger.error(f"Nie udało się dołączyć załącznika {file_path}: {e}")
+        if len(row) != 50:
+            print(f"Wiersz {row_index+1} ma niepoprawną liczbę kolumn: {len(row)}")
+            continue
 
-        # Wysłanie maila
-        smtp_server = app.config['MAIL_SERVER']
-        smtp_port = app.config['MAIL_PORT']
-        smtp_use_tls = app.config['MAIL_USE_TLS']
+        # Iteracja przez kolumny Z do AH (indeksy 25 do 33)
+        for i in range(25, 34):
+            possibility = row[i].strip() if row[i] else ''
+            if possibility:
+                if possibility not in possibilities:
+                    possibilities[possibility] = []
+                possibilities[possibility].append({'email': email, 'company': company})
+                print(f"Znaleziona możliwość '{possibility}' w wierszu {row_index+1} dla firmy '{company}'")
+    return possibilities
 
-        with smtplib.SMTP(smtp_server, smtp_port) as server:
-            if smtp_use_tls:
-                server.starttls()
-            server.login(user.email_address, email_password)
-            server.send_message(msg)
-            app.logger.info(f"E-mail wysłany do: {to_email}")
+def get_potential_clients(data):
+    """
+    Pobiera potencjalnych klientów z danych arkusza.
 
-    except Exception as e:
-        app.logger.error(f"Błąd wysyłania e-maila do {to_email}: {str(e)}")
-        raise e
+    Kolumny:
+        - AT: Nazwa firmy (45)
+        - AU: Adres email (46)
+        - AV: Grupa (47)
+        - AX: Język (49)
+
+    Zwraca:
+        Słownik z grupami jako kluczami, a listami klientów jako wartościami.
+    """
+    potential_clients = {}
+    for idx, row in enumerate(data):
+        print(f"Wiersz {idx} ma długość {len(row)}")
+        if len(row) > 49:
+            group = row[47]  # AV
+            email = row[46]  # AU
+            company = row[45]  # AT
+            language = row[49]  # AX
+            print(f"Wiersz {idx}: group='{group}', email='{email}', company='{company}', language='{language}'")
+            if group and email and company and language:
+                group = group.strip()
+                email = email.strip()
+                company = company.strip()
+                language = language.strip()
+                if group not in potential_clients:
+                    potential_clients[group] = []
+                potential_clients[group].append({
+                    'email': email,
+                    'company': company,
+                    'language': language
+                })
+            else:
+                print(f"Wiersz {idx} pominięty z powodu brakujących danych.")
+        else:
+            print(f"Wiersz {idx} pominięty z powodu niewystarczającej długości.")
+    # Logowanie liczby grup i klientów
+    print(f"Pobrano {len(potential_clients)} grup potencjalnych klientów.")
+    total_clients = sum(len(clients) for clients in potential_clients.values())
+    print(f"Pobrano {total_clients} potencjalnych klientów.")
+    return potential_clients
+
+
 
 
 def format_phone_number(phone_number):

@@ -663,6 +663,54 @@ def send_message():
         flash('Wystąpił błąd podczas wysyłania wiadomości.', 'error')
         return redirect(url_for('index'))
 
+# Funkcja asynchroniczna do wysyłania e-maili
+def send_emails_async(emails, subject, body, user, attachment_paths=None, task_id=None):
+    """
+    Funkcja wysyłająca e-maile w tle.
+    
+    Args:
+        emails (list): Lista adresów e-mail do wysłania.
+        subject (str): Temat wiadomości.
+        body (str): Treść wiadomości w formacie HTML.
+        user (User): Obiekt użytkownika wysyłającego wiadomość.
+        attachment_paths (list, optional): Lista ścieżek do załączników. Defaults to None.
+        task_id (str, optional): Unikalny identyfikator zadania. Defaults to None.
+    """
+    with app.app_context():
+        stop_event = email_sending_stop_events.get(task_id)
+        try:
+            app.logger.debug(f"Rozpoczęcie wysyłania e-maili do: {emails}")
+            total = len(emails)
+            sent = 0
+            for email in emails:
+                # Sprawdź, czy otrzymaliśmy sygnał do zatrzymania
+                if stop_event and stop_event.is_set():
+                    app.logger.info(f"Zatrzymano wysyłanie e-maili dla task_id: {task_id}")
+                    break
+                
+                send_email(email, subject, body, user, attachments=attachment_paths)
+                sent += 1
+                # Aktualizacja postępu
+                email_sending_progress[task_id] = {
+                    'total': total,
+                    'sent': sent
+                }
+        except Exception as e:
+            app.logger.error(f"Błąd podczas wysyłania e-maili: {str(e)}")
+        finally:
+            # Usunięcie postępu po zakończeniu
+            email_sending_progress.pop(task_id, None)
+            # Usuwanie załączników po wysłaniu wszystkich lub zatrzymaniu e-maili
+            if attachment_paths:
+                for file_path in attachment_paths:
+                    try:
+                        if os.path.exists(file_path):
+                            os.remove(file_path)
+                            app.logger.info(f"Usunięto załącznik: {file_path}")
+                        else:
+                            app.logger.error(f"Nie udało się usunąć załącznika {file_path}: Plik nie istnieje.")
+                    except Exception as e:
+                        app.logger.error(f"Nie udało się usunąć załącznika {file_path}: {e}")
 
 @app.errorhandler(RequestEntityTooLarge)
 def handle_request_entity_too_large(e):

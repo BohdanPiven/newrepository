@@ -836,13 +836,10 @@ def send_email_ajax():
     if not valid_emails:
         return jsonify({'success': False, 'message': 'Proszę wybrać przynajmniej jeden adres e-mail.'}), 400
 
-    # DEBUG: Wypisanie wybranych emaili przed filtrowaniem
-    app.logger.debug(f"Wybrane adresy e-mail przed filtrowaniem: {valid_emails}")
-
     # Obsługa załączników
     attachment_filenames = []
     for file in attachments:
-        if file and allowed_file(file.filename):
+        if file and is_allowed_file(file.filename):
             filename = secure_filename(file.filename)
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -851,46 +848,41 @@ def send_email_ajax():
         elif file.filename != '':
             return jsonify({'success': False, 'message': f'Nieprawidłowy typ pliku: {file.filename}'}), 400
 
-    # Pobranie danych z arkusza i utworzenie mapy adresów e-mail do podsegmentów
+    # Pobranie danych z arkusza i utworzenie mapy adresów e-mail -> podsegment
     data = get_data_from_sheet()
     email_subsegment = get_email_subsegment_mapping(data)
 
-    # Filtruj adresy e-mail zgodnie z wybranym językiem
+    # Filtrowanie adresów e-mail zgodnie z wybranym językiem
     filtered_emails = [email for email in valid_emails if email_subsegment.get(email) == language]
-
-    # DEBUG: Wypisanie wyników filtrowania
-    app.logger.debug(f"Wybrane język: {language}")
-    app.logger.debug(f"Przefiltrowane adresy e-mail: {filtered_emails}")
-    app.logger.debug(f"Liczba przefiltrowanych e-maili: {len(filtered_emails)}")
+    app.logger.debug(f"Wynik filtrowania. Język: {language}, E-maili: {len(filtered_emails)}")
 
     if not filtered_emails:
         return jsonify({'success': False, 'message': 'Brak adresów e-mail zgodnych z wybranym językiem.'}), 400
 
     try:
-        # Wysyłanie e-maili do wybranych adresów
-        for email in filtered_emails:
-            send_email(
-                to_email=email,
-                subject=subject,
-                body=message,
-                user=user,
-                attachments=attachment_filenames
-            )
-            app.logger.info(f"E-mail wysłany do: {email}")
+        # -------------------------------
+        # Wywołanie asynchronicznego zadania Celery:
+        # -------------------------------
+        from app import send_bulk_emails  # lub zaimportuj na górze pliku
+        task = send_bulk_emails.delay(
+            filtered_emails,
+            subject,
+            message,
+            user_id,
+            attachment_filenames
+        )
 
-        # Usunięcie załączników po wysłaniu
-        for filepath in attachment_filenames:
-            try:
-                os.remove(filepath)
-                app.logger.debug(f"Załącznik usunięty: {filepath}")
-            except Exception as e:
-                app.logger.error(f'Nie udało się usunąć załącznika {filepath}: {e}')
-
-        return jsonify({'success': True, 'message': 'Wiadomość została wysłana pomyślnie.'}), 200
+        # Odpowiadamy od razu JSONem – Heroku nie przerwie requestu
+        return jsonify({
+            'success': True,
+            'message': 'Rozpoczęto wysyłanie wiadomości w tle.',
+            'task_id': task.id
+        }), 200
 
     except Exception as e:
-        app.logger.error(f'Błąd podczas wysyłania emaila: {e}')
-        return jsonify({'success': False, 'message': 'Wystąpił błąd podczas wysyłania wiadomości.'}), 500
+        app.logger.error(f'Błąd podczas wysyłania zadań Celery: {e}')
+        return jsonify({'success': False, 'message': 'Wystąpił błąd podczas inicjowania wysyłki.'}), 500
+
 
 
 

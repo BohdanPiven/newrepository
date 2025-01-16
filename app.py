@@ -37,6 +37,7 @@ import ssl
 from celery import Celery
 
 # Zmienna środowiskowa z Heroku z URL do Redis.
+# Po dodaniu "Heroku Redis" zwykle masz REDIS_URL w config vars.
 redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
 
 # Tworzymy obiekt Celery wraz z parametrami SSL
@@ -44,19 +45,19 @@ celery_app = Celery(
     "app",
     broker=redis_url,
     backend=redis_url,
+    # Dla nowszych Celery (5.3+), parametry SSL ustawia się przez transport_options:
     broker_transport_options={
         'visibility_timeout': 3600,  # (opcjonalnie) czas rezerwacji zadań w sekundach
         'ssl': {
-            'ssl_cert_reqs': ssl.CERT_NONE  # Poprawiona nazwa parametru
+            'ssl_cert_reqs': ssl.CERT_NONE
         }
     },
     result_backend_transport_options={
-        'ssl': {
-            'ssl_cert_reqs': ssl.CERT_NONE  # Poprawiona nazwa parametru
-        }
+        'ssl_cert_reqs': ssl.CERT_NONE
     }
 )
 
+   
 # Dodaj bieżący katalog do ścieżki Pythona
 sys.path.append(os.path.abspath(os.getcwd()))
 
@@ -82,9 +83,16 @@ else:
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+# (Opcjonalnie) Jeśli chcesz jeszcze wyróżnić w logu ścieżkę do pliku SQLite,
+# możesz zostawić coś takiego:
+# if database_url.startswith("sqlite:///"):
+#     db_path = database_url.replace("sqlite:///", "")
+#     print(f"Using database at: {db_path}")
+
 # Podstawowa konfiguracja
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default_secret_key')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # Maksymalnie 16 MB na żądanie
+
 
 # Bezpieczne ustawienia ciasteczek sesji
 app.config['SESSION_COOKIE_SECURE'] = False  # Ustaw na True w produkcji
@@ -105,19 +113,11 @@ app.config['MAIL_USE_TLS'] = True
 MAIL_USERNAME = os.getenv('MAIL_USERNAME')
 MAIL_PASSWORD_ENCRYPTED = os.getenv('MAIL_PASSWORD')
 
-# DEBUG: Sprawdzenie, czy MAIL_PASSWORD_ENCRYPTED jest ustawione
-if MAIL_PASSWORD_ENCRYPTED is None:
-    app.logger.error("MAIL_PASSWORD jest niezdefiniowane w Config Vars!")
-    raise ValueError("MAIL_PASSWORD jest niezdefiniowane w Config Vars!")
-else:
-    app.logger.debug("MAIL_PASSWORD jest ustawione.")
-
 # Odszyfrowanie MAIL_PASSWORD (o ile jest zaszyfrowane)
 try:
     MAIL_PASSWORD = fernet.decrypt(MAIL_PASSWORD_ENCRYPTED.encode()).decode()
-    app.logger.debug("MAIL_PASSWORD został pomyślnie odszyfrowany.")
 except Exception as e:
-    app.logger.error(f"Błąd odszyfrowywania MAIL_PASSWORD: {e}")
+    print(f"Błąd odszyfrowywania MAIL_PASSWORD: {e}")
     MAIL_PASSWORD = MAIL_PASSWORD_ENCRYPTED  # Jeśli nie jest szyfrowane
 
 app.config['MAIL_USERNAME'] = MAIL_USERNAME
@@ -170,6 +170,7 @@ app.config['MAX_ATTACHMENTS'] = 5
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
 SPREADSHEET_ID = os.getenv('SPREADSHEET_ID', '')
 
+
 def is_allowed_file(file):
     """
     Sprawdza, czy plik ma dozwolone rozszerzenie i prawidłowy typ MIME.
@@ -195,6 +196,7 @@ def is_allowed_file(file):
     ]
     return mime_type in allowed_mime_types
 
+
 def upload_file_to_gcs(file, expiration=3600):
     """
     Przesyła plik do Google Cloud Storage i zwraca signed URL.
@@ -215,10 +217,12 @@ def upload_file_to_gcs(file, expiration=3600):
         app.logger.error(f"Nie udało się przesłać pliku {file.filename} do GCS: {e}")
         return False
 
+
 @app.errorhandler(RequestEntityTooLarge)
 def handle_file_too_large(e):
     flash('Przesłany plik jest za duży. Maksymalny rozmiar to 16 MB.', 'error')
     return redirect(url_for('index'))
+
 
 # Definiowanie szablonu podpisu
 EMAIL_SIGNATURE_TEMPLATE = """
@@ -265,6 +269,7 @@ EMAIL_SIGNATURE_TEMPLATE = """
 </table>
 """
 
+
 # Funkcja pobierająca dane z Google Sheets
 def get_data_from_sheet():
     credentials_b64 = os.getenv('GOOGLE_CREDENTIALS_BASE64')
@@ -274,7 +279,7 @@ def get_data_from_sheet():
         credentials = service_account.Credentials.from_service_account_info(credentials_info, scopes=SCOPES)
     else:
         raise ValueError("GOOGLE_CREDENTIALS_BASE64 not set in environment variables.")
-
+    
     service = build('sheets', 'v4', credentials=credentials)
     sheet = service.spreadsheets()
 
@@ -291,8 +296,9 @@ def get_data_from_sheet():
         if len(row) < 50:  # AX to 50 kolumny
             row.extend([''] * (50 - len(row)))
         print(f"Wiersz {i+1} ma {len(row)} kolumn")
-
+    
     return data
+
 
 def get_segments():
     """
@@ -326,6 +332,7 @@ def get_segments():
         "NEW2","NEW3","NEW2025_1", "NEW2025_2", "NEW2025_3", "NEW2025_4", "NEW2025_5"
     ]
 
+
 def get_unique_segments_with_counts(data):
     """
     Pobiera unikalne segmenty i liczy wystąpienia dla 'Polski' i 'Zagraniczny'.
@@ -344,6 +351,7 @@ def get_unique_segments_with_counts(data):
                     segments[segment]["Zagraniczny"] += 1
     return segments
 
+
 def get_email_company_pairs_for_segment(data, segment, subsegment):
     """
     Pobiera pary adres e-mail i nazwa firmy dla danego segmentu i podsegmentu.
@@ -357,10 +365,8 @@ def get_email_company_pairs_for_segment(data, segment, subsegment):
                 pairs.append({'email': email, 'company': company})
     return pairs
 
+
 def get_unique_possibilities_with_companies(data):
-    """
-    Pobiera unikalne możliwości i przypisane do nich firmy oraz e-maile.
-    """
     possibilities = {}
     for row_index, row in enumerate(data):
         company = row[20].strip() if len(row) > 20 and row[20] else "Nieznana Firma"
@@ -379,6 +385,7 @@ def get_unique_possibilities_with_companies(data):
                 possibilities[possibility].append({'email': email, 'company': company})
                 print(f"Znaleziona możliwość '{possibility}' w wierszu {row_index+1} dla firmy '{company}'")
     return possibilities
+
 
 def get_potential_clients(data):
     """
@@ -423,6 +430,7 @@ def get_potential_clients(data):
     total_clients = sum(len(clients) for clients in potential_clients.values())
     print(f"Pobrano {total_clients} potencjalnych klientów.")
     return potential_clients
+
 
 def send_email(to_email, subject, body, user, attachments=None):
     """
@@ -508,43 +516,49 @@ def send_email(to_email, subject, body, user, attachments=None):
         app.logger.error(f"Błąd wysyłania e-maila do {to_email}: {str(e)}")
         raise e
 
+
 def format_phone_number(phone_number):
     """
     Formatuje numer telefonu, dodając spacje po kodzie kraju i co trzy cyfry.
     Przykład: '+48786480887' -> '+48 786 480 887'
     """
-    # Sprawdzenie, czy numer zaczyna się od '+48' i ma dokładnie 12 znaków (+48 + 9 cyfr)
     if phone_number.startswith('+48') and len(phone_number) == 12 and phone_number[3:].isdigit():
         return f"{phone_number[:3]} {phone_number[3:6]} {phone_number[6:9]} {phone_number[9:]}"
     else:
-        # Jeśli numer nie pasuje do oczekiwanego formatu, zwróć go bez zmian
         return phone_number
 
-def send_verification_email(user, code):
-    """
-    Wysyła e-mail z kodem weryfikacyjnym do użytkownika.
-    """
-    subject = "Kod weryfikacyjny do resetowania hasła"
-    sender = app.config['MAIL_USERNAME']
-    recipients = [user.email_address]
-    # Tworzenie HTML wiadomości z mniejszym odstępem między wierszami
-    body = f"""
-    <div style="line-height: 0.8; font-family: Arial, sans-serif;">
-        <p style="margin: 2px 0;">Cześć {user.first_name},</p>
-        <p style="margin: 2px 0;">Twój kod weryfikacyjny to: <strong>{code}</strong></p>
-        <p style="margin: 2px 0;">Kod jest ważny przez 15 minut.</p>
-        <p style="margin: 2px 0;">Pozdrawiam,<br>Zespół Ranges</p>
-    </div>
-    """
 
-    msg = Message(subject=subject, sender=sender, recipients=recipients, html=body)
-    try:
-        mail.send(msg)
-        app.logger.info(f"E-mail weryfikacyjny wysłany do {user.email_address}.")
-        return True
-    except Exception as e:
-        app.logger.error(f"Błąd podczas wysyłania e-maila do {user.email_address}: {e}")
-        return False
+@app.route('/test_email')
+def test_email():
+    user = User.query.first()  # Wybierz odpowiedniego użytkownika
+    if user:
+        subject = "Testowy E-mail z Załącznikiem"
+        body = "To jest testowy e-mail z załącznikiem."
+        test_attachment = os.path.join(app.config['UPLOAD_FOLDER'], 'test_attachment.pdf')
+        if not os.path.exists(test_attachment):
+            try:
+                with open(test_attachment, 'wb') as f:
+                    f.write('To jest testowy załącznik.'.encode('utf-8'))
+            except Exception as e:
+                app.logger.error(f"Nie udało się utworzyć testowego załącznika: {e}")
+                flash('Wystąpił błąd podczas tworzenia testowego załącznika.', 'error')
+                return redirect(url_for('index'))
+        attachment_paths = [test_attachment]
+        try:
+            send_email(user.email_address, subject, body, user, attachments=attachment_paths)
+            flash('Testowy e-mail został wysłany.', 'success')
+        except Exception as e:
+            flash(f'Wystąpił błąd podczas wysyłania testowego e-maila: {e}', 'error')
+    else:
+        flash('Nie znaleziono użytkownika do wysłania testowego e-maila.', 'error')
+    return redirect(url_for('index'))
+
+
+@app.errorhandler(RequestEntityTooLarge)
+def handle_request_entity_too_large(e):
+    flash('Przesłany plik jest za duży. Maksymalny rozmiar to 16 MB.', 'error')
+    return redirect(url_for('index'))
+
 
 # *** Jedna wersja get_email_subsegment_mapping ***
 def get_email_subsegment_mapping(data):
@@ -573,9 +587,10 @@ def get_email_subsegment_mapping(data):
     app.logger.debug(f"Polski: {polski_count}, Zagraniczny: {zagraniczny_count}")
     return email_subsegment
 
+
 # *** Zadanie Celery do asynchronicznej wysyłki ***
-@celery_app.task(bind=True)
-def send_bulk_emails(self, emails, subject, body, user_id, attachment_paths=None):
+@celery_app.task
+def send_bulk_emails(emails, subject, body, user_id, attachment_paths=None):
     with app.app_context():
         user = db.session.get(User, user_id)
         
@@ -593,14 +608,15 @@ def send_bulk_emails(self, emails, subject, body, user_id, attachment_paths=None
                 )
                 sent_count += 1
 
-                # Raportuj postęp
-                self.update_state(
+                # Raportuj postęp (opcjonalnie)
+                send_bulk_emails.update_state(
                     state='PROGRESS',
                     meta={'current': sent_count, 'total': total}
                 )
+
             except Exception as e:
                 app.logger.error(f"Błąd wysyłania do {email}: {e}")
-                # Możesz tutaj dodać logikę do obsługi błędów, np. zapisywanie błędów
+                # Nie przerywaj pętli – ewentualnie loguj lub licz błędy
 
         return {
             'state': 'SUCCESS',
@@ -608,6 +624,7 @@ def send_bulk_emails(self, emails, subject, body, user_id, attachment_paths=None
             'total': total,
             'status': f'Wysłano {sent_count} / {total} e-maili'
         }
+
 
 @app.route('/send_message', methods=['POST'])
 def send_message():
@@ -656,22 +673,20 @@ def send_message():
     email_subsegment = get_email_subsegment_mapping(data)
 
     # Filtrowanie e-maili pod kątem wybranego języka
-    filtered_emails = [email for email in include_emails if email_subsegment.get(email.lower()) == language.capitalize()]
+    filtered_emails = [email for email in include_emails if email_subsegment.get(email) == language]
 
     if not filtered_emails:
         flash('Brak adresów e-mail zgodnych z wybranym językiem.', 'error')
         return redirect(url_for('index'))
 
     try:
-        # Wywołanie asynchronicznego zadania Celery
-        task = send_bulk_emails.apply_async(
-            args=[
-                filtered_emails,        # lista docelowych adresów
-                subject,                # temat
-                message,                # treść
-                user_id,                # ID użytkownika
-                attachment_filenames    # ścieżki do załączników
-            ]
+        # Tu kluczowa zmiana: asynchroniczna wysyłka
+        task = send_bulk_emails.delay(
+            filtered_emails,      # lista docelowych adresów
+            subject,              # temat
+            message,              # treść
+            user_id,              # ID użytkownika
+            attachment_filenames  # ścieżki do załączników
         )
 
         flash('Rozpoczęto asynchroniczną wysyłkę e-maili.', 'success')
@@ -682,136 +697,7 @@ def send_message():
         flash('Wystąpił błąd podczas wysyłania wiadomości.', 'error')
         return redirect(url_for('index'))
 
-@app.route('/send_message_ajax', methods=['POST'])
-def send_email_ajax():
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'message': 'Nie jesteś zalogowany.'}), 401
 
-    user_id = session['user_id']
-    user = db.session.get(User, user_id)
-    if not user:
-        return jsonify({'success': False, 'message': 'Użytkownik nie istnieje.'}), 404
-
-    # Pobranie danych z formularza
-    subject = request.form.get('subject')
-    message = request.form.get('message')
-    language = request.form.get('language')
-    segments_selected = request.form.getlist('segments')
-    include_emails = request.form.getlist('include_emails')
-    attachments = request.files.getlist('attachments')
-
-    # Walidacja wymaganych pól
-    if not subject or not message or not language:
-        return jsonify({'success': False, 'message': 'Proszę wypełnić wszystkie wymagane pola.'}), 400
-
-    # Filtracja i walidacja emaili
-    valid_emails = [email.strip().replace(';', '').lower() for email in include_emails if email.strip()]
-    if not valid_emails:
-        return jsonify({'success': False, 'message': 'Proszę wybrać przynajmniej jeden adres e-mail.'}), 400
-
-    # Obsługa załączników
-    attachment_filenames = []
-    for file in attachments:
-        if file and is_allowed_file(file.filename):
-            filename = secure_filename(file.filename)
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-            file.save(filepath)
-            attachment_filenames.append(filepath)
-        elif file.filename != '':
-            return jsonify({'success': False, 'message': f'Nieprawidłowy typ pliku: {file.filename}'}), 400
-
-    # Pobranie danych z arkusza i utworzenie mapy adresów e-mail -> podsegment
-    data = get_data_from_sheet()
-    email_subsegment = get_email_subsegment_mapping(data)
-
-    # Filtrowanie adresów e-mail zgodnie z wybranym językiem
-    filtered_emails = [email for email in valid_emails if email_subsegment.get(email) == language.capitalize()]
-    app.logger.debug(f"Wynik filtrowania. Język: {language}, E-maili: {len(filtered_emails)}")
-
-    if not filtered_emails:
-        return jsonify({'success': False, 'message': 'Brak adresów e-mail zgodnych z wybranym językiem.'}), 400
-
-    try:
-        # Wywołanie asynchronicznego zadania Celery
-        task = send_bulk_emails.apply_async(
-            args=[
-                filtered_emails,        # lista docelowych adresów
-                subject,                # temat
-                message,                # treść
-                user_id,                # ID użytkownika
-                attachment_filenames    # ścieżki do załączników
-            ]
-        )
-
-        # Odpowiadamy od razu JSONem – Heroku nie przerwie requestu
-        return jsonify({
-            'success': True,
-            'message': 'Rozpoczęto wysyłanie wiadomości w tle.',
-            'task_id': task.id
-        }), 200
-
-    except Exception as e:
-        app.logger.error(f'Błąd podczas wysyłania zadań Celery: {e}')
-        return jsonify({'success': False, 'message': 'Wystąpił błąd podczas inicjowania wysyłki.'}), 500
-
-@app.route('/stop_sending/<task_id>', methods=['POST'])
-def stop_sending(task_id):
-    """
-    Endpoint do zatrzymania wysyłania e-maili dla danego task_id.
-    """
-    stop_event = email_sending_stop_events.get(task_id)
-    if stop_event:
-        stop_event.set()
-        return jsonify({'success': True, 'message': 'Proces wysyłania został zatrzymany.'}), 200
-    else:
-        return jsonify({'success': False, 'message': 'Nie znaleziono zadania o podanym ID.'}), 404
-
-@app.route('/email_progress/<task_id>')
-def email_progress(task_id):
-    """
-    Trasa zwracająca aktualny postęp wysyłania e-maili.
-
-    Args:
-        task_id (str): Unikalny identyfikator zadania.
-
-    Returns:
-        JSON: Procentowy postęp wysyłania.
-    """
-    progress = celery_app.AsyncResult(task_id)
-    if progress.state == 'PROGRESS':
-        return jsonify({'percentage': (progress.info.get('current', 0) / progress.info.get('total', 1)) * 100})
-    elif progress.state == 'SUCCESS':
-        return jsonify({'percentage': 100})
-    else:
-        return jsonify({'percentage': 0})
-
-# Funkcja wysyłająca e-maile z kodem weryfikacyjnym
-def send_verification_email(user, code):
-    """
-    Wysyła e-mail z kodem weryfikacyjnym do użytkownika.
-    """
-    subject = "Kod weryfikacyjny do resetowania hasła"
-    sender = app.config['MAIL_USERNAME']
-    recipients = [user.email_address]
-    # Tworzenie HTML wiadomości z mniejszym odstępem między wierszami
-    body = f"""
-    <div style="line-height: 0.8; font-family: Arial, sans-serif;">
-        <p style="margin: 2px 0;">Cześć {user.first_name},</p>
-        <p style="margin: 2px 0;">Twój kod weryfikacyjny to: <strong>{code}</strong></p>
-        <p style="margin: 2px 0;">Kod jest ważny przez 15 minut.</p>
-        <p style="margin: 2px 0;">Pozdrawiam,<br>Zespół Ranges</p>
-    </div>
-    """
-
-    msg = Message(subject=subject, sender=sender, recipients=recipients, html=body)
-    try:
-        mail.send(msg)
-        app.logger.info(f"E-mail weryfikacyjny wysłany do {user.email_address}.")
-        return True
-    except Exception as e:
-        app.logger.error(f"Błąd podczas wysyłania e-maila do {user.email_address}: {e}")
-        return False
 
 # Funkcja asynchroniczna do wysyłania e-maili
 def send_emails_async(emails, subject, body, user, attachment_paths=None, task_id=None):
@@ -862,31 +748,219 @@ def send_emails_async(emails, subject, body, user, attachment_paths=None, task_i
                     except Exception as e:
                         app.logger.error(f"Nie udało się usunąć załącznika {file_path}: {e}")
 
-@app.route('/test_email')
-def test_email():
-    user = User.query.first()  # Wybierz odpowiedniego użytkownika
-    if user:
-        subject = "Testowy E-mail z Załącznikiem"
-        body = "To jest testowy e-mail z załącznikiem."
-        test_attachment = os.path.join(app.config['UPLOAD_FOLDER'], 'test_attachment.pdf')
-        if not os.path.exists(test_attachment):
-            try:
-                with open(test_attachment, 'wb') as f:
-                    f.write('To jest testowy załącznik.'.encode('utf-8'))
-            except Exception as e:
-                app.logger.error(f"Nie udało się utworzyć testowego załącznika: {e}")
-                flash('Wystąpił błąd podczas tworzenia testowego załącznika.', 'error')
-                return redirect(url_for('index'))
-        attachment_paths = [test_attachment]
-        try:
-            send_email(user.email_address, subject, body, user, attachments=attachment_paths)
-            flash('Testowy e-mail został wysłany.', 'success')
-        except Exception as e:
-            flash(f'Wystąpił błąd podczas wysyłania testowego e-maila: {e}', 'error')
-    else:
-        flash('Nie znaleziono użytkownika do wysłania testowego e-maila.', 'error')
-    return redirect(url_for('index'))
 
+@app.route('/stop_sending/<task_id>', methods=['POST'])
+def stop_sending(task_id):
+    """
+    Endpoint do zatrzymania wysyłania e-maili dla danego task_id.
+    """
+    stop_event = email_sending_stop_events.get(task_id)
+    if stop_event:
+        stop_event.set()
+        return jsonify({'success': True, 'message': 'Proces wysyłania został zatrzymany.'}), 200
+    else:
+        return jsonify({'success': False, 'message': 'Nie znaleziono zadania o podanym ID.'}), 404
+
+@app.route('/email_progress/<task_id>')
+def email_progress(task_id):
+    """
+    Trasa zwracająca aktualny postęp wysyłania e-maili.
+
+    Args:
+        task_id (str): Unikalny identyfikator zadania.
+
+    Returns:
+        JSON: Procentowy postęp wysyłania.
+    """
+    progress = email_sending_progress.get(task_id, None)
+    if progress:
+        percentage = (progress['sent'] / progress['total']) * 100
+        return jsonify({'percentage': percentage})
+    else:
+        # Jeśli zadanie nie istnieje lub zostało ukończone
+        return jsonify({'percentage': 100})
+
+
+# Funkcja formatowania numeru telefonu
+def format_phone_number(phone_number):
+    """
+    Formatuje numer telefonu, dodając spacje po kodzie kraju i co trzy cyfry.
+    Przykład: '+48786480887' -> '+48 786 480 887'
+    """
+    # Sprawdzenie, czy numer zaczyna się od '+48' i ma dokładnie 12 znaków (+48 + 9 cyfr)
+    if phone_number.startswith('+48') and len(phone_number) == 12 and phone_number[3:].isdigit():
+        return f"{phone_number[:3]} {phone_number[3:6]} {phone_number[6:9]} {phone_number[9:]}"
+    else:
+        # Jeśli numer nie pasuje do oczekiwanego formatu, zwróć go bez zmian
+        return phone_number
+
+# Funkcja wysyłająca e-maile z kodem weryfikacyjnym
+
+def send_verification_email(user, code):
+    """
+    Wysyła e-mail z kodem weryfikacyjnym do użytkownika.
+    """
+    subject = "Kod weryfikacyjny do resetowania hasła"
+    sender = app.config['MAIL_USERNAME']
+    recipients = [user.email_address]
+    # Tworzenie HTML wiadomości z mniejszym odstępem między wierszami
+    body = f"""
+    <div style="line-height: 0.8; font-family: Arial, sans-serif;">
+        <p style="margin: 2px 0;">Cześć {user.first_name},</p>
+        <p style="margin: 2px 0;">Twój kod weryfikacyjny to: <strong>{code}</strong></p>
+        <p style="margin: 2px 0;">Kod jest ważny przez 15 minut.</p>
+        <p style="margin: 2px 0;">Pozdrawiam,<br>Zespół Ranges</p>
+    </div>
+    """
+
+    msg = Message(subject=subject, sender=sender, recipients=recipients, html=body)
+    try:
+        mail.send(msg)
+        app.logger.info(f"E-mail weryfikacyjny wysłany do {user.email_address}.")
+        return True
+    except Exception as e:
+        app.logger.error(f"Błąd podczas wysyłania e-maila do {user.email_address}: {e}")
+        return False
+
+@app.route('/send_message_ajax', methods=['POST'])
+def send_email_ajax():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Nie jesteś zalogowany.'}), 401
+
+    user_id = session['user_id']
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({'success': False, 'message': 'Użytkownik nie istnieje.'}), 404
+
+    # Pobranie danych z formularza
+    subject = request.form.get('subject')
+    message = request.form.get('message')
+    language = request.form.get('language')
+    segments_selected = request.form.getlist('segments')
+    include_emails = request.form.getlist('include_emails')
+    attachments = request.files.getlist('attachments')
+
+    # Walidacja wymaganych pól
+    if not subject or not message or not language:
+        return jsonify({'success': False, 'message': 'Proszę wypełnić wszystkie wymagane pola.'}), 400
+
+    # Filtracja i walidacja emaili
+    valid_emails = [email.strip().replace(';', '') for email in include_emails if email.strip()]
+    if not valid_emails:
+        return jsonify({'success': False, 'message': 'Proszę wybrać przynajmniej jeden adres e-mail.'}), 400
+
+    # Obsługa załączników
+    attachment_filenames = []
+    for file in attachments:
+        if file and is_allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+            file.save(filepath)
+            attachment_filenames.append(filepath)
+        elif file.filename != '':
+            return jsonify({'success': False, 'message': f'Nieprawidłowy typ pliku: {file.filename}'}), 400
+
+    # Pobranie danych z arkusza i utworzenie mapy adresów e-mail -> podsegment
+    data = get_data_from_sheet()
+    email_subsegment = get_email_subsegment_mapping(data)
+
+    # Filtrowanie adresów e-mail zgodnie z wybranym językiem
+    filtered_emails = [email for email in valid_emails if email_subsegment.get(email) == language]
+    app.logger.debug(f"Wynik filtrowania. Język: {language}, E-maili: {len(filtered_emails)}")
+
+    if not filtered_emails:
+        return jsonify({'success': False, 'message': 'Brak adresów e-mail zgodnych z wybranym językiem.'}), 400
+
+    try:
+        # -------------------------------
+        # Wywołanie asynchronicznego zadania Celery:
+        # -------------------------------
+        from app import send_bulk_emails  # lub zaimportuj na górze pliku
+        task = send_bulk_emails.delay(
+            filtered_emails,
+            subject,
+            message,
+            user_id,
+            attachment_filenames
+        )
+
+        # Odpowiadamy od razu JSONem – Heroku nie przerwie requestu
+        return jsonify({
+            'success': True,
+            'message': 'Rozpoczęto wysyłanie wiadomości w tle.',
+            'task_id': task.id
+        }), 200
+
+    except Exception as e:
+        app.logger.error(f'Błąd podczas wysyłania zadań Celery: {e}')
+        return jsonify({'success': False, 'message': 'Wystąpił błąd podczas inicjowania wysyłki.'}), 500
+
+
+
+
+@app.route('/send_message_ajax', methods=['POST'])
+def send_message_ajax():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Nie jesteś zalogowany.'}), 401
+
+    user_id = session['user_id']
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({'success': False, 'message': 'Użytkownik nie istnieje.'}), 404
+
+    subject = request.form.get('subject')
+    message = request.form.get('message')
+    language = request.form.get('language')
+    recipients = request.form.get('recipients', '')
+    attachments = request.files.getlist('attachments')
+
+    if not subject or not message or not language:
+        return jsonify({'success': False, 'message': 'Wypełnij wszystkie wymagane pola.'}), 400
+
+    valid_emails = []
+    raw_recipients = recipients.replace(';', ',')
+    for email in raw_recipients.split(','):
+        clean = email.strip()
+        if clean:
+           valid_emails.append(clean)
+
+    if not valid_emails:
+        return jsonify({'success': False, 'message': 'Proszę wybrać przynajmniej jeden adres e-mail.'}), 400
+
+    attachment_filenames = []
+    for file in attachments:
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+            file.save(filepath)
+            attachment_filenames.append(filepath)
+        elif file.filename != '':
+            return jsonify({'success': False, 'message': f'Nieprawidłowy typ pliku: {file.filename}'}), 400
+
+    data = get_data_from_sheet()
+    email_subsegment = get_email_subsegment_mapping(data)
+    filtered_emails = [email for email in valid_emails if email_subsegment.get(email) == language]
+
+    if not filtered_emails:
+        return jsonify({'success': False, 'message': 'Brak adresów e-mail zgodnych z wybranym językiem.'}), 400
+
+    try:
+        import uuid
+        task_id = str(uuid.uuid4())
+        stop_event = threading.Event()
+        email_sending_stop_events[task_id] = stop_event
+        thread = threading.Thread(
+            target=send_emails_async,
+            args=(filtered_emails, subject, message, user, attachment_filenames, task_id)
+        )
+        thread.start()
+
+        return jsonify({'success': True, 'message': 'Rozpoczęto wysyłanie wiadomości.', 'task_id': task_id}), 200
+    except Exception as e:
+        app.logger.error(f'Błąd: {e}')
+        return jsonify({'success': False, 'message': 'Błąd podczas wysyłania.'}), 500
 
 
 @app.route('/add_note_ajax', methods=['POST'])

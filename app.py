@@ -598,6 +598,7 @@ def test_email():
 
     return redirect(url_for('index'))
 
+
 def get_email_subsegment_mapping(data):
     """
     Zwraca słownik mapujący adresy e-mail do podsegmentów ('Polski' lub 'Zagraniczny').

@@ -51,12 +51,10 @@ if redis_url.startswith("rediss://"):
     celery_app.conf.update(
         broker_transport_options={
             'visibility_timeout': 3600,  # opcjonalnie, np. 1 godz. rezerwacji zadań
-            'ssl': {
-                'ssl_cert_reqs': ssl.CERT_NONE
-            }
+            'ssl_cert_reqs': 'CERT_NONE'  # <-- ZMIANA SSL_CERT_REQS
         },
         result_backend_transport_options={
-            'ssl_cert_reqs': ssl.CERT_NONE
+            'ssl_cert_reqs': 'CERT_NONE'  # <-- ZMIANA SSL_CERT_REQS
         }
     )
 
@@ -85,16 +83,8 @@ else:
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# (Opcjonalnie) Jeśli chcesz jeszcze wyróżnić w logu ścieżkę do pliku SQLite,
-# możesz zostawić coś takiego:
-# if database_url.startswith("sqlite:///"):
-#     db_path = database_url.replace("sqlite:///", "")
-#     print(f"Using database at: {db_path}")
-
-# Podstawowa konfiguracja
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default_secret_key')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # Maksymalnie 16 MB na żądanie
-
 
 # Bezpieczne ustawienia ciasteczek sesji
 app.config['SESSION_COOKIE_SECURE'] = False  # Ustaw na True w produkcji
@@ -272,7 +262,6 @@ EMAIL_SIGNATURE_TEMPLATE = """
 """
 
 
-# Funkcja pobierająca dane z Google Sheets
 def get_data_from_sheet():
     credentials_b64 = os.getenv('GOOGLE_CREDENTIALS_BASE64')
     if credentials_b64:
@@ -700,7 +689,6 @@ def send_message():
         return redirect(url_for('index'))
 
 
-
 # Funkcja asynchroniczna do wysyłania e-maili
 def send_emails_async(emails, subject, body, user, attachment_paths=None, task_id=None):
     """
@@ -783,21 +771,17 @@ def email_progress(task_id):
         return jsonify({'percentage': 100})
 
 
-# Funkcja formatowania numeru telefonu
 def format_phone_number(phone_number):
     """
     Formatuje numer telefonu, dodając spacje po kodzie kraju i co trzy cyfry.
     Przykład: '+48786480887' -> '+48 786 480 887'
     """
-    # Sprawdzenie, czy numer zaczyna się od '+48' i ma dokładnie 12 znaków (+48 + 9 cyfr)
     if phone_number.startswith('+48') and len(phone_number) == 12 and phone_number[3:].isdigit():
         return f"{phone_number[:3]} {phone_number[3:6]} {phone_number[6:9]} {phone_number[9:]}"
     else:
-        # Jeśli numer nie pasuje do oczekiwanego formatu, zwróć go bez zmian
         return phone_number
 
 # Funkcja wysyłająca e-maile z kodem weryfikacyjnym
-
 def send_verification_email(user, code):
     """
     Wysyła e-mail z kodem weryfikacyjnym do użytkownika.
@@ -823,6 +807,7 @@ def send_verification_email(user, code):
     except Exception as e:
         app.logger.error(f"Błąd podczas wysyłania e-maila do {user.email_address}: {e}")
         return False
+
 
 @app.route('/send_message_ajax', methods=['POST'])
 def send_email_ajax():
@@ -854,7 +839,7 @@ def send_email_ajax():
     # Obsługa załączników
     attachment_filenames = []
     for file in attachments:
-        if file and is_allowed_file(file.filename):
+        if file and is_allowed_file(file):
             filename = secure_filename(file.filename)
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -887,7 +872,6 @@ def send_email_ajax():
             attachment_filenames
         )
 
-        # Odpowiadamy od razu JSONem – Heroku nie przerwie requestu
         return jsonify({
             'success': True,
             'message': 'Rozpoczęto wysyłanie wiadomości w tle.',
@@ -897,8 +881,6 @@ def send_email_ajax():
     except Exception as e:
         app.logger.error(f'Błąd podczas wysyłania zadań Celery: {e}')
         return jsonify({'success': False, 'message': 'Wystąpił błąd podczas inicjowania wysyłki.'}), 500
-
-
 
 
 @app.route('/send_message_ajax', methods=['POST'])
@@ -932,7 +914,7 @@ def send_message_ajax():
 
     attachment_filenames = []
     for file in attachments:
-        if file and allowed_file(file.filename):
+        if file and is_allowed_file(file.filename):
             filename = secure_filename(file.filename)
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -999,7 +981,6 @@ def add_note_ajax():
             return jsonify({'success': False, 'message': f'Błąd podczas dodawania notatki: {e}'}), 500
     else:
         return jsonify({'success': False, 'message': 'Nie można dodać pustej notatki.'}), 400
-
 
 
 @app.route('/edit_note_ajax', methods=['POST'])

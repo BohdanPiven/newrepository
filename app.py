@@ -258,28 +258,57 @@ EMAIL_SIGNATURE_TEMPLATE = """
 
 # Przykładowa funkcja pobierająca dane z Google Sheet (jeśli potrzebne)
 def get_data_from_sheet():
-    credentials_b64 = os.getenv('GOOGLE_CREDENTIALS_BASE64')
-    if credentials_b64:
-        credentials_json = base64.b64decode(credentials_b64).decode('utf-8')
-        credentials_info = json.loads(credentials_json)
-        credentials = service_account.Credentials.from_service_account_info(credentials_info, scopes=SCOPES)
-    else:
-        raise ValueError("GOOGLE_CREDENTIALS_BASE64 not set in environment variables.")
-    
-    service = build('sheets', 'v4', credentials=credentials)
-    sheet = service.spreadsheets()
-    RANGE_NAME = 'A1:AX'  # 50 kolumn
-    
-    result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range=RANGE_NAME).execute()
-    data = result.get('values', [])
-    
-    # Uzupełnianie brakujących kolumn do 50
-    for i, row in enumerate(data):
-        if len(row) < 50:
-            row.extend([''] * (50 - len(row)))
-        print(f"Wiersz {i+1} ma {len(row)} kolumn")
-    
-    return data
+    """
+    Pobiera dane z Google Sheets API.
+    """
+    # Pobranie zakodowanych danych uwierzytelniających z konfiguracji
+    credentials_base64 = os.getenv('GOOGLE_CREDENTIALS_BASE64')
+    if not credentials_base64:
+        raise ValueError("Brak danych uwierzytelniających Google w zmiennych środowiskowych.")
+
+    # Dekodowanie danych uwierzytelniających
+    try:
+        credentials_json = base64.b64decode(credentials_base64).decode('utf-8')
+        credentials_dict = json.loads(credentials_json)
+    except Exception as e:
+        raise ValueError(f"Nie udało się zdekodować danych uwierzytelniających Google: {e}")
+
+    # Zdefiniowanie zakresów dostępu
+    SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
+
+    # Tworzenie obiektu Credentials
+    try:
+        credentials = service_account.Credentials.from_service_account_info(
+            credentials_dict, scopes=SCOPES
+        )
+    except Exception as e:
+        raise ValueError(f"Nie udało się utworzyć obiektu Credentials: {e}")
+
+    # Inicjalizacja usługi Google Sheets API
+    try:
+        service = build('sheets', 'v4', credentials=credentials)
+    except Exception as e:
+        raise ValueError(f"Nie udało się zainicjalizować usługi Google Sheets API: {e}")
+
+    # Pobranie identyfikatora arkusza z konfiguracji
+    spreadsheet_id = os.getenv('GOOGLE_SPREADSHEET_ID')
+    if not spreadsheet_id:
+        raise ValueError("Brak identyfikatora arkusza Google Sheets w zmiennych środowiskowych.")
+
+    # Pobranie nazwy zakładki (sheet) z konfiguracji
+    sheet_name = os.getenv('GOOGLE_SHEET_NAME', 'Sheet1')  # Domyślnie 'Sheet1' jeśli nie ustawiono
+
+    # Zdefiniowanie zakresu danych do pobrania
+    range_name = f"{sheet_name}!A1:Z"  # Zakres od kolumny A do Z, dostosuj według potrzeb
+
+    # Pobranie danych z arkusza
+    try:
+        sheet = service.spreadsheets()
+        result = sheet.values().get(spreadsheetId=spreadsheet_id, range=range_name).execute()
+        values = result.get('values', [])
+        return values
+    except Exception as e:
+        raise ValueError(f"Nie udało się pobrać danych z arkusza Google Sheets: {e}")
 
 # Funkcja zwracająca listę segmentów
 def get_segments():
@@ -427,85 +456,38 @@ def get_potential_clients(data):
 
 # Funkcja: Wysyłanie pojedynczego e-maila
 def send_email(to_email, subject, body, user, attachments=None):
-    """
-    Wysyła e-mail za pomocą indywidualnego hasła usera (odszyfrowanego).
-    """
+    msg = EmailMessage()
+    msg['Subject'] = subject
+    msg['From'] = user.email_address
+    msg['To'] = to_email
+    msg.set_content(body, subtype='html')  # Zakładam, że wiadomość jest HTML
+
+    # Dodawanie załączników, jeśli są
+    if attachments:
+        for filepath in attachments:
+            try:
+                with open(filepath, 'rb') as f:
+                    file_data = f.read()
+                    file_name = os.path.basename(filepath)
+                msg.add_attachment(file_data, maintype='application', subtype='octet-stream', filename=file_name)
+            except Exception as e:
+                app.logger.error(f"Błąd dodawania załącznika {filepath}: {e}")
+
+    # Szyfrowanie hasła SMTP
     try:
-        # Odszyfruj hasło z bazy (kolumna user.email_password)
-        email_password_encrypted = user.email_password
-        email_password = fernet.decrypt(email_password_encrypted.encode()).decode()
-
-        # Formatowanie nr telefonu
-        formatted_phone_number = format_phone_number(user.phone_number)
-
-        # Podpis (signature)
-        signature = EMAIL_SIGNATURE_TEMPLATE.format(
-            first_name=user.first_name,
-            last_name=user.last_name,
-            position=user.position,
-            phone_number=formatted_phone_number,
-            email_address=user.email_address
-        )
-
-        # Treść wiadomości (HTML + styl akapitów)
-        message_body = f'''
-        <div style="font-family: Calibri, sans-serif; font-size: 11pt;">
-            <style>
-                p {{
-                    margin: 0;
-                    line-height: 1.2;
-                }}
-                p + p {{
-                    margin-top: 10px;
-                }}
-            </style>
-            {body}
-        </div>
-        '''
-
-        # Połączenie treści z podpisem
-        body_with_signature = f'''
-        {message_body}
-        {signature}
-        '''
-
-        # Tworzenie wiadomości MIME
-        msg = MIMEMultipart()
-        msg['Subject'] = subject
-        msg['From'] = user.email_address
-        msg['To'] = to_email
-        msg['Reply-To'] = user.email_address
-        msg.attach(MIMEText(body_with_signature, 'html'))
-
-        # Dodawanie załączników
-        if attachments:
-            for file_path in attachments:
-                if not os.path.exists(file_path):
-                    app.logger.error(f"Załącznik nie istnieje: {file_path}")
-                    continue
-                try:
-                    with open(file_path, 'rb') as f:
-                        part = MIMEApplication(f.read(), Name=os.path.basename(file_path))
-                        part['Content-Disposition'] = f'attachment; filename="{os.path.basename(file_path)}"'
-                        msg.attach(part)
-                except Exception as e:
-                    app.logger.error(f"Nie udało się dołączyć załącznika {file_path}: {e}")
-
-        # Wysłanie maila
-        smtp_server = app.config['MAIL_SERVER']
-        smtp_port = app.config['MAIL_PORT']
-        smtp_use_tls = app.config['MAIL_USE_TLS']
-
-        with smtplib.SMTP(smtp_server, smtp_port) as server:
-            if smtp_use_tls:
-                server.starttls()
-            server.login(user.email_address, email_password)
-            server.send_message(msg)
-            app.logger.info(f"E-mail wysłany do: {to_email}")
-
+        decrypted_password = fernet.decrypt(user.email_password.encode()).decode()
     except Exception as e:
-        app.logger.error(f"Błąd wysyłania e-maila do {to_email}: {str(e)}")
-        raise e
+        app.logger.error(f"Błąd odszyfrowywania hasła SMTP: {e}")
+        raise
+
+    # Wysyłka e-maila
+    try:
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+            smtp.login(user.email_address, decrypted_password)
+            smtp.send_message(msg)
+    except Exception as e:
+        app.logger.error(f"Błąd wysyłania e-maila do {to_email}: {e}")
+        raise
 
 
 def format_phone_number(phone_number):
@@ -521,6 +503,7 @@ def format_phone_number(phone_number):
 # -------------
 # CELERY TASK
 # -------------
+
 @celery_app.task(bind=True)
 def send_bulk_emails(self, emails, subject, body, user_id, language, attachment_paths=None):
     with app.app_context():
@@ -572,7 +555,7 @@ def send_bulk_emails(self, emails, subject, body, user_id, language, attachment_
 
             except Exception as e:
                 app.logger.error(f"Błąd wysyłania do {email}: {e}")
-                # Nie przerywaj pętli, ewentualnie loguj błędy
+                # Nie przerywaj pętli, loguj błędy
 
         return {
             'state': 'SUCCESS',
@@ -580,6 +563,7 @@ def send_bulk_emails(self, emails, subject, body, user_id, language, attachment_
             'total': total,
             'status': f'Wysłano {sent_count} / {total} e-maili'
         }
+
 
 
 # -------------
@@ -714,24 +698,18 @@ def send_message_ajax():
     message = request.form.get('message')
     recipients = request.form.get('recipients', '')
     attachments = request.files.getlist('attachments')
+    language = request.form.get('language')  # Pobranie wybranego języka
 
     if not subject or not message:
         return jsonify({'success': False, 'message': 'Wypełnij wszystkie wymagane pola.'}), 400
 
-    # Przetworzenie stringa recipients na listę e-maili
-    valid_emails = []
-    raw_recipients = recipients.replace(';', ',')
-    for email in raw_recipients.split(','):
-        clean = email.strip()
-        if clean:
-            valid_emails.append(clean)
-
-    if not valid_emails:
+    if not recipients:
         return jsonify({'success': False, 'message': 'Proszę wybrać przynajmniej jeden adres e-mail.'}), 400
 
+    # Obsługa załączników
     attachment_filenames = []
     for file in attachments:
-        if file and is_allowed_file(file.filename):
+        if file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(filepath)
@@ -740,19 +718,31 @@ def send_message_ajax():
             return jsonify({'success': False, 'message': f'Nieprawidłowy typ pliku: {file.filename}'}), 400
 
     try:
-        import uuid
-        task_id = str(uuid.uuid4())
-        stop_event = threading.Event()
-        email_sending_stop_events[task_id] = stop_event
+        # Przetworzenie stringa recipients na listę e-maili
+        valid_emails = []
+        raw_recipients = recipients.replace(';', ',')
+        for email in raw_recipients.split(','):
+            clean = email.strip()
+            if clean:
+                valid_emails.append(clean)
 
-        # Uruchom wątku (wersja bez Celery) lub:
-        # Wersja z Celery:
-        task = send_bulk_emails.delay(valid_emails, subject, message, user_id, attachment_filenames)
+        if not valid_emails:
+            return jsonify({'success': False, 'message': 'Proszę wybrać przynajmniej jeden adres e-mail.'}), 400
 
-        return jsonify({'success': True, 'message': 'Rozpoczęto wysyłanie wiadomości.', 'task_id': task.id}), 200
+        # Wywołanie asynchronicznego zadania Celery z przekazaniem języka
+        task = send_bulk_emails.delay(
+            valid_emails,
+            subject,
+            message,
+            user_id,
+            language,  # Przekazanie języka
+            attachment_filenames
+        )
+        return jsonify({'success': True, 'message': 'Rozpoczęto asynchroniczną wysyłkę e-maili.', 'task_id': task.id}), 200
     except Exception as e:
-        app.logger.error(f'Błąd: {e}')
-        return jsonify({'success': False, 'message': 'Błąd podczas wysyłania.'}), 500
+        app.logger.error(f'Błąd podczas inicjowania zadania Celery: {e}')
+        return jsonify({'success': False, 'message': 'Wystąpił błąd podczas wysyłania wiadomości.'}), 500
+
 
 
 # Funkcja zatrzymująca proces wysyłania (opcjonalna)

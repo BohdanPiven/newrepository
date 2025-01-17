@@ -522,19 +522,38 @@ def format_phone_number(phone_number):
 # CELERY TASK
 # -------------
 @celery_app.task(bind=True)
-def send_bulk_emails(self, emails, subject, body, user_id, attachment_paths=None):
-    """
-    Zadanie Celery do masowej wysyłki. Wysyła e-maile do listy 'emails' w jednym podejściu.
-    """
+def send_bulk_emails(self, emails, subject, body, user_id, language, attachment_paths=None):
     with app.app_context():
         user = db.session.get(User, user_id)
         if not user:
             raise ValueError(f"Brak użytkownika o ID: {user_id}")
 
-        sent_count = 0
-        total = len(emails)
+        # Pobranie danych z Google Sheets
+        data = get_data_from_sheet()
+        
+        # Tworzenie mapowania e-maili do subsegmentów
+        email_subsegment = get_email_subsegment_mapping(data)
 
-        for email in emails:
+        # Walidacja języka
+        if language not in ['Polski', 'Zagraniczny']:
+            raise ValueError(f"Nieznany język: {language}")
+
+        # Filtrowanie e-maili na podstawie wybranego języka
+        filtered_emails = [email for email in emails if email_subsegment.get(email) == language]
+
+        if not filtered_emails:
+            app.logger.warning(f"Brak adresów e-mail dla języka: {language}")
+            return {
+                'state': 'SUCCESS',
+                'current': 0,
+                'total': 0,
+                'status': f'Brak adresów e-mail dla języka: {language}'
+            }
+
+        sent_count = 0
+        total = len(filtered_emails)
+
+        for email in filtered_emails:
             try:
                 send_email(
                     to_email=email,
@@ -613,6 +632,7 @@ def get_email_subsegment_mapping(data):
     return email_subsegment
 
 
+
 @app.route('/send_message', methods=['POST'])
 def send_message():
     """
@@ -661,8 +681,10 @@ def send_message():
             subject,
             message,
             user_id,
+            language,  # Przekazanie języka
             attachment_filenames
         )
+
         flash('Rozpoczęto asynchroniczną wysyłkę e-maili.', 'success')
         return redirect(url_for('index'))
     except Exception as e:

@@ -1,8 +1,8 @@
-"""Initial migration
+"""Initial full schema
 
-Revision ID: 2e4e5b400771
+Revision ID: c0dfd68d7bd9
 Revises: 
-Create Date: 2024-12-10 20:48:50.473493
+Create Date: 2025-01-24 00:21:21.066540
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '2e4e5b400771'
+revision = 'c0dfd68d7bd9'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -42,6 +42,7 @@ def upgrade():
     sa.Column('license_key_id', sa.Integer(), nullable=False),
     sa.Column('reset_code', sa.String(length=6), nullable=True),
     sa.Column('reset_code_expiration', sa.DateTime(), nullable=True),
+    sa.Column('color', sa.String(length=7), server_default='#e0f7fa', nullable=True),
     sa.ForeignKeyConstraint(['license_key_id'], ['license_key.id'], ),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('email_address', name='uq_user_email_address'),

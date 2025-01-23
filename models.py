@@ -47,7 +47,7 @@ class User(db.Model):
     username = db.Column(db.String(150), nullable=False)
     email_address = db.Column(db.String(150), nullable=False)
     email_password = db.Column(db.String(500), nullable=False)
-    app_password_hash = db.Column(db.String(128), nullable=False)
+    app_password_hash = db.Column(db.Text, nullable=False)
     phone_number = db.Column(db.String(20), nullable=False)
     license_key_id = db.Column(db.Integer, db.ForeignKey('license_key.id'), nullable=False)
     reset_code = db.Column(db.String(6), nullable=True)

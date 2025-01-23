@@ -680,6 +680,7 @@ def handle_request_entity_too_large(e):
 # Asynchroniczne API do wysyłania e-maili (przykład)
 @app.route('/send_message_ajax', methods=['POST'])
 def send_message_ajax():
+    # 1. Sprawdzenie, czy użytkownik jest zalogowany
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Nie jesteś zalogowany.'}), 401
 
@@ -688,15 +689,18 @@ def send_message_ajax():
     if not user:
         return jsonify({'success': False, 'message': 'Użytkownik nie istnieje.'}), 404
 
+    # 2. Pobieramy dane z formularza
     subject = request.form.get('subject')
     message = request.form.get('message')
     recipients = request.form.get('recipients', '')
     attachments = request.files.getlist('attachments')
+    language = request.form.get('language', '').strip()  # <-- kluczowe: "Polski" lub "Zagraniczny"
 
+    # Walidacja pola subject / message
     if not subject or not message:
-        return jsonify({'success': False, 'message': 'Wypełnij wszystkie wymagane pola.'}), 400
+        return jsonify({'success': False, 'message': 'Wypełnij wszystkie wymagane pola (temat i treść).'}), 400
 
-    # Przetworzenie stringa recipients na listę e-maili
+    # 3. Rozbicie stringa "recipients" na listę e-maili (np. oddzielone przecinkami)
     valid_emails = []
     raw_recipients = recipients.replace(';', ',')
     for email in raw_recipients.split(','):
@@ -705,8 +709,9 @@ def send_message_ajax():
             valid_emails.append(clean)
 
     if not valid_emails:
-        return jsonify({'success': False, 'message': 'Proszę wybrać przynajmniej jeden adres e-mail.'}), 400
+        return jsonify({'success': False, 'message': 'Nie wybrano żadnych adresów e-mail.'}), 400
 
+    # 4. Obsługa załączników
     attachment_filenames = []
     for file in attachments:
         if file and is_allowed_file(file.filename):
@@ -717,20 +722,63 @@ def send_message_ajax():
         elif file.filename != '':
             return jsonify({'success': False, 'message': f'Nieprawidłowy typ pliku: {file.filename}'}), 400
 
+    # 5. Budowa słownika email->język (Polski/Zagraniczny) z Google Sheet
+    #    UWAGA: dostosuj indeksy kolumn do swojego arkusza, jeśli się różnią!
+    data = get_data_from_sheet()  
+    email_language_map = {}  # klucz: email, wartość: np. 'Polski' lub 'Zagraniczny'
+
+    for row in data:
+        # -- Segment/kontrahenci --
+        # sprawdzamy czy jest subsegment row[23] i e-mail w row[17]
+        if len(row) > 23 and row[17] and row[23]:
+            em = row[17].strip()
+            subseg = row[23].strip()  # np. "Polski" lub "Zagraniczny"
+            email_language_map[em] = subseg
+        
+        # -- Potencjalni klienci --
+        # sprawdzamy czy jest e-mail w row[46] i język w row[49]
+        if len(row) > 49 and row[46] and row[49]:
+            em = row[46].strip()
+            lng = row[49].strip()     # np. "Polski" lub "Zagraniczny"
+            email_language_map[em] = lng
+
+    # 6. Filtrowanie: z valid_emails usuwamy te, które nie pasują do wybranego language
+    final_emails = []
+    for e in valid_emails:
+        # Sprawdzamy, czy w słowniku jest przypisanie email->język
+        mail_lang = email_language_map.get(e, "")
+        # Dodaj do finalnej listy tylko, jeśli mail_lang = chosen language
+        if mail_lang == language:
+            final_emails.append(e)
+
+    if not final_emails:
+        return jsonify({'success': False, 'message': f'Żaden z zaznaczonych adresów nie pasuje do języka: {language}.'}), 400
+
     try:
+        # 7. Wywołanie asynchronicznego zadania Celery (lub innej metody wysyłki)
         import uuid
         task_id = str(uuid.uuid4())
         stop_event = threading.Event()
         email_sending_stop_events[task_id] = stop_event
 
-        # Uruchom wątku (wersja bez Celery) lub:
-        # Wersja z Celery:
-        task = send_bulk_emails.delay(valid_emails, subject, message, user_id, attachment_filenames)
+        task = send_bulk_emails.delay(
+            final_emails,
+            subject,
+            message,
+            user_id,
+            attachment_filenames
+        )
 
-        return jsonify({'success': True, 'message': 'Rozpoczęto wysyłanie wiadomości.', 'task_id': task.id}), 200
+        return jsonify({
+            'success': True,
+            'message': f'Rozpoczęto wysyłanie wiadomości (tylko {language}).',
+            'task_id': task.id
+        }), 200
+
     except Exception as e:
         app.logger.error(f'Błąd: {e}')
         return jsonify({'success': False, 'message': 'Błąd podczas wysyłania.'}), 500
+
 
 
 # Funkcja zatrzymująca proces wysyłania (opcjonalna)

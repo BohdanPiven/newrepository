@@ -31,6 +31,7 @@ from flask import jsonify
 from email.message import EmailMessage
 import mimetypes
 import ssl
+from models import PASTEL_COLORS
 
 # ------------------------------
 # *** KONFIGURACJA CELERY W TYM SAMYM PLIKU ***

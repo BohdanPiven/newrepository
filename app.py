@@ -3839,7 +3839,7 @@ def index():
 
                         <label for="language">Wybierz język:</label>
                         <select id="language" name="language" required>
-                            <option value="" disabled selected>Wybierz język</option>
+                            <option value="">Wybierz język</option>
                             <option value="Polski">Polski</option>
                             <option value="Zagraniczny">Zagraniczny</option>
                         </select>

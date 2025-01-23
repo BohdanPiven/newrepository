@@ -680,7 +680,9 @@ def handle_request_entity_too_large(e):
 # Asynchroniczne API do wysyłania e-maili (przykład)
 @app.route('/send_message_ajax', methods=['POST'])
 def send_message_ajax():
-    # 1. Sprawdzenie, czy użytkownik jest zalogowany
+    # ---------------------
+    # 1. Sprawdź czy zalogowany
+    # ---------------------
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Nie jesteś zalogowany.'}), 401
 
@@ -689,18 +691,26 @@ def send_message_ajax():
     if not user:
         return jsonify({'success': False, 'message': 'Użytkownik nie istnieje.'}), 404
 
-    # 2. Pobieramy dane z formularza
+    # ---------------------
+    # 2. Pobierz dane z formularza
+    # ---------------------
     subject = request.form.get('subject')
     message = request.form.get('message')
-    recipients = request.form.get('recipients', '')
+    recipients = request.form.get('recipients', '')  # wszystkie e-maile zaznaczone po stronie JS
     attachments = request.files.getlist('attachments')
-    language = request.form.get('language', '').strip()  # <-- kluczowe: "Polski" lub "Zagraniczny"
 
-    # Walidacja pola subject / message
+    # Nowy klucz: jaki język (Polski lub Zagraniczny)
+    language = request.form.get('language', '').strip()
+
+    # Prosta walidacja
     if not subject or not message:
         return jsonify({'success': False, 'message': 'Wypełnij wszystkie wymagane pola (temat i treść).'}), 400
+    if not language:
+        return jsonify({'success': False, 'message': 'Nie wybrano języka (Polski / Zagraniczny).'}), 400
 
-    # 3. Rozbicie stringa "recipients" na listę e-maili (np. oddzielone przecinkami)
+    # ---------------------
+    # 3. Przerób stringa recipients -> lista e-maili
+    # ---------------------
     valid_emails = []
     raw_recipients = recipients.replace(';', ',')
     for email in raw_recipients.split(','):
@@ -711,7 +721,9 @@ def send_message_ajax():
     if not valid_emails:
         return jsonify({'success': False, 'message': 'Nie wybrano żadnych adresów e-mail.'}), 400
 
+    # ---------------------
     # 4. Obsługa załączników
+    # ---------------------
     attachment_filenames = []
     for file in attachments:
         if file and is_allowed_file(file.filename):
@@ -722,47 +734,55 @@ def send_message_ajax():
         elif file.filename != '':
             return jsonify({'success': False, 'message': f'Nieprawidłowy typ pliku: {file.filename}'}), 400
 
-    # 5. Budowa słownika email->język (Polski/Zagraniczny) z Google Sheet
-    #    UWAGA: dostosuj indeksy kolumn do swojego arkusza, jeśli się różnią!
+    # ---------------------
+    # 5. Zbuduj słownik email->język (Polski/Zagraniczny) z Google Sheet
+    # ---------------------
     data = get_data_from_sheet()  
-    email_language_map = {}  # klucz: email, wartość: np. 'Polski' lub 'Zagraniczny'
+    email_language_map = {}  # np. {"abc@firma.pl": "Polski", "xyz@company.com": "Zagraniczny", ...}
 
     for row in data:
-        # -- Segment/kontrahenci --
-        # sprawdzamy czy jest subsegment row[23] i e-mail w row[17]
+        # Przykład: segmenty
+        # row[17] = e-mail, row[23] = subsegment ("Polski"/"Zagraniczny")
         if len(row) > 23 and row[17] and row[23]:
             em = row[17].strip()
-            subseg = row[23].strip()  # np. "Polski" lub "Zagraniczny"
+            subseg = row[23].strip()
             email_language_map[em] = subseg
         
-        # -- Potencjalni klienci --
-        # sprawdzamy czy jest e-mail w row[46] i język w row[49]
+        # Przykład: potencjalni klienci
+        # row[46] = e-mail, row[49] = język ("Polski"/"Zagraniczny")
         if len(row) > 49 and row[46] and row[49]:
             em = row[46].strip()
-            lng = row[49].strip()     # np. "Polski" lub "Zagraniczny"
+            lng = row[49].strip()
             email_language_map[em] = lng
 
-    # 6. Filtrowanie: z valid_emails usuwamy te, które nie pasują do wybranego language
-    final_emails = []
+    # ---------------------
+    # 6. Odfiltruj maile, które nie pasują do wybranego języka
+    # ---------------------
+    filtered_emails = []
     for e in valid_emails:
-        # Sprawdzamy, czy w słowniku jest przypisanie email->język
-        mail_lang = email_language_map.get(e, "")
-        # Dodaj do finalnej listy tylko, jeśli mail_lang = chosen language
+        mail_lang = email_language_map.get(e, "")  # odczytaj język z mapy (albo "")
         if mail_lang == language:
-            final_emails.append(e)
+            filtered_emails.append(e)
 
-    if not final_emails:
-        return jsonify({'success': False, 'message': f'Żaden z zaznaczonych adresów nie pasuje do języka: {language}.'}), 400
+    # Jeżeli po filtracji nic nie zostało, zwróć info
+    if not filtered_emails:
+        return jsonify({
+            'success': False,
+            'message': f'Żaden z zaznaczonych adresów nie pasuje do języka: {language}.'
+        }), 400
 
+    # ---------------------
+    # 7. Wyślij (Celery) do finalnie przefiltrowanej listy
+    # ---------------------
     try:
-        # 7. Wywołanie asynchronicznego zadania Celery (lub innej metody wysyłki)
         import uuid
         task_id = str(uuid.uuid4())
         stop_event = threading.Event()
         email_sending_stop_events[task_id] = stop_event
 
+        # Zadanie Celery - zamiast valid_emails dajemy filtered_emails:
         task = send_bulk_emails.delay(
-            final_emails,
+            filtered_emails,  # kluczowa zmiana: wysyłamy TYLKO pasujące do wybranego języka
             subject,
             message,
             user_id,
@@ -771,7 +791,7 @@ def send_message_ajax():
 
         return jsonify({
             'success': True,
-            'message': f'Rozpoczęto wysyłanie wiadomości (tylko {language}).',
+            'message': f'Rozpoczęto wysyłanie wiadomości (język: {language}).',
             'task_id': task.id
         }), 200
 

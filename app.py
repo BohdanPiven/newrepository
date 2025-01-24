@@ -249,7 +249,7 @@ EMAIL_SIGNATURE_TEMPLATE = """
             
             <!-- Tekst prawny -->
             <p style="margin: 20px 0 0 0; font-size: 9.5px; color: #888888;">
-                This e-mail is intended solely for the person to whom it is addressed. ...
+                This e-mail is intended solely for the person to whom it is addressed. The contents of this e-mail and any of its attachments contain confidential information, the use or disclosure of which may be restricted. If you are not the addressee of this e-mail or you have received this e-mail by mistake, you may not disclose to other persons, copy or otherwise distribute the contents of this e-mail or its attachments. Please immediately notify the sender of the received e-mail and delete this e-mail and any of its attachments without saving any copies and without disclosing the contents of the e-mail.
             </p>
         </td>
     </tr>

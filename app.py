@@ -367,26 +367,55 @@ def get_email_company_pairs_for_segment(data, segment, subsegment):
                 pairs.append({'email': email, 'company': company})
     return pairs
 
-# Funkcja do uzyskania unikalnych możliwości z firmami
-def get_unique_possibilities_with_companies(data):
+def get_unique_possibilities_with_counts(data):
+    """
+    Zwraca słownik możliwości z podziałem na 'Polski' i 'Zagraniczny' oraz listą firm.
+    {
+        "Możliwość": {
+            "Polski": 0,
+            "Zagraniczny": 0,
+            "entries": [
+                {"email": ..., "company": ..., "subsegment": ...},
+                ...
+            ]
+        },
+        ...
+    }
+    """
     possibilities = {}
-    for row_index, row in enumerate(data):
-        company = row[20].strip() if len(row) > 20 and row[20] else "Nieznana Firma"
-        email = row[17].strip() if len(row) > 17 and row[17] else ""
 
-        if len(row) != 50:
-            print(f"Wiersz {row_index+1} ma niepoprawną liczbę kolumn: {len(row)}")
-            continue
+    for row in data:
+        # Przykładowo subsegment (Polski/Zagraniczny) może być w kolumnie 23:
+        subsegment = row[23].strip() if len(row) > 23 and row[23] else ""
+        email = row[17].strip() if len(row) > 17 else ""
+        company = row[20].strip() if len(row) > 20 else "Nieznana Firma"
 
-        # Iteracja przez kolumny Z do AH (indeksy 25 do 33)
+        # Iteracja przez kolumny 25..33 (Z..AH)
         for i in range(25, 34):
-            possibility = row[i].strip() if row[i] else ''
+            possibility = row[i].strip() if len(row) > i and row[i] else ''
             if possibility:
                 if possibility not in possibilities:
-                    possibilities[possibility] = []
-                possibilities[possibility].append({'email': email, 'company': company})
-                print(f"Znaleziona możliwość '{possibility}' w wierszu {row_index+1} dla firmy '{company}'")
+                    possibilities[possibility] = {
+                        'Polski': 0,
+                        'Zagraniczny': 0,
+                        'entries': []
+                    }
+
+                # Zwiększenie licznika
+                if subsegment == "Polski":
+                    possibilities[possibility]['Polski'] += 1
+                elif subsegment == "Zagraniczny":
+                    possibilities[possibility]['Zagraniczny'] += 1
+
+                # Dodanie do entries
+                possibilities[possibility]['entries'].append({
+                    'email': email,
+                    'company': company,
+                    'subsegment': subsegment
+                })
+
     return possibilities
+
 
 def get_potential_clients(data):
     """
@@ -2036,7 +2065,10 @@ def index():
     data = get_data_from_sheet()
     segments = get_unique_segments_with_counts(data)
     notes = Note.query.order_by(Note.id.desc()).all()  # Pobranie wszystkich notatek, najnowsze na górze
-    possibilities = get_unique_possibilities_with_companies(data)
+
+    # Użycie nowej funkcji zamiast starej
+    possibilities = get_unique_possibilities_with_counts(data)
+
     potential_clients = get_potential_clients(data)
 
     index_template = '''
@@ -3811,7 +3843,6 @@ def index():
                             <img src="{{ url_for('static', filename='greek_key.png') }}" alt="Toggle Possibilities">
                         </button>
                         
-                        <!-- Zmiana obrazka na 'money.png' i zmiana etykiety -->
                         <button type="button" class="toggle-potential-clients-btn" onclick="togglePotentialClientsList(this)">
                             <img src="{{ url_for('static', filename='money.png') }}" alt="Toggle Potential Clients">
                         </button>
@@ -3868,22 +3899,31 @@ def index():
 
                         <!-- Lista możliwości i firm -->
                         <ul class="possibility-list">
-                            {% for possibility, companies in possibilities.items() %}
+                            {# 
+                               ZAMIANA: zamiast  {% for possibility, companies in possibilities.items() %} 
+                               używamy  {% for possibility, details in possibilities.items() %} 
+                               bo w 'details' mamy m.in. 'Polski', 'Zagraniczny' i 'entries' 
+                            #}
+                            {% for possibility, details in possibilities.items() %}
                                 {% set possibility_index = loop.index %}
                                 <li class="possibility-item">
                                     <input type="checkbox" name="possibilities" value="{{ possibility }}" id="possibility-{{ possibility_index }}" onchange="handlePossibilityChange(this)">
                                     <span class="possibility-label" data-index="{{ possibility_index }}">
-                                        {{ possibility }} <span class="company-count">({{ companies|length }})</span>
+                                        {{ possibility }}
+                                        <span class="company-count">
+                                            (Polski: {{ details['Polski'] }}, Zagraniczny: {{ details['Zagraniczny'] }})
+                                        </span>
                                     </span>
                                 </li>
                                 <ul class="company-list" id="companies-{{ possibility_index }}">
                                     <!-- Przycisk Zaznacz/Odznacz Wszystkie Firmy w Tej Możliwości -->
                                     <button type="button" class="yellow-btn select-deselect-companies-btn" onclick="toggleSelectAllCompaniesInPossibility('companies-{{ possibility_index }}')">Zaznacz Wszystkie</button>
                     
-                                    {% for company in companies %}
+                                    {# 'entries' to lista firm wewnątrz danej możliwości #}
+                                    {% for entry in details['entries'] %}
                                         <li class="company-item">
-                                            <input type="checkbox" name="include_emails" value="{{ company.email }}" id="company-{{ possibility_index }}-{{ loop.index }}">
-                                            <label for="company-{{ possibility_index }}-{{ loop.index }}">{{ company.company }}</label>
+                                            <input type="checkbox" name="include_emails" value="{{ entry.email }}" id="company-{{ possibility_index }}-{{ loop.index }}">
+                                            <label for="company-{{ possibility_index }}-{{ loop.index }}">{{ entry.company }}</label>
                                         </li>
                                     {% endfor %}
                                 </ul>
@@ -3912,7 +3952,6 @@ def index():
                                 <ul class="clients-list" id="clients-{{ group_index }}">
                                     {% for client in clients %}
                                         <li class="client-item">
-                                            <!-- Wyświetlanie tylko nazwy firmy i języka -->
                                             <input type="checkbox" name="include_potential_emails" value="{{ client.email }}" id="client-{{ group_index }}-{{ loop.index }}">
                                             <label for="client-{{ group_index }}-{{ loop.index }}">{{ client.company }} ({{ client.language }})</label>
                                         </li>
@@ -4036,6 +4075,7 @@ def index():
         data=data,
         max_attachments=app.config['MAX_ATTACHMENTS']
     )
+
 
 
 

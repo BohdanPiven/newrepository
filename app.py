@@ -160,7 +160,7 @@ SPREADSHEET_ID = os.getenv('SPREADSHEET_ID', '')
 
 def is_allowed_file(file):
     """
-    Sprawdza, czy plik ma dozwolone rozszerzenie i prawidłowy typ MIME.
+    Sprawdza, czy plik (FileStorage) ma dozwolone rozszerzenie i prawidłowy typ MIME.
     """
     if '.' not in file.filename or file.filename.rsplit('.', 1)[1].lower() not in ALLOWED_EXTENSIONS:
         return False
@@ -682,11 +682,11 @@ def handle_request_entity_too_large(e):
 @app.route('/send_message_ajax', methods=['POST'])
 def send_message_ajax():
     """
-    Wersja z dodatkowym print (app.logger.info) w budowaniu słownika
-    email->język, żebyśmy mogli prześledzić w logach, co się faktycznie
-    odczytuje z arkusza Google.
+    Wersja z dodatkowymi logami (app.logger.info) i obsługą załączników
+    poprawioną tak, by do is_allowed_file() przekazywać obiekt pliku, 
+    a nie samą nazwę (file.filename).
     """
-    # 1. Sprawdzenie, czy użytkownik jest zalogowany.
+    # 1. Sprawdzenie, czy użytkownik jest zalogowany
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': 'Nie jesteś zalogowany.'}), 401
 
@@ -702,13 +702,20 @@ def send_message_ajax():
     attachments = request.files.getlist('attachments')
     language = request.form.get('language', '').strip()
 
-    # Walidacja
+    # Walidacja podstawowa
     if not subject or not message:
-        return jsonify({'success': False, 'message': 'Wypełnij wszystkie wymagane pola (temat i treść).'}), 400
-    if not language:
-        return jsonify({'success': False, 'message': 'Nie wybrano języka (Polski / Zagraniczny).'}), 400
+        return jsonify({
+            'success': False, 
+            'message': 'Wypełnij wszystkie wymagane pola (temat i treść).'
+        }), 400
 
-    # 3. Rozbicie recipients na listę e-maili
+    if not language:
+        return jsonify({
+            'success': False, 
+            'message': 'Nie wybrano języka (Polski / Zagraniczny).'
+        }), 400
+
+    # 3. Parsowanie wpisanych odbiorców (może zawierać przecinki lub średniki)
     valid_emails = []
     raw_recipients = recipients.replace(';', ',')
     for email in raw_recipients.split(','):
@@ -717,46 +724,53 @@ def send_message_ajax():
             valid_emails.append(clean)
 
     if not valid_emails:
-        return jsonify({'success': False, 'message': 'Proszę wybrać przynajmniej jeden adres e-mail.'}), 400
+        return jsonify({
+            'success': False, 
+            'message': 'Proszę wybrać przynajmniej jeden adres e-mail.'
+        }), 400
 
     # 4. Obsługa załączników
     attachment_filenames = []
     for file in attachments:
-        if file and is_allowed_file(file.filename):
+        # ZMIANA TUTAJ – wywołujemy is_allowed_file(file)
+        if file and is_allowed_file(file):
             filename = secure_filename(file.filename)
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(filepath)
             attachment_filenames.append(filepath)
+        # Jeśli nie jest pusty .filename, ale nie przechodzi walidacji – zwróć błąd
         elif file.filename != '':
-            return jsonify({'success': False, 'message': f'Nieprawidłowy typ pliku: {file.filename}'}), 400
+            return jsonify({
+                'success': False, 
+                'message': f'Nieprawidłowy typ pliku: {file.filename}'
+            }), 400
 
-    # 5. Pobranie danych z Google Sheet + zbudowanie słownika email->język
+    # 5. Pobranie danych z Google Sheet + budowa słownika email->język
     data = get_data_from_sheet()
     email_language_map = {}
 
     for row_index, row in enumerate(data):
-        # Segmenty / możliwości: row[17] = e-mail, row[23] = subsegment
+        # SEGMENTY / MOŻLIWOŚCI: e-mail w row[17], subsegment w row[23]
         if len(row) > 23 and row[17] and row[23]:
             em = row[17].strip()
             subseg = row[23].strip()
-            # *** PRINT / LOG: pokażemy co się dzieje
             app.logger.info(f"[DEBUG] SEG row {row_index}: email={em}, subseg='{subseg}'")
             email_language_map[em] = subseg
 
-        # Potencjalni klienci: row[46] = e-mail, row[49] = język
+        # POTENCJALNI KLIENCI: e-mail w row[46], język w row[49]
         if len(row) > 49 and row[46] and row[49]:
             em = row[46].strip()
             lng = row[49].strip()
-            # *** PRINT / LOG: 
             app.logger.info(f"[DEBUG] POTC row {row_index}: email={em}, lang='{lng}'")
             email_language_map[em] = lng
 
-    # 6. Filtr: zostaw tylko e-maile, które mają w tym słowniku
-    # identyczny język jak user wybrał w formularzu
+    # 6. Filtrowanie e-maili pod kątem wybranego języka
     filtered_emails = []
     for e in valid_emails:
         mail_lang = email_language_map.get(e, "")
-        app.logger.info(f"[DEBUG] Checking email={e}, mail_lang='{mail_lang}', user_chosen='{language}'")
+        app.logger.info(
+            f"[DEBUG] Checking email={e}, mail_lang='{mail_lang}', user_chosen='{language}'"
+        )
         if mail_lang == language:
             filtered_emails.append(e)
 
@@ -766,7 +780,7 @@ def send_message_ajax():
             'message': f'Żaden z zaznaczonych adresów nie pasuje do języka: {language}.'
         }), 400
 
-    # 7. Wysyłanie przez Celery (asynchroniczne)
+    # 7. Uruchamianie asynchronicznej wysyłki (Celery)
     try:
         import uuid
         task_id = str(uuid.uuid4())
@@ -774,10 +788,10 @@ def send_message_ajax():
         email_sending_stop_events[task_id] = stop_event
 
         task = send_bulk_emails.delay(
-            filtered_emails,
-            subject,
-            message,
-            user_id,
+            filtered_emails, 
+            subject, 
+            message, 
+            user_id, 
             attachment_filenames
         )
 
@@ -789,8 +803,10 @@ def send_message_ajax():
 
     except Exception as e:
         app.logger.error(f'Błąd: {e}')
-        return jsonify({'success': False, 'message': 'Błąd podczas wysyłania.'}), 500
-
+        return jsonify({
+            'success': False, 
+            'message': 'Błąd podczas wysyłania.'
+        }), 500
 
 
 # Funkcja zatrzymująca proces wysyłania (opcjonalna)

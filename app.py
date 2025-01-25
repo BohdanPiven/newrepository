@@ -2013,7 +2013,6 @@ def index():
     possibilities = get_unique_possibilities_with_companies(data)
     potential_clients = get_potential_clients(data)
 
-    # Szablon z pełną obsługą dropzone w <script>
     index_template = '''
     <!DOCTYPE html>
     <html lang="pl">
@@ -2023,7 +2022,7 @@ def index():
         <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
         <link href="https://fonts.googleapis.com/css2?family=Quantico&display=swap" rel="stylesheet">
         <style>
-            /* Resetowanie stylów domyślnych */
+            /* ------- [STYLOWANIE – NIC NIE ZMIENIAMY W SEKCJI CSS] ------- */
             * {
                 margin: 0;
                 padding: 0;
@@ -2041,7 +2040,6 @@ def index():
                 color: #333333;
                 overflow-x: hidden;
             }
-            /* Header */
             .top-header {
                 position: fixed;
                 top: 0;
@@ -2096,7 +2094,6 @@ def index():
             .top-header .user-info a:hover {
                 color: #FFC107;
             }
-            /* Wrapper na zawartość */
             .content-wrapper {
                 display: flex;
                 flex: 1;
@@ -2106,7 +2103,6 @@ def index():
                 position: relative;
                 z-index: 1;
             }
-            /* Sidebar */
             .sidebar {
                 position: fixed;
                 top: 60px;
@@ -2126,7 +2122,6 @@ def index():
             .sidebar.active {
                 left: 0;
             }
-            /* Main Content */
             .main-content {
                 flex: 1;
                 padding: 20px;
@@ -2154,7 +2149,6 @@ def index():
                 margin-bottom: 20px;
                 font-size: 36px;
             }
-            /* Flash Messages */
             .flash-message {
                 background-color: #e9ecef;
                 color: #495057;
@@ -2180,7 +2174,6 @@ def index():
                 background-color: #fff3cd;
                 color: #856404;
             }
-            /* Formularze i elementy */
             label {
                 display: block;
                 margin-top: 10px;
@@ -2684,9 +2677,9 @@ def index():
         <!-- Dodaj CKEditor -->
         <script src="https://cdn.ckeditor.com/ckeditor5/39.0.1/classic/ckeditor.js"></script>
         <script>
-            // ---------------------------
-            // Funkcje wspólne
-            // ---------------------------
+            /* ------------------------- */
+            /* PODSTAWOWE FUNKCJE        */
+            /* ------------------------- */
             function showFlashMessage(category, message) {
                 const flashMessage = document.querySelector(`.flash-message.${category}`);
                 if (flashMessage) {
@@ -2697,21 +2690,18 @@ def index():
                     }, 5000);
                 }
             }
-
             function showSpinner(spinnerId) {
                 const spinner = document.getElementById(spinnerId);
                 if (spinner) {
                     spinner.style.display = 'inline-block';
                 }
             }
-
             function hideSpinner(spinnerId) {
                 const spinner = document.getElementById(spinnerId);
                 if (spinner) {
                     spinner.style.display = 'none';
                 }
             }
-
             function escapeHtml(text) {
                 var map = {
                     '&': '&amp;',
@@ -2723,28 +2713,24 @@ def index():
                 return text.replace(/[&<>"']/g, function(m) { return map[m]; });
             }
 
-            // ---------------------------
-            // Koniec Funkcji wspólnych
-            // ---------------------------
-
+            /* -------------------------------------------------------------- */
             document.addEventListener('DOMContentLoaded', function() {
-                // ------------------------
-                // Konfiguracja CKEditor
-                // ------------------------
+                /* ------------------- INICJALIZACJA CKEDITOR ------------------ */
                 ClassicEditor
                     .create(document.querySelector('#message-editor'), {
                         toolbar: ['bold', 'italic', 'underline', 'bulletedList', 'numberedList', 'link']
                     })
                     .then(editor => {
                         window.editor = editor;
+                        // Obsługa wysyłki formularza
                         const form = document.getElementById('main-form');
                         form.addEventListener('submit', (event) => {
                             event.preventDefault();
-                            // Pobieranie treści edytora
+                            // Pobierz treść z CKEditora
                             const data = editor.getData();
                             document.querySelector('#message').value = data;
 
-                            // Sprawdzanie czy pole wiadomości jest puste (bez znaczników i spacji)
+                            // Sprawdź, czy "Wiadomość" nie jest pusta
                             const tempElement = document.createElement('div');
                             tempElement.innerHTML = data;
                             const textContent = tempElement.textContent || tempElement.innerText || '';
@@ -2754,26 +2740,27 @@ def index():
                                 return;
                             }
 
-                            // Walidacja zaznaczeń segmentów, możliwości i potencjalnych klientów
+                            // (Sprawdzenia rodzic-dziecko, itp.)
                             if (!validateParentChildSelection()) {
-                                return; // Komunikat błędu jest w validateParentChildSelection()
+                                return;
                             }
 
                             showSpinner('spinner');
                             const formData = new FormData(form);
 
-                            // Pobieranie zaznaczonych adresów e-mail
+                            // Pobranie zaznaczonych e-maili
                             const emailCheckboxes = document.querySelectorAll('input[name="include_emails"]:checked, input[name="include_potential_emails"]:checked');
                             const emails = Array.from(emailCheckboxes).map(cb => cb.value);
 
-                            // Pobieranie wybranych użytkowników
+                            // Pobranie wybranych użytkowników (z notatek)
                             const selectedUserEmails = Array.from(document.querySelectorAll('input[name="selected_users"]'))
                                 .map(input => input.value);
-                            
-                            // Łączenie wszystkich odbiorców
+
+                            // Łączenie w jedną listę
                             const allRecipients = emails.concat(selectedUserEmails);
                             formData.set('recipients', allRecipients.join(','));
 
+                            // Wysyłka Ajax do send_message_ajax
                             fetch('{{ url_for("send_message_ajax") }}', {
                                 method: 'POST',
                                 body: formData,
@@ -2804,98 +2791,96 @@ def index():
                         console.error('Błąd inicjalizacji CKEditor:', error);
                     });
 
-                // ------------------------
-                // Obsługa załączników – klik i drag&drop
-                // ------------------------
+                /* -------------- [NOWA] OBSŁUGA ZAŁĄCZNIKÓW (klik + drag&drop) -------------- */
                 const dropzone = document.getElementById('dropzone');
                 const attachmentsInput = document.getElementById('attachments');
                 const attachmentsPreview = document.getElementById('attachments-preview');
                 const attachmentsCount = document.getElementById('attachments-count');
                 const maxAttachments = parseInt('{{ max_attachments }}', 10);
 
-                // Klik w dropzone => otwórz okno wyboru plików
+                // Kliknięcie w #dropzone => otwórz okno wyboru plików
                 dropzone.addEventListener('click', function() {
                     attachmentsInput.click();
                 });
 
-                // Dragover
+                // Dragover/Dragleave
                 dropzone.addEventListener('dragover', function(e) {
                     e.preventDefault();
                     dropzone.classList.add('dragover');
                 });
-
                 dropzone.addEventListener('dragleave', function(e) {
                     e.preventDefault();
                     dropzone.classList.remove('dragover');
                 });
 
-                // Drop
+                // Drop => przypisanie plików do attachmentsInput
                 dropzone.addEventListener('drop', function(e) {
                     e.preventDefault();
                     dropzone.classList.remove('dragover');
-                    handleFiles(e.dataTransfer.files);
+                    const droppedFiles = e.dataTransfer.files;
+                    handleDroppedFiles(droppedFiles);
                 });
 
-                // Zmiana w input[type="file"]
+                // Gdy użytkownik wybierze pliki z okna
                 attachmentsInput.addEventListener('change', function(e) {
-                    handleFiles(e.target.files);
+                    handleDroppedFiles(e.target.files);
                 });
 
-                function handleFiles(fileList) {
-                    let currentFiles = [...attachmentsInput.files];
-                    let incoming = [...fileList];
+                // Funkcja łącząca pliki: stare + nowe => attachmentsInput
+                function handleDroppedFiles(newFiles) {
+                    let current = [...attachmentsInput.files];
+                    let incoming = [...newFiles];
 
-                    if ((currentFiles.length + incoming.length) > maxAttachments) {
+                    // Sprawdzanie limitu
+                    if ((current.length + incoming.length) > maxAttachments) {
                         alert(`Możesz dodać maksymalnie ${maxAttachments} załączników!`);
                         return;
                     }
+                    let updated = current.concat(incoming);
 
-                    let updated = currentFiles.concat(incoming);
+                    // Nowy FileList w attachmentsInput
                     let dt = new DataTransfer();
                     updated.forEach(file => dt.items.add(file));
                     attachmentsInput.files = dt.files;
 
+                    // Odśwież podgląd
                     refreshPreview();
                 }
 
+                // Odświeżenie #attachments-preview i #attachments-count
                 function refreshPreview() {
                     attachmentsPreview.innerHTML = '';
                     let filesArray = [...attachmentsInput.files];
                     filesArray.forEach((file, index) => {
-                        const fileDiv = document.createElement('div');
-                        fileDiv.className = 'attachment-item';
+                        const itemDiv = document.createElement('div');
+                        itemDiv.classList.add('attachment-item');
 
                         const fileName = document.createElement('span');
                         fileName.textContent = file.name;
 
                         const removeBtn = document.createElement('button');
-                        removeBtn.innerHTML = '×';
-                        removeBtn.onclick = () => {
-                            removeFile(index);
-                        };
+                        removeBtn.textContent = '×';
+                        removeBtn.addEventListener('click', () => removeFile(index));
 
-                        fileDiv.appendChild(fileName);
-                        fileDiv.appendChild(removeBtn);
-                        attachmentsPreview.appendChild(fileDiv);
+                        itemDiv.appendChild(fileName);
+                        itemDiv.appendChild(removeBtn);
+                        attachmentsPreview.appendChild(itemDiv);
                     });
                     attachmentsCount.textContent = `Załączników: ${filesArray.length}/${maxAttachments}`;
                 }
 
+                // Usuwanie pliku z listy
                 function removeFile(index) {
                     let filesArray = [...attachmentsInput.files];
                     filesArray.splice(index, 1);
                     let dt = new DataTransfer();
-                    filesArray.forEach(file => dt.items.add(file));
+                    filesArray.forEach(f => dt.items.add(f));
                     attachmentsInput.files = dt.files;
                     refreshPreview();
                 }
-                // ------------------------
-                // Koniec obsługi załączników
-                // ------------------------
+                /* -------------------------------------------------------------------------- */
 
-                // ------------------------
-                // Obsługa segmentów, możliwości, klientów i notatek
-                // ------------------------
+                /* -------------------- OBSŁUGA SEGMENTÓW / MOŻLIWOŚCI (zostawiamy!) -------------------- */
                 document.querySelectorAll('.possibility-label').forEach(function(label) {
                     label.addEventListener('click', function(event) {
                         var index = this.getAttribute('data-index');
@@ -2918,7 +2903,7 @@ def index():
                     });
                 });
 
-                // Transfer treści notatki do pola wiadomości
+                // Obsługa transferu notatek
                 document.addEventListener('click', function(event) {
                     if (event.target && event.target.classList.contains('transfer-note-btn')) {
                         const noteContent = event.target.getAttribute('data-note-content');
@@ -2964,7 +2949,7 @@ def index():
                     });
                 });
 
-                // Edycja notatek - otwieranie modala
+                // Edycja notatek – otwieranie modala
                 document.addEventListener('click', function(event) {
                     if (event.target && event.target.classList.contains('edit-btn')) {
                         const noteId = event.target.getAttribute('data-note-id');
@@ -2973,7 +2958,7 @@ def index():
                     }
                 });
 
-                // Kliknięcia w imię/nazwisko użytkownika (dodawanie do wybranych)
+                // Kliknięcia w nazwę użytkownika
                 attachUserNameClickListeners();
 
                 // Usuwanie notatki (AJAX)
@@ -3040,10 +3025,9 @@ def index():
                         });
                     }
                 });
+            }); // KONIEC DOMContentLoaded
 
-            }); // <- Koniec DOMContentLoaded
-
-            // Funkcje do togglowania
+            /* ------- SEGMENTY/MOŻLIWOŚCI/KLIENCI – ORYGINALNE FUNKCJE ------- */
             function toggleSidebar(button) {
                 var sidebar = document.querySelector('.sidebar');
                 sidebar.classList.toggle('active');
@@ -3068,28 +3052,24 @@ def index():
                 potentialClientsContainer.classList.toggle('show');
                 img.classList.toggle('rotate');
             }
-            // Segmenty: rozwijanie e-maili
             function toggleEmailsList(segmentIndex) {
                 var emailList = document.getElementById(`emails-${segmentIndex}`);
                 if (emailList) {
                     emailList.classList.toggle('show');
                 }
             }
-            // Możliwości: rozwijanie firm
             function toggleCompanyList(possibilityIndex) {
                 var companyList = document.getElementById(`companies-${possibilityIndex}`);
                 if (companyList) {
                     companyList.classList.toggle('show');
                 }
             }
-            // Potencjalni klienci: rozwijanie
             function toggleClientsList(groupIndex) {
                 var clientsList = document.getElementById(`clients-${groupIndex}`);
                 if (clientsList) {
                     clientsList.classList.toggle('show');
                 }
             }
-            // Przeniesienie treści notatki do edytora
             function transferToMessageField(content) {
                 if (window.editor) {
                     window.editor.setData(content);
@@ -3097,7 +3077,6 @@ def index():
                     document.getElementById('message').value = content;
                 }
             }
-            // Walidacja rodzic-dziecko (zaznaczone segmenty vs maile)
             function validateParentChildSelection() {
                 const segmentCheckboxes = document.querySelectorAll('.segment-item input[type="checkbox"]');
                 for (const segment of segmentCheckboxes) {
@@ -3137,7 +3116,6 @@ def index():
                 }
                 return true;
             }
-            // Notatki - odświeżenie listy
             function updateNotesList(notes) {
                 const notesList = document.querySelector('.note-section ul');
                 notesList.innerHTML = '';
@@ -3195,21 +3173,24 @@ def index():
                     });
                 });
             }
-            // Obsługa modal edycji
             function openEditModal(noteId, currentContent) {
                 const modal = document.getElementById('editModal');
                 const editForm = document.getElementById('edit-note-form');
                 const editInput = document.getElementById('edit-note-input');
                 const closeModalBtn = document.getElementById('closeEditModal');
+
                 editInput.value = currentContent;
                 editForm.setAttribute('data-note-id', noteId);
                 modal.style.display = 'block';
-                closeModalBtn.onclick = function() { closeEditModal(); }
+
+                closeModalBtn.onclick = function() {
+                    closeEditModal();
+                };
                 window.onclick = function(event) {
                     if (event.target == modal) {
                         closeEditModal();
                     }
-                }
+                };
             }
             function closeEditModal() {
                 const modal = document.getElementById('editModal');
@@ -3220,10 +3201,7 @@ def index():
                 fetch('{{ url_for("edit_note_ajax") }}', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        note_id: noteId,
-                        new_content: newContent
-                    }),
+                    body: JSON.stringify({ note_id: noteId, new_content: newContent }),
                     credentials: 'same-origin'
                 })
                 .then(response => response.json())
@@ -3232,11 +3210,17 @@ def index():
                     if (data.success) {
                         showFlashMessage('success', data.message);
                         const noteSpan = document.querySelector(`.note[data-note-id="${noteId}"] .note-content`);
-                        if (noteSpan) noteSpan.textContent = data.note.content;
+                        if (noteSpan) {
+                            noteSpan.textContent = data.note.content;
+                        }
                         const editBtn = document.querySelector(`.note[data-note-id="${noteId}"] .edit-btn`);
-                        if (editBtn) editBtn.setAttribute('data-note-content', data.note.content);
+                        if (editBtn) {
+                            editBtn.setAttribute('data-note-content', data.note.content);
+                        }
                         const transferBtn = document.querySelector(`.note[data-note-id="${noteId}"] .transfer-note-btn`);
-                        if (transferBtn) transferBtn.setAttribute('data-note-content', data.note.content);
+                        if (transferBtn) {
+                            transferBtn.setAttribute('data-note-content', data.note.content);
+                        }
                     } else {
                         showFlashMessage('error', data.message);
                     }
@@ -3261,10 +3245,8 @@ def index():
                     editNote(noteId, newContent);
                 }
             });
-
-            // Zaznaczone elementy (segmenty, możliwości, klienci)
             function updateSelectedItems() {
-                // (Jeśli potrzebna jest aktualizacja znaczników – można wypełnić)
+                // Domyślnie puste – nic nie zmieniamy w selektorach
             }
         </script>
     </head>
@@ -3383,6 +3365,7 @@ def index():
                         </ul>
                     </div>
                 </div>
+
                 <!-- Główna treść strony -->
                 <div class="main-content">
                     <div class="form-container">
@@ -3390,14 +3373,16 @@ def index():
                         <div class="flash-message success"></div>
                         <div class="flash-message error"></div>
                         <div class="flash-message warning"></div>
+
                         <label for="subject">Temat:</label>
                         <input type="text" id="subject" name="subject" required>
+
                         <label for="message-editor">Wiadomość:</label>
                         <div id="message-editor"></div>
                         <textarea name="message" id="message" style="display: none;"></textarea>
 
-                        <!-- Ukryte pole file + dropzone -->
                         <label for="attachments">Załączniki:</label>
+                        <!-- UWAGA: input jest ukryty, #dropzone jest obok -->
                         <input type="file" name="attachments" id="attachments" multiple style="display: none;">
                         <div id="dropzone" class="dropzone">
                             Przeciągnij i upuść pliki tutaj lub kliknij, aby wybrać.
@@ -3424,6 +3409,7 @@ def index():
                 </div>
             </div>
         </form>
+
         <!-- Sekcja notatek i modale -->
         <div class="note-section">
             <h3>Notatki</h3>
@@ -3459,6 +3445,7 @@ def index():
                 </form>
             {% endif %}
         </div>
+
         <!-- Modal do edycji notatki -->
         <div id="editModal" class="modal">
             <div class="modal-content">
@@ -3472,7 +3459,7 @@ def index():
                 </form>
             </div>
         </div>
-        <!-- Stopka -->
+
         <footer class="footer">
             © DigitDrago
         </footer>
@@ -3491,8 +3478,6 @@ def index():
         data=data,
         max_attachments=app.config['MAX_ATTACHMENTS']
     )
-
-
 
 
 

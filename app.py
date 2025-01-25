@@ -157,18 +157,20 @@ app.config['MAX_ATTACHMENTS'] = 5
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
 SPREADSHEET_ID = os.getenv('SPREADSHEET_ID', '')
 
-
 def is_allowed_file(file):
     """
     Sprawdza, czy plik (FileStorage) ma dozwolone rozszerzenie i prawidłowy typ MIME.
     """
+    # Sprawdzenie rozszerzenia
     if '.' not in file.filename or file.filename.rsplit('.', 1)[1].lower() not in ALLOWED_EXTENSIONS:
         return False
 
+    # Odczyt fragmentu pliku do zbadania MIME
     file.seek(0)
-    mime_type = magic.from_buffer(file.read(1024), mime=True)
+    sample = file.read(1024)
     file.seek(0)
 
+    mime_type = magic.from_buffer(sample, mime=True)
     allowed_mime_types = [
         'application/pdf',
         'image/jpeg',
@@ -181,6 +183,7 @@ def is_allowed_file(file):
         'text/plain',
         'application/zip'
     ]
+
     return mime_type in allowed_mime_types
 
 
@@ -429,17 +432,19 @@ def get_potential_clients(data):
 # Funkcja: Wysyłanie pojedynczego e-maila
 def send_email(to_email, subject, body, user, attachments=None):
     """
-    Wysyła e-mail za pomocą indywidualnego hasła usera (odszyfrowanego).
+    attachments -> lista dictów: {
+        'filename': str,
+        'mime_type': str,
+        'content_b64': str
+    }
     """
     try:
-        # Odszyfruj hasło z bazy (kolumna user.email_password)
+        # Odszyfruj hasło z bazy:
         email_password_encrypted = user.email_password
         email_password = fernet.decrypt(email_password_encrypted.encode()).decode()
 
-        # Formatowanie nr telefonu
+        # (opcjonalnie) stwórz podpis, sformatuj phone_number, itp.
         formatted_phone_number = format_phone_number(user.phone_number)
-
-        # Podpis (signature)
         signature = EMAIL_SIGNATURE_TEMPLATE.format(
             first_name=user.first_name,
             last_name=user.last_name,
@@ -448,25 +453,11 @@ def send_email(to_email, subject, body, user, attachments=None):
             email_address=user.email_address
         )
 
-        # Treść wiadomości (HTML + styl akapitów)
-        message_body = f'''
+        # Budowa treści
+        body_with_signature = f'''
         <div style="font-family: Calibri, sans-serif; font-size: 11pt;">
-            <style>
-                p {{
-                    margin: 0;
-                    line-height: 1.2;
-                }}
-                p + p {{
-                    margin-top: 10px;
-                }}
-            </style>
             {body}
         </div>
-        '''
-
-        # Połączenie treści z podpisem
-        body_with_signature = f'''
-        {message_body}
         {signature}
         '''
 
@@ -475,22 +466,23 @@ def send_email(to_email, subject, body, user, attachments=None):
         msg['Subject'] = subject
         msg['From'] = user.email_address
         msg['To'] = to_email
-        msg['Reply-To'] = user.email_address
         msg.attach(MIMEText(body_with_signature, 'html'))
 
-        # Dodawanie załączników
+        # Dodawanie załączników (z base64)
         if attachments:
-            for file_path in attachments:
-                if not os.path.exists(file_path):
-                    app.logger.error(f"Załącznik nie istnieje: {file_path}")
-                    continue
+            for attach in attachments:
                 try:
-                    with open(file_path, 'rb') as f:
-                        part = MIMEApplication(f.read(), Name=os.path.basename(file_path))
-                        part['Content-Disposition'] = f'attachment; filename="{os.path.basename(file_path)}"'
-                        msg.attach(part)
+                    file_content = base64.b64decode(attach['content_b64'])
+                    part = MIMEApplication(file_content, Name=attach['filename'])
+                    # Ewentualnie, jeśli chcesz ustawić MIME:
+                    # part.set_type(attach['mime_type'])
+
+                    part['Content-Disposition'] = f'attachment; filename="{attach["filename"]}"'
+                    msg.attach(part)
                 except Exception as e:
-                    app.logger.error(f"Nie udało się dołączyć załącznika {file_path}: {e}")
+                    app.logger.error(
+                        f"Nie udało się dodać załącznika {attach['filename']}: {e}"
+                    )
 
         # Wysłanie maila
         smtp_server = app.config['MAIL_SERVER']
@@ -523,9 +515,14 @@ def format_phone_number(phone_number):
 # CELERY TASK
 # -------------
 @celery_app.task(bind=True)
-def send_bulk_emails(self, emails, subject, body, user_id, attachment_paths=None):
+def send_bulk_emails(self, emails, subject, body, user_id, attachments_data=None):
     """
-    Zadanie Celery do masowej wysyłki. Wysyła e-maile do listy 'emails' w jednym podejściu.
+    Zadanie Celery do masowej wysyłki.
+    attachments_data -> lista słowników: {
+        'filename': str,
+        'mime_type': str,
+        'content_b64': str
+    }
     """
     with app.app_context():
         user = db.session.get(User, user_id)
@@ -536,13 +533,16 @@ def send_bulk_emails(self, emails, subject, body, user_id, attachment_paths=None
         total = len(emails)
 
         for email in emails:
+            # (opcjonalne sprawdzenie, czy nie przerwano zadania)
+            # if email_sending_stop_events[...]:
+
             try:
                 send_email(
                     to_email=email,
                     subject=subject,
                     body=body,
                     user=user,
-                    attachments=attachment_paths
+                    attachments=attachments_data  # <-- kluczowe
                 )
                 sent_count += 1
 
@@ -551,7 +551,6 @@ def send_bulk_emails(self, emails, subject, body, user_id, attachment_paths=None
                     state='PROGRESS',
                     meta={'current': sent_count, 'total': total}
                 )
-
             except Exception as e:
                 app.logger.error(f"Błąd wysyłania do {email}: {e}")
                 # Nie przerywaj pętli, ewentualnie loguj błędy
@@ -562,7 +561,6 @@ def send_bulk_emails(self, emails, subject, body, user_id, attachment_paths=None
             'total': total,
             'status': f'Wysłano {sent_count} / {total} e-maili'
         }
-
 
 # -------------
 # TRASY
@@ -682,9 +680,8 @@ def handle_request_entity_too_large(e):
 @app.route('/send_message_ajax', methods=['POST'])
 def send_message_ajax():
     """
-    Wersja z dodatkowymi logami (app.logger.info) i obsługą załączników
-    poprawioną tak, by do is_allowed_file() przekazywać obiekt pliku, 
-    a nie samą nazwę (file.filename).
+    Przyjmuje wiadomość i załączniki przez AJAX.
+    Zamiast zapisywać pliki na dysk, koduje je w base64 i przekazuje do Celery.
     """
     # 1. Sprawdzenie, czy użytkownik jest zalogowany
     if 'user_id' not in session:
@@ -699,23 +696,22 @@ def send_message_ajax():
     subject = request.form.get('subject')
     message = request.form.get('message')
     recipients = request.form.get('recipients', '')
-    attachments = request.files.getlist('attachments')
     language = request.form.get('language', '').strip()
 
-    # Walidacja podstawowa
+    # Walidacja
     if not subject or not message:
         return jsonify({
-            'success': False, 
+            'success': False,
             'message': 'Wypełnij wszystkie wymagane pola (temat i treść).'
         }), 400
 
     if not language:
         return jsonify({
-            'success': False, 
+            'success': False,
             'message': 'Nie wybrano języka (Polski / Zagraniczny).'
         }), 400
 
-    # 3. Parsowanie wpisanych odbiorców (może zawierać przecinki lub średniki)
+    # 3. Rozbicie recipients na listę e-maili
     valid_emails = []
     raw_recipients = recipients.replace(';', ',')
     for email in raw_recipients.split(','):
@@ -725,52 +721,61 @@ def send_message_ajax():
 
     if not valid_emails:
         return jsonify({
-            'success': False, 
+            'success': False,
             'message': 'Proszę wybrać przynajmniej jeden adres e-mail.'
         }), 400
 
-    # 4. Obsługa załączników
-    attachment_filenames = []
+    # 4. Odczyt plików i konwersja w base64
+    attachments = request.files.getlist('attachments')
+    attachment_data = []
     for file in attachments:
-        # ZMIANA TUTAJ – wywołujemy is_allowed_file(file)
         if file and is_allowed_file(file):
+            # Odczyt całego pliku do pamięci
+            file_bytes = file.read()
+            file.seek(0)  # Można przywrócić wskaźnik, ale nie jest to już krytyczne
+
+            # Ustalenie nazwy i MIME
             filename = secure_filename(file.filename)
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(filepath)
-            attachment_filenames.append(filepath)
-        # Jeśli nie jest pusty .filename, ale nie przechodzi walidacji – zwróć błąd
+            sample = file.read(1024)
+            file.seek(0)
+            mime_type = magic.from_buffer(sample, mime=True)
+
+            # Kodujemy zawartość w base64
+            encoded = base64.b64encode(file_bytes).decode('utf-8')
+
+            attachment_data.append({
+                'filename': filename,
+                'mime_type': mime_type,
+                'content_b64': encoded
+            })
+
         elif file.filename != '':
             return jsonify({
-                'success': False, 
+                'success': False,
                 'message': f'Nieprawidłowy typ pliku: {file.filename}'
             }), 400
 
-    # 5. Pobranie danych z Google Sheet + budowa słownika email->język
+    # 5. (Przykład) – pobranie arkusza Google i sprawdzanie, czy e-mail ma ten sam język, co user wybrał
     data = get_data_from_sheet()
     email_language_map = {}
 
     for row_index, row in enumerate(data):
-        # SEGMENTY / MOŻLIWOŚCI: e-mail w row[17], subsegment w row[23]
+        # Segmenty / możliwości: row[17] = e-mail, row[23] = subsegment
         if len(row) > 23 and row[17] and row[23]:
             em = row[17].strip()
             subseg = row[23].strip()
-            app.logger.info(f"[DEBUG] SEG row {row_index}: email={em}, subseg='{subseg}'")
             email_language_map[em] = subseg
 
-        # POTENCJALNI KLIENCI: e-mail w row[46], język w row[49]
+        # Potencjalni klienci: row[46] = e-mail, row[49] = język
         if len(row) > 49 and row[46] and row[49]:
             em = row[46].strip()
             lng = row[49].strip()
-            app.logger.info(f"[DEBUG] POTC row {row_index}: email={em}, lang='{lng}'")
             email_language_map[em] = lng
 
     # 6. Filtrowanie e-maili pod kątem wybranego języka
     filtered_emails = []
     for e in valid_emails:
         mail_lang = email_language_map.get(e, "")
-        app.logger.info(
-            f"[DEBUG] Checking email={e}, mail_lang='{mail_lang}', user_chosen='{language}'"
-        )
         if mail_lang == language:
             filtered_emails.append(e)
 
@@ -780,7 +785,7 @@ def send_message_ajax():
             'message': f'Żaden z zaznaczonych adresów nie pasuje do języka: {language}.'
         }), 400
 
-    # 7. Uruchamianie asynchronicznej wysyłki (Celery)
+    # 7. Wywołanie Celery (asynchronicznie), przekazujemy attachment_data w pamięci
     try:
         import uuid
         task_id = str(uuid.uuid4())
@@ -788,11 +793,11 @@ def send_message_ajax():
         email_sending_stop_events[task_id] = stop_event
 
         task = send_bulk_emails.delay(
-            filtered_emails, 
-            subject, 
-            message, 
-            user_id, 
-            attachment_filenames
+            filtered_emails,
+            subject,
+            message,
+            user_id,
+            attachment_data  # <-- tu kluczowa zmiana
         )
 
         return jsonify({
@@ -804,7 +809,7 @@ def send_message_ajax():
     except Exception as e:
         app.logger.error(f'Błąd: {e}')
         return jsonify({
-            'success': False, 
+            'success': False,
             'message': 'Błąd podczas wysyłania.'
         }), 500
 

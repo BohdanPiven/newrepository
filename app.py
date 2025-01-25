@@ -2049,7 +2049,6 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if 'user_id' not in session:
@@ -2063,14 +2062,30 @@ def index():
         return redirect(url_for('login'))
 
     data = get_data_from_sheet()
-    segments = get_unique_segments_with_counts(data)
-    notes = Note.query.order_by(Note.id.desc()).all()  # Pobranie wszystkich notatek, najnowsze na górze
 
-    # Użycie nowej funkcji zamiast starej
-    possibilities = get_unique_possibilities_with_counts(data)
+    # --- [1] Pobieramy oryginalne słowniki z licznikami segmentów i możliwości ---
+    segments_dict = get_unique_segments_with_counts(data)
+    possibilities_dict = get_unique_possibilities_with_counts(data)
 
+    # --- [2] Sortujemy je według sumy (Polski + Zagraniczny) w kolejności malejącej ---
+    sorted_segments = sorted(
+        segments_dict.items(),
+        key=lambda item: (item[1]['Polski'] + item[1]['Zagraniczny']),
+        reverse=True
+    )
+    sorted_possibilities = sorted(
+        possibilities_dict.items(),
+        key=lambda item: (item[1]['Polski'] + item[1]['Zagraniczny']),
+        reverse=True
+    )
+
+    # Notatki
+    notes = Note.query.order_by(Note.id.desc()).all()
+
+    # Potencjalni klienci
     potential_clients = get_potential_clients(data)
 
+    # Poniżej znajduje się cały szablon index_template – bez zmian
     index_template = '''
     <!DOCTYPE html>
     <html lang="pl">
@@ -2985,7 +3000,6 @@ def index():
                 img.classList.toggle('rotate');
             }
 
-            // Funkcje do zaznaczania/odznaczania wszystkich segmentów
             function toggleSelectAllSegments(button) {
                 var segmentCheckboxes = document.querySelectorAll('.segment-item input[type="checkbox"]');
                 var allChecked = Array.from(segmentCheckboxes).every(cb => cb.checked);
@@ -3000,7 +3014,6 @@ def index():
                 updateSelectedItems();
             }
 
-            // Funkcje do zaznaczania/odznaczania wszystkich możliwości
             function toggleSelectAllPossibilities(button) {
                 var possibilityCheckboxes = document.querySelectorAll('.possibility-item input[type="checkbox"]');
                 var allChecked = Array.from(possibilityCheckboxes).every(cb => cb.checked);
@@ -3015,18 +3028,15 @@ def index():
                 updateSelectedItems();
             }
 
-            // Funkcje do zaznaczania/odznaczania wszystkich potencjalnych klientów
             function toggleSelectAllPotentialClients(button) {
                 var groupCheckboxes = document.querySelectorAll('.potential-client-group input[type="checkbox"]');
                 var clientCheckboxes = document.querySelectorAll('.potential-clients-list .client-item input[type="checkbox"]');
                 var allChecked = Array.from(groupCheckboxes).every(cb => cb.checked) && Array.from(clientCheckboxes).every(cb => cb.checked);
 
-                // Zaznacz lub odznacz wszystkie group checkboxes
                 groupCheckboxes.forEach(function(groupCheckbox) {
                     groupCheckbox.checked = !allChecked;
                 });
 
-                // Zaznacz lub odznacz wszystkie client checkboxes
                 clientCheckboxes.forEach(function(clientCheckbox) {
                     clientCheckbox.checked = !allChecked;
                 });
@@ -3036,7 +3046,6 @@ def index():
                 updateSelectedItems();
             }
 
-            // Funkcje do zaznaczania/odznaczania wszystkich e-maili w segmencie
             function toggleSelectAllEmailsInSegment(emailListId) {
                 var emailList = document.getElementById(emailListId);
                 var emailCheckboxes = emailList.querySelectorAll('input[type="checkbox"]');
@@ -3053,7 +3062,6 @@ def index():
                 updateSelectedItems();
             }
 
-            // Funkcje do zaznaczania/odznaczania wszystkich firm w możliwości
             function toggleSelectAllCompaniesInPossibility(companyListId) {
                 var companyList = document.getElementById(companyListId);
                 var companyCheckboxes = companyList.querySelectorAll('input[type="checkbox"]');
@@ -3070,7 +3078,6 @@ def index():
                 updateSelectedItems();
             }
 
-            // Funkcje do rozwijania/zwijania wszystkich list
             function toggleAllSegmentsExpandCollapse(button) {
                 var emailLists = document.querySelectorAll('.email-list');
                 var allExpanded = Array.from(emailLists).every(list => list.classList.contains('show'));
@@ -3083,7 +3090,6 @@ def index():
                     }
                 });
 
-                // Zmiana etykiety przycisku w zależności od stanu
                 button.textContent = allExpanded ? 'Rozwiń wszystkie segmenty' : 'Zwiń wszystkie segmenty';
             }
 
@@ -3117,7 +3123,6 @@ def index():
                 button.textContent = allExpanded ? 'Rozwiń wszystkich potencjalnych klientów' : 'Zwiń wszystkich potencjalnych klientów';
             }
 
-            // Funkcje do obsługi zmian checkboxów
             function handleSegmentChange(segmentCheckbox) {
                 toggleEmailsInSegment(segmentCheckbox);
                 updateSelectedItems();
@@ -3133,7 +3138,6 @@ def index():
                 updateSelectedItems();
             }
 
-            // Funkcje do togglowania e-maili, firm i klientów
             function toggleEmailsInSegment(segmentCheckbox) {
                 var segmentIndex = segmentCheckbox.id.split('-')[1];
                 var emailList = document.getElementById(`emails-${segmentIndex}`);
@@ -3167,7 +3171,6 @@ def index():
                 }
             }
 
-            // Funkcje do obsługi edycji notatek
             document.addEventListener('DOMContentLoaded', function() {
                 // Inicjalizacja CKEditor
                 ClassicEditor
@@ -3181,12 +3184,9 @@ def index():
                         const form = document.getElementById('main-form');
                         form.addEventListener('submit', (event) => {
                             event.preventDefault();
-
-                            // Pobieranie treści edytora
                             const data = editor.getData();
                             document.querySelector('#message').value = data;
 
-                            // Sprawdzanie czy pole wiadomości jest puste
                             const tempElement = document.createElement('div');
                             tempElement.innerHTML = data;
                             const textContent = tempElement.textContent || tempElement.innerText || '';
@@ -3196,34 +3196,25 @@ def index():
                                 return;
                             }
 
-                            // Walidacja zaznaczeń segmentów, możliwości i potencjalnych klientów
                             if (!validateParentChildSelection()) {
-                                // Jeśli walidacja nie przeszła, to wyświetlamy komunikat (już wyświetlony w funkcji) i nie wysyłamy
                                 return;
                             }
 
                             showSpinner('spinner');
                             const formData = new FormData(form);
 
-                            // Pobieranie zaznaczonych adresów e-mail
                             const emailCheckboxes = document.querySelectorAll('input[name="include_emails"]:checked, input[name="include_potential_emails"]:checked');
                             const emails = Array.from(emailCheckboxes).map(cb => cb.value);
 
-                            // Pobieranie wybranych użytkowników
                             const selectedUserEmails = Array.from(document.querySelectorAll('input[name="selected_users"]'))
                                 .map(input => input.value);
-                            
-                            // Łączenie wszystkich odbiorców
+
                             const allRecipients = emails.concat(selectedUserEmails);
                             formData.set('recipients', allRecipients.join(','));
 
-                            // === Zmiany w załącznikach (START) ===
-                            // Dodajemy wybrane przez użytkownika pliki (z listy selectedFiles) do formData,
-                            // żeby zostały faktycznie wysłane do send_message_ajax.
                             selectedFiles.forEach((file) => {
                                 formData.append('attachments', file);
                             });
-                            // === Zmiany w załącznikach (KONIEC) ===
 
                             fetch('{{ url_for("send_message_ajax") }}', {
                                 method: 'POST',
@@ -3240,11 +3231,7 @@ def index():
                                     document.getElementById('attachments-count').textContent = "Załączników: 0/{{ max_attachments }}";
                                     editor.setData('');
                                     updateSelectedItems();
-
-                                    // === Zmiany w załącznikach (START) ===
-                                    // Czyścimy tablicę z wybranymi plikami, żeby po wysyłce wszystko się resetowało.
                                     selectedFiles = [];
-                                    // === Zmiany w załącznikach (KONIEC) ===
                                 } else {
                                     showFlashMessage('error', data.message);
                                 }
@@ -3260,16 +3247,14 @@ def index():
                         console.error('Błąd inicjalizacji CKEditor:', error);
                     });
 
-                // Obsługa kliknięć na etykiety możliwości
                 document.querySelectorAll('.possibility-label').forEach(function(label) {
                     label.addEventListener('click', function(event) {
                         var index = this.getAttribute('data-index');
                         toggleCompanyList(index);
-                        event.stopPropagation(); // Zapobiega zaznaczeniu checkboxa
+                        event.stopPropagation();
                     });
                 });
 
-                // Obsługa kliknięć na etykiety segmentów
                 document.querySelectorAll('.segment-label').forEach(function(label) {
                     label.addEventListener('click', function(event) {
                         var index = this.getAttribute('data-index');
@@ -3278,7 +3263,6 @@ def index():
                     });
                 });
 
-                // Obsługa kliknięć na etykiety potencjalnych klientów
                 document.querySelectorAll('.potential-client-group-label').forEach(function(label) {
                     label.addEventListener('click', function(event) {
                         var index = this.getAttribute('data-index');
@@ -3287,7 +3271,6 @@ def index():
                     });
                 });
 
-                // Obsługa otwierania edycji notatek
                 document.addEventListener('click', function(event) {
                     if (event.target && event.target.classList.contains('edit-btn')) {
                         const noteId = event.target.getAttribute('data-note-id');
@@ -3297,7 +3280,6 @@ def index():
                     }
                 });
 
-                // Obsługa transferu notatek do pola wiadomości
                 document.addEventListener('click', function(event) {
                     if (event.target && event.target.classList.contains('transfer-note-btn')) {
                         const noteContent = event.target.getAttribute('data-note-content');
@@ -3307,24 +3289,19 @@ def index():
                     }
                 });
 
-                // Obsługa kliknięć na imię i nazwisko użytkownika w notatkach
                 document.querySelector('.note-section').addEventListener('click', function(event) {
                     if (event.target && event.target.classList.contains('user-name')) {
                         const userName = event.target.textContent.trim();
                         const userEmail = event.target.getAttribute('data-email');
-
-                        // Sprawdzenie, czy użytkownik jest już dodany
                         const alreadySelected = Array.from(document.querySelectorAll('#selected-users .selected-item'))
                             .some(item => item.getAttribute('data-email') === userEmail);
 
                         if (!alreadySelected) {
-                            // Tworzenie elementu tagu użytkownika
                             const userSpan = document.createElement('span');
                             userSpan.className = 'selected-item';
                             userSpan.setAttribute('data-email', userEmail);
                             userSpan.textContent = userName;
 
-                            // Dodanie przycisku usuwania
                             const removeBtn = document.createElement('span');
                             removeBtn.className = 'remove-item';
                             removeBtn.textContent = '×';
@@ -3333,24 +3310,20 @@ def index():
                             });
                             userSpan.appendChild(removeBtn);
 
-                            // Dodanie ukrytego inputa do formularza
                             const hiddenInput = document.createElement('input');
                             hiddenInput.type = 'hidden';
                             hiddenInput.name = 'selected_users';
                             hiddenInput.value = userEmail;
                             userSpan.appendChild(hiddenInput);
 
-                            // Dodanie tagu do kontenera
                             document.getElementById('selected-users').appendChild(userSpan);
                         }
                     }
                 });
 
-                // Obsługa submit dla formularza dodawania notatki
                 const addNoteForm = document.getElementById('add-note-form');
                 addNoteForm.addEventListener('submit', function(event) {
-                    event.preventDefault(); // Zapobiega tradycyjnemu wysłaniu formularza
-
+                    event.preventDefault();
                     const noteInput = this.querySelector('input[name="note"]');
                     const noteContent = noteInput.value.trim();
 
@@ -3359,10 +3332,8 @@ def index():
                         return;
                     }
 
-                    // Pokaż spinner
                     showSpinner('note-spinner');
 
-                    // Wyślij AJAX POST request
                     fetch('{{ url_for("add_note_ajax") }}', {
                         method: 'POST',
                         headers: {
@@ -3376,8 +3347,8 @@ def index():
                         hideSpinner('note-spinner');
                         if (data.success) {
                             showFlashMessage('success', data.message);
-                            updateNotesList(data.notes); // Aktualizuj listę notatek
-                            noteInput.value = ''; // Wyczyść pole input
+                            updateNotesList(data.notes);
+                            noteInput.value = '';
                         } else {
                             showFlashMessage('error', data.message);
                         }
@@ -3389,32 +3360,22 @@ def index():
                     });
                 });
 
-                // === Zmiany w załącznikach (START) ===
-                // Obsługa załączników: klik, drag & drop, brak duplikatów, limit 5 załączników.
-
                 const attachmentsInput = document.getElementById('attachments');
                 const dropzone = document.getElementById('dropzone');
                 const attachmentsPreview = document.getElementById('attachments-preview');
                 const attachmentsCount = document.getElementById('attachments-count');
-                // Pobierz wartość max_attachments z kontekstu
                 const maxAttachments = {{ max_attachments }};
-                
-                // Tablica, w której przechowujemy wybrane pliki
                 window.selectedFiles = [];
 
-                // Kliknięcie w dropzone -> klik na ukrytym <input type="file">
                 dropzone.addEventListener('click', () => {
                     attachmentsInput.click();
                 });
 
-                // Zmiana w input[type="file"]
                 attachmentsInput.addEventListener('change', (e) => {
                     handleFiles(e.target.files);
-                    // Wyzeruj input, żeby można było dodać ten sam plik, jeśli został usunięty
                     e.target.value = '';
                 });
 
-                // Funkcja zapobiegająca domyślnemu zachowaniu dla drag & drop
                 function preventDefaults(e) {
                     e.preventDefault();
                     e.stopPropagation();
@@ -3425,7 +3386,6 @@ def index():
                     document.body.addEventListener(eventName, preventDefaults, false);
                 });
 
-                // Podświetlanie dropzone w trakcie przeciągania
                 ['dragenter', 'dragover'].forEach(eventName => {
                     dropzone.addEventListener(eventName, () => dropzone.classList.add('dragover'), false);
                 });
@@ -3433,7 +3393,6 @@ def index():
                     dropzone.addEventListener(eventName, () => dropzone.classList.remove('dragover'), false);
                 });
 
-                // Obsługa upuszczenia plików
                 dropzone.addEventListener('drop', (e) => {
                     handleFiles(e.dataTransfer.files);
                 });
@@ -3444,7 +3403,6 @@ def index():
                             alert("Możesz dodać maksymalnie " + maxAttachments + " załączników.");
                             break;
                         }
-                        // Sprawdzamy duplikaty (porównujemy name, size, lastModified)
                         const isDuplicate = selectedFiles.some(f =>
                             f.name === file.name &&
                             f.size === file.size &&
@@ -3479,10 +3437,8 @@ def index():
                     });
                     attachmentsCount.textContent = `Załączników: ${selectedFiles.length}/${maxAttachments}`;
                 }
-                // === Zmiany w załącznikach (KONIEC) ===
             });
 
-            // Funkcje do obsługi edycji notatek
             function openEditModal(noteId, currentContent) {
                 const modal = document.getElementById('editModal');
                 const editForm = document.getElementById('edit-note-form');
@@ -3555,7 +3511,6 @@ def index():
                 });
             }
 
-            // Obsługa submit form do edytowania notatki
             document.addEventListener('submit', function(event) {
                 if (event.target && event.target.id === 'edit-note-form') {
                     event.preventDefault();
@@ -3572,7 +3527,6 @@ def index():
                 }
             });
 
-            // Obsługa submit form do usuwania notatek
             document.addEventListener('submit', function(event) {
                 if (event.target && event.target.classList.contains('delete-note-form')) {
                     event.preventDefault();
@@ -3609,7 +3563,6 @@ def index():
                 }
             });
 
-            // Obsługa submit form do usuwania wszystkich notatek
             document.addEventListener('submit', function(event) {
                 if (event.target && event.target.id === 'delete-all-notes-form') {
                     event.preventDefault();
@@ -3645,21 +3598,17 @@ def index():
                 }
             });
 
-            // Funkcje do zarządzania przyciskami "Zaznacz Wszystkie"
             function updateSelectAllButtons() {
-                // Aktualizacja przycisków "Zaznacz Wszystkie" dla segmentów
                 var selectAllSegmentsBtn = document.getElementById('select-all-segments-btn');
                 var segmentCheckboxes = document.querySelectorAll('.segment-item input[type="checkbox"]');
                 var allSegmentsChecked = Array.from(segmentCheckboxes).every(cb => cb.checked);
                 selectAllSegmentsBtn.textContent = allSegmentsChecked ? 'Odznacz wszystkie segmenty' : 'Zaznacz wszystkie segmenty';
 
-                // Aktualizacja przycisków "Zaznacz Wszystkie" dla możliwości
                 var selectAllPossibilitiesBtn = document.getElementById('select-all-possibilities-btn');
                 var possibilityCheckboxes = document.querySelectorAll('.possibility-item input[type="checkbox"]');
                 var allPossibilitiesChecked = Array.from(possibilityCheckboxes).every(cb => cb.checked);
                 selectAllPossibilitiesBtn.textContent = allPossibilitiesChecked ? 'Odznacz wszystkie możliwości' : 'Zaznacz wszystkie możliwości';
 
-                // Aktualizacja przycisków "Zaznacz Wszystkich" dla potencjalnych klientów
                 var selectAllPotentialClientsBtn = document.querySelector('.select-deselect-potential-clients-btn');
                 var groupCheckboxes = document.querySelectorAll('.potential-client-group input[type="checkbox"]');
                 var clientCheckboxes = document.querySelectorAll('.potential-clients-list .client-item input[type="checkbox"]');
@@ -3668,7 +3617,6 @@ def index():
             }
 
             function updateEmailToggleButtons() {
-                // Aktualizacja przycisków togglingu e-maili w segmentach
                 var emailLists = document.querySelectorAll('.email-list');
                 emailLists.forEach(function(emailList) {
                     var toggleBtn = emailList.querySelector('.select-deselect-emails-btn');
@@ -3679,7 +3627,6 @@ def index():
             }
 
             function updateCompanyToggleButtons() {
-                // Aktualizacja przycisków togglingu firm w możliwościach
                 var companyLists = document.querySelectorAll('.company-list');
                 companyLists.forEach(function(companyList) {
                     var toggleBtn = companyList.querySelector('.select-deselect-companies-btn');
@@ -3689,7 +3636,6 @@ def index():
                 });
             }
 
-            // Funkcja do toggle panelu bocznego
             function toggleSidebar(button) {
                 var sidebar = document.querySelector('.sidebar');
                 sidebar.classList.toggle('active');
@@ -3697,7 +3643,6 @@ def index():
                 mainContent.classList.toggle('sidebar-active');
             }
 
-            // Funkcje do togglowania list e-maili, firm i klientów
             function toggleEmailsList(segmentIndex) {
                 var emailList = document.getElementById(`emails-${segmentIndex}`);
                 if (emailList) {
@@ -3719,16 +3664,13 @@ def index():
                 }
             }
 
-            // Funkcja walidująca zaznaczenia rodzic-dziecko
             function validateParentChildSelection() {
-                // Sprawdzanie segmentów
                 const segmentCheckboxes = document.querySelectorAll('.segment-item input[type="checkbox"]');
                 for (const segment of segmentCheckboxes) {
                     const segmentIndex = segment.id.split('-')[1];
                     const emailList = document.getElementById(`emails-${segmentIndex}`);
                     if (emailList) {
                         const childEmails = emailList.querySelectorAll('input[type="checkbox"]:checked');
-                        // Jeśli są zaznaczone maile, a segment nie jest zaznaczony – błąd
                         if (childEmails.length > 0 && !segment.checked) {
                             showFlashMessage('error', 'Zaznacz etykiety (segmenty)!');
                             return false;
@@ -3736,14 +3678,12 @@ def index():
                     }
                 }
 
-                // Sprawdzanie możliwości
                 const possibilityCheckboxes = document.querySelectorAll('.possibility-item input[type="checkbox"]');
                 for (const possibility of possibilityCheckboxes) {
                     const possibilityIndex = possibility.id.split('-')[1];
                     const companyList = document.getElementById(`companies-${possibilityIndex}`);
                     if (companyList) {
                         const childCompanies = companyList.querySelectorAll('input[type="checkbox"]:checked');
-                        // Jeśli są zaznaczone firmy, a możliwość nie jest zaznaczona – błąd
                         if (childCompanies.length > 0 && !possibility.checked) {
                             showFlashMessage('error', 'Zaznacz etykiety (możliwości)!');
                             return false;
@@ -3751,14 +3691,12 @@ def index():
                     }
                 }
 
-                // Sprawdzanie potencjalnych klientów
                 const groupCheckboxes = document.querySelectorAll('.potential-client-group input[type="checkbox"]');
                 for (const group of groupCheckboxes) {
                     const groupIndex = group.id.split('-')[2];
                     const clientsList = document.getElementById(`clients-${groupIndex}`);
                     if (clientsList) {
                         const childClients = clientsList.querySelectorAll('input[type="checkbox"]:checked');
-                        // Jeśli są zaznaczeni klienci, a grupa nie jest zaznaczona – błąd
                         if (childClients.length > 0 && !group.checked) {
                             showFlashMessage('error', 'Zaznacz etykiety (potencjalni klienci)!');
                             return false;
@@ -3769,26 +3707,21 @@ def index():
                 return true;
             }
 
-            // Funkcja do obsługi kliknięć na imię i nazwisko użytkownika w notatkach
             function attachUserNameClickListeners() {
                 document.querySelectorAll('.user-name').forEach(function(userNameSpan) {
                     userNameSpan.style.cursor = 'pointer';
                     userNameSpan.addEventListener('click', function() {
                         const userName = this.textContent.trim();
                         const userEmail = this.getAttribute('data-email');
-
-                        // Sprawdzenie, czy użytkownik jest już dodany
                         const alreadySelected = Array.from(document.querySelectorAll('#selected-users .selected-item'))
                             .some(item => item.getAttribute('data-email') === userEmail);
 
                         if (!alreadySelected) {
-                            // Tworzenie elementu tagu użytkownika
                             const userSpan = document.createElement('span');
                             userSpan.className = 'selected-item';
                             userSpan.setAttribute('data-email', userEmail);
                             userSpan.textContent = userName;
 
-                            // Dodanie przycisku usuwania
                             const removeBtn = document.createElement('span');
                             removeBtn.className = 'remove-item';
                             removeBtn.textContent = '×';
@@ -3797,14 +3730,12 @@ def index():
                             });
                             userSpan.appendChild(removeBtn);
 
-                            // Dodanie ukrytego inputa do formularza
                             const hiddenInput = document.createElement('input');
                             hiddenInput.type = 'hidden';
                             hiddenInput.name = 'selected_users';
                             hiddenInput.value = userEmail;
                             userSpan.appendChild(hiddenInput);
 
-                            // Dodanie tagu do kontenera
                             document.getElementById('selected-users').appendChild(userSpan);
                         }
                     });
@@ -3852,13 +3783,10 @@ def index():
                     <div id="segments-container" class="segments-container">
                         <!-- Przycisk Zaznacz/Odznacz Wszystkie Segmenty -->
                         <button type="button" id="select-all-segments-btn" class="yellow-btn" onclick="toggleSelectAllSegments(this)">Zaznacz wszystkie segmenty</button>
-
-                        <!-- Przycisk Rozwiń/Zwiń Wszystkie Segmenty -->
                         <button type="button" class="yellow-btn" onclick="toggleAllSegmentsExpandCollapse(this)">Rozwiń wszystkie segmenty</button>
 
-                        <!-- Lista segmentów i adresów e-mail -->
                         <ul class="segment-list">
-                            {% for segment, counts in segments.items() %}
+                            {% for segment, counts in segments %}
                                 {% set segment_index = loop.index %}
                                 <li class="segment-item">
                                     <input type="checkbox" name="segments" value="{{ segment }}" id="segment-{{ segment_index }}" onchange="handleSegmentChange(this)">
@@ -3867,7 +3795,6 @@ def index():
                                     </span>
                                 </li>
                                 <ul class="email-list" id="emails-{{ segment_index }}">
-                                    <!-- Przycisk Zaznacz/Odznacz Wszystkie Adresy w Tym Segmencie -->
                                     <button type="button" class="yellow-btn select-deselect-emails-btn" onclick="toggleSelectAllEmailsInSegment('emails-{{ segment_index }}')">Zaznacz Wszystkie</button>
                                     
                                     {% set emails_companies_polski = get_email_company_pairs_for_segment(data, segment, "Polski") %}
@@ -3891,20 +3818,11 @@ def index():
 
                     <!-- Kontener możliwości -->
                     <div id="possibilities-container" class="possibilities-container">
-                        <!-- Przycisk Zaznacz/Odznacz Wszystkie Możliwości -->
                         <button type="button" id="select-all-possibilities-btn" class="yellow-btn" onclick="toggleSelectAllPossibilities(this)">Zaznacz wszystkie możliwości</button>
-
-                        <!-- Przycisk Rozwiń/Zwiń Wszystkie Możliwości -->
                         <button type="button" class="yellow-btn" onclick="toggleAllPossibilitiesExpandCollapse(this)">Rozwiń wszystkie możliwości</button>
 
-                        <!-- Lista możliwości i firm -->
                         <ul class="possibility-list">
-                            {# 
-                               ZAMIANA: zamiast  {% for possibility, companies in possibilities.items() %} 
-                               używamy  {% for possibility, details in possibilities.items() %} 
-                               bo w 'details' mamy m.in. 'Polski', 'Zagraniczny' i 'entries' 
-                            #}
-                            {% for possibility, details in possibilities.items() %}
+                            {% for possibility, details in possibilities %}
                                 {% set possibility_index = loop.index %}
                                 <li class="possibility-item">
                                     <input type="checkbox" name="possibilities" value="{{ possibility }}" id="possibility-{{ possibility_index }}" onchange="handlePossibilityChange(this)">
@@ -3916,10 +3834,8 @@ def index():
                                     </span>
                                 </li>
                                 <ul class="company-list" id="companies-{{ possibility_index }}">
-                                    <!-- Przycisk Zaznacz/Odznacz Wszystkie Firmy w Tej Możliwości -->
                                     <button type="button" class="yellow-btn select-deselect-companies-btn" onclick="toggleSelectAllCompaniesInPossibility('companies-{{ possibility_index }}')">Zaznacz Wszystkie</button>
                     
-                                    {# 'entries' to lista firm wewnątrz danej możliwości #}
                                     {% for entry in details['entries'] %}
                                         <li class="company-item">
                                             <input type="checkbox" name="include_emails" value="{{ entry.email }}" id="company-{{ possibility_index }}-{{ loop.index }}">
@@ -3933,13 +3849,9 @@ def index():
                     
                     <!-- Kontener potencjalnych klientów -->
                     <div id="potential-clients-container" class="potential-clients-container">
-                        <!-- Przycisk Zaznacz/Odznacz Wszystkich Potencjalnych Klientów -->
                         <button type="button" class="yellow-btn select-deselect-potential-clients-btn" onclick="toggleSelectAllPotentialClients(this)">Zaznacz wszystkich klientów</button>
-                        
-                        <!-- Przycisk Rozwiń/Zwiń Wszystkich Potencjalnych Klientów -->
                         <button type="button" class="yellow-btn" onclick="toggleAllPotentialClientsExpandCollapse(this)">Rozwiń wszystkich potencjalnych klientów</button>
 
-                        <!-- Lista potencjalnych klientów -->
                         <ul class="potential-clients-list">
                             {% for group, clients in potential_clients.items() %}
                                 {% set group_index = loop.index %}
@@ -4067,9 +3979,11 @@ def index():
     return render_template_string(
         index_template,
         user=user,
-        segments=segments,
+        # zamiast segments=segments_dict.items(), przekazujemy posortowaną listę
+        segments=sorted_segments,
         notes=notes,
-        possibilities=possibilities,
+        # zamiast possibilities=possibilities_dict.items(), przekazujemy posortowaną listę
+        possibilities=sorted_possibilities,
         potential_clients=potential_clients,
         get_email_company_pairs_for_segment=get_email_company_pairs_for_segment,
         data=data,

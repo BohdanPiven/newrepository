@@ -2390,7 +2390,6 @@ def index():
                 user-select: none;
                 color: #ffffff;
             }
-            /* Uniemożliwienie kliknięcia na etykietę zaznaczania checkboxa */
             .segment-label,
             .possibility-label,
             .potential-client-group-label {
@@ -2421,7 +2420,6 @@ def index():
                 font-size: 14px;
                 user-select: none;
             }
-            /* Zwinięte listy domyślnie */
             .clients-list,
             .email-list,
             .company-list {
@@ -2692,7 +2690,7 @@ def index():
         <script>
             // Funkcje wspólne
             function showFlashMessage(category, message) {
-                const flashMessage = document.querySelector(`.flash-message.${category}`);
+                const flashMessage = document.querySelector('.flash-message.' + category);
                 if (flashMessage) {
                     flashMessage.textContent = message;
                     flashMessage.classList.add('show');
@@ -2963,12 +2961,10 @@ def index():
                 var clientCheckboxes = document.querySelectorAll('.potential-clients-list .client-item input[type="checkbox"]');
                 var allChecked = Array.from(groupCheckboxes).every(cb => cb.checked) && Array.from(clientCheckboxes).every(cb => cb.checked);
 
-                // Zaznacz lub odznacz wszystkie group checkboxes
                 groupCheckboxes.forEach(function(groupCheckbox) {
                     groupCheckbox.checked = !allChecked;
                 });
 
-                // Zaznacz lub odznacz wszystkie client checkboxes
                 clientCheckboxes.forEach(function(clientCheckbox) {
                     clientCheckbox.checked = !allChecked;
                 });
@@ -3025,7 +3021,6 @@ def index():
                     }
                 });
 
-                // Zmiana etykiety przycisku w zależności od stanu
                 button.textContent = allExpanded ? 'Rozwiń wszystkie segmenty' : 'Zwiń wszystkie segmenty';
             }
 
@@ -3140,25 +3135,40 @@ def index():
 
                             // Walidacja zaznaczeń segmentów, możliwości i potencjalnych klientów
                             if (!validateParentChildSelection()) {
-                                // Jeśli walidacja nie przeszła, to wyświetlamy komunikat (już wyświetlony w funkcji) i nie wysyłamy
+                                // Jeśli walidacja nie przeszła, to komunikat już wyświetlony w funkcji
                                 return;
                             }
 
                             showSpinner('spinner');
-                            const formData = new FormData(form);
+                            const formData = new FormData();
 
-                            // Pobieranie zaznaczonych adresów e-mail
+                            // --- Przygotowujemy wszystkie dane z formularza, ale RĘCZNIE (żeby mieć pełną kontrolę nad załącznikami) ---
+                            // 1) Wyciągamy wszystkie zwykłe pola z formularza
+                            const otherFields = new FormData(form);
+                            for (let [name, value] of otherFields.entries()) {
+                                if (name !== 'attachments') {
+                                    formData.append(name, value);
+                                }
+                            }
+
+                            // 2) Doklejamy załączniki z naszej tablicy attachmentsArray (patrz kod poniżej)
+                            attachmentsArray.forEach(file => {
+                                formData.append('attachments', file);
+                            });
+
+                            // 3) Pobieramy zaznaczone adresy e-mail
                             const emailCheckboxes = document.querySelectorAll('input[name="include_emails"]:checked, input[name="include_potential_emails"]:checked');
                             const emails = Array.from(emailCheckboxes).map(cb => cb.value);
 
-                            // Pobieranie wybranych użytkowników
+                            // 4) Pobieramy wybranych użytkowników
                             const selectedUserEmails = Array.from(document.querySelectorAll('input[name="selected_users"]'))
                                 .map(input => input.value);
-                            
-                            // Łączenie wszystkich odbiorców
+
+                            // 5) Łączymy wszystkich odbiorców
                             const allRecipients = emails.concat(selectedUserEmails);
                             formData.set('recipients', allRecipients.join(','));
 
+                            // Wysyłka AJAX
                             fetch('{{ url_for("send_message_ajax") }}', {
                                 method: 'POST',
                                 body: formData,
@@ -3170,8 +3180,9 @@ def index():
                                 if (data.success) {
                                     showFlashMessage('success', data.message);
                                     form.reset();
-                                    document.getElementById('attachments-preview').innerHTML = '';
-                                    document.getElementById('attachments-count').textContent = `Załączników: 0/{{ max_attachments }}`;
+                                    // Oczyszczamy naszą tablicę załączników i podgląd
+                                    attachmentsArray = [];
+                                    renderAttachmentsPreview();
                                     editor.setData('');
                                     updateSelectedItems();
                                 } else {
@@ -3216,7 +3227,7 @@ def index():
                     });
                 });
 
-                // Obsługa otwierania edycji notatek
+                // Obsługa otwierania edycji notatek (edycja)
                 document.addEventListener('click', function(event) {
                     if (event.target && event.target.classList.contains('edit-btn')) {
                         const noteId = event.target.getAttribute('data-note-id');
@@ -3236,16 +3247,7 @@ def index():
                     }
                 });
 
-                // Obsługa otwierania edycji notatki
-                document.querySelectorAll('.edit-btn').forEach(function(button) {
-                    button.addEventListener('click', function() {
-                        const noteId = this.getAttribute('data-note-id');
-                        const noteContent = this.getAttribute('data-note-content');
-                        openEditModal(noteId, noteContent);
-                    });
-                });
-
-                // Obsługa kliknięć na imię i nazwisko użytkownika w notatkach
+                // Obsługa kliknięć na imię i nazwisko użytkownika w notatkach (dodawanie do wybranych)
                 document.querySelector('.note-section').addEventListener('click', function(event) {
                     if (event.target && event.target.classList.contains('user-name')) {
                         const userName = event.target.textContent.trim();
@@ -3287,7 +3289,7 @@ def index():
                 // Obsługa submit dla formularza dodawania notatki
                 const addNoteForm = document.getElementById('add-note-form');
                 addNoteForm.addEventListener('submit', function(event) {
-                    event.preventDefault(); // Zapobiega tradycyjnemu wysłaniu formularza
+                    event.preventDefault();
 
                     const noteInput = this.querySelector('input[name="note"]');
                     const noteContent = noteInput.value.trim();
@@ -3297,25 +3299,23 @@ def index():
                         return;
                     }
 
-                    // Pokaż spinner
                     showSpinner('note-spinner');
 
-                    // Wyślij AJAX POST request
-                    fetch('{{ url_for("add_note_ajax") }}', { // Upewnij się, że używasz url_for dla odpowiedniej ścieżki
+                    fetch('{{ url_for("add_note_ajax") }}', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({ note: noteContent }),
-                        credentials: 'same-origin' // Umożliwia wysyłanie cookies, jeśli są potrzebne
+                        credentials: 'same-origin'
                     })
                     .then(response => response.json())
                     .then(data => {
                         hideSpinner('note-spinner');
                         if (data.success) {
                             showFlashMessage('success', data.message);
-                            updateNotesList(data.notes); // Aktualizuj listę notatek
-                            noteInput.value = ''; // Wyczyść pole input
+                            updateNotesList(data.notes);
+                            noteInput.value = '';
                         } else {
                             showFlashMessage('error', data.message);
                         }
@@ -3326,12 +3326,8 @@ def index():
                         showFlashMessage('error', 'Wystąpił błąd podczas dodawania notatki.');
                     });
                 });
-
-                // Obsługa otwierania edycji notatki
-                // (dublowanie z wcześniejszego event listener jest usunięte)
             });
 
-            // Funkcje do obsługi edycji notatek
             function openEditModal(noteId, currentContent) {
                 const modal = document.getElementById('editModal');
                 const editForm = document.getElementById('edit-note-form');
@@ -3360,7 +3356,7 @@ def index():
             }
 
             function editNote(noteId, newContent) {
-                showSpinner(`edit-spinner`);
+                showSpinner('edit-spinner');
 
                 fetch('{{ url_for("edit_note_ajax") }}', {
                     method: 'POST',
@@ -3375,19 +3371,19 @@ def index():
                 })
                 .then(response => response.json())
                 .then(data => {
-                    hideSpinner(`edit-spinner`);
+                    hideSpinner('edit-spinner');
 
                     if (data.success) {
                         showFlashMessage('success', data.message);
-                        const noteSpan = document.querySelector(`.note[data-note-id="${noteId}"] .note-content`);
+                        const noteSpan = document.querySelector('.note[data-note-id="' + noteId + '"] .note-content');
                         if (noteSpan) {
                             noteSpan.textContent = data.note.content;
                         }
-                        const editBtn = document.querySelector(`.note[data-note-id="${noteId}"] .edit-btn`);
+                        const editBtn = document.querySelector('.note[data-note-id="' + noteId + '"] .edit-btn');
                         if (editBtn) {
                             editBtn.setAttribute('data-note-content', data.note.content);
                         }
-                        const transferBtn = document.querySelector(`.note[data-note-id="${noteId}"] .transfer-note-btn`);
+                        const transferBtn = document.querySelector('.note[data-note-id="' + noteId + '"] .transfer-note-btn');
                         if (transferBtn) {
                             transferBtn.setAttribute('data-note-content', data.note.content);
                         }
@@ -3399,19 +3395,17 @@ def index():
                 })
                 .catch(error => {
                     console.error('Błąd podczas edytowania notatki:', error);
-                    hideSpinner(`edit-spinner`);
+                    hideSpinner('edit-spinner');
                     showFlashMessage('error', 'Wystąpił błąd podczas edytowania notatki.');
                 });
             }
 
-            // Obsługa submit form do edytowania notatki
             document.addEventListener('submit', function(event) {
                 if (event.target && event.target.id === 'edit-note-form') {
                     event.preventDefault();
                     const form = event.target;
                     const noteId = form.getAttribute('data-note-id');
                     const newContent = document.getElementById('edit-note-input').value.trim();
-                    const spinnerId = `edit-spinner`;
 
                     if (newContent === '') {
                         showFlashMessage('error', 'Nowa treść notatki nie może być pusta.');
@@ -3422,12 +3416,12 @@ def index():
                 }
             });
 
-            // Obsługa submit form do usuwania notatek
+            // Usuwanie notatek
             document.addEventListener('submit', function(event) {
                 if (event.target && event.target.classList.contains('delete-note-form')) {
                     event.preventDefault();
                     const noteId = event.target.getAttribute('data-note-id');
-                    const spinnerId = `note-spinner-${noteId}`;
+                    const spinnerId = 'note-spinner-' + noteId;
 
                     showSpinner(spinnerId);
 
@@ -3459,7 +3453,7 @@ def index():
                 }
             });
 
-            // Obsługa submit form do usuwania wszystkich notatek
+            // Usuwanie wszystkich notatek
             document.addEventListener('submit', function(event) {
                 if (event.target && event.target.id === 'delete-all-notes-form') {
                     event.preventDefault();
@@ -3495,21 +3489,18 @@ def index():
                 }
             });
 
-            // Funkcje do zarządzania przyciskami "Zaznacz Wszystkie"
+            // Funkcje pomocnicze
             function updateSelectAllButtons() {
-                // Aktualizacja przycisków "Zaznacz Wszystkie" dla segmentów
                 var selectAllSegmentsBtn = document.getElementById('select-all-segments-btn');
                 var segmentCheckboxes = document.querySelectorAll('.segment-item input[type="checkbox"]');
                 var allSegmentsChecked = Array.from(segmentCheckboxes).every(cb => cb.checked);
                 selectAllSegmentsBtn.textContent = allSegmentsChecked ? 'Odznacz wszystkie segmenty' : 'Zaznacz wszystkie segmenty';
 
-                // Aktualizacja przycisków "Zaznacz Wszystkie" dla możliwości
                 var selectAllPossibilitiesBtn = document.getElementById('select-all-possibilities-btn');
                 var possibilityCheckboxes = document.querySelectorAll('.possibility-item input[type="checkbox"]');
                 var allPossibilitiesChecked = Array.from(possibilityCheckboxes).every(cb => cb.checked);
                 selectAllPossibilitiesBtn.textContent = allPossibilitiesChecked ? 'Odznacz wszystkie możliwości' : 'Zaznacz wszystkie możliwości';
 
-                // Aktualizacja przycisków "Zaznacz Wszystkich" dla potencjalnych klientów
                 var selectAllPotentialClientsBtn = document.querySelector('.select-deselect-potential-clients-btn');
                 var groupCheckboxes = document.querySelectorAll('.potential-client-group input[type="checkbox"]');
                 var clientCheckboxes = document.querySelectorAll('.potential-clients-list .client-item input[type="checkbox"]');
@@ -3518,7 +3509,6 @@ def index():
             }
 
             function updateEmailToggleButtons() {
-                // Aktualizacja przycisków togglingu e-maili w segmentach
                 var emailLists = document.querySelectorAll('.email-list');
                 emailLists.forEach(function(emailList) {
                     var toggleBtn = emailList.querySelector('.select-deselect-emails-btn');
@@ -3529,7 +3519,6 @@ def index():
             }
 
             function updateCompanyToggleButtons() {
-                // Aktualizacja przycisków togglingu firm w możliwościach
                 var companyLists = document.querySelectorAll('.company-list');
                 companyLists.forEach(function(companyList) {
                     var toggleBtn = companyList.querySelector('.select-deselect-companies-btn');
@@ -3539,7 +3528,6 @@ def index():
                 });
             }
 
-            // Funkcja do toggle panelu bocznego
             function toggleSidebar(button) {
                 var sidebar = document.querySelector('.sidebar');
                 sidebar.classList.toggle('active');
@@ -3547,79 +3535,70 @@ def index():
                 mainContent.classList.toggle('sidebar-active');
             }
 
-            // Funkcje do togglowania list e-maili, firm i klientów
             function toggleEmailsList(segmentIndex) {
-                var emailList = document.getElementById(`emails-${segmentIndex}`);
+                var emailList = document.getElementById('emails-' + segmentIndex);
                 if (emailList) {
                     emailList.classList.toggle('show');
                 }
             }
 
             function toggleCompanyList(possibilityIndex) {
-                var companyList = document.getElementById(`companies-${possibilityIndex}`);
+                var companyList = document.getElementById('companies-' + possibilityIndex);
                 if (companyList) {
                     companyList.classList.toggle('show');
                 }
             }
 
             function toggleClientsList(groupIndex) {
-                var clientsList = document.getElementById(`clients-${groupIndex}`);
+                var clientsList = document.getElementById('clients-' + groupIndex);
                 if (clientsList) {
                     clientsList.classList.toggle('show');
                 }
             }
 
-            // Funkcja walidująca zaznaczenia rodzic-dziecko
             function validateParentChildSelection() {
-                // Sprawdzanie segmentów
+                // Segmenty
                 const segmentCheckboxes = document.querySelectorAll('.segment-item input[type="checkbox"]');
                 for (const segment of segmentCheckboxes) {
                     const segmentIndex = segment.id.split('-')[1];
                     const emailList = document.getElementById(`emails-${segmentIndex}`);
                     if (emailList) {
                         const childEmails = emailList.querySelectorAll('input[type="checkbox"]:checked');
-                        // Jeśli są zaznaczone maile, a segment nie jest zaznaczony – błąd
                         if (childEmails.length > 0 && !segment.checked) {
                             showFlashMessage('error', 'Zaznacz etykiety (segmenty)!');
                             return false;
                         }
                     }
                 }
-
-                // Sprawdzanie możliwości
+                // Możliwości
                 const possibilityCheckboxes = document.querySelectorAll('.possibility-item input[type="checkbox"]');
                 for (const possibility of possibilityCheckboxes) {
                     const possibilityIndex = possibility.id.split('-')[1];
                     const companyList = document.getElementById(`companies-${possibilityIndex}`);
                     if (companyList) {
                         const childCompanies = companyList.querySelectorAll('input[type="checkbox"]:checked');
-                        // Jeśli są zaznaczone firmy, a możliwość nie jest zaznaczona – błąd
                         if (childCompanies.length > 0 && !possibility.checked) {
                             showFlashMessage('error', 'Zaznacz etykiety (możliwości)!');
                             return false;
                         }
                     }
                 }
-
-                // Sprawdzanie potencjalnych klientów
+                // Potencjalni klienci
                 const groupCheckboxes = document.querySelectorAll('.potential-client-group input[type="checkbox"]');
                 for (const group of groupCheckboxes) {
                     const groupIndex = group.id.split('-')[2];
                     const clientsList = document.getElementById(`clients-${groupIndex}`);
                     if (clientsList) {
                         const childClients = clientsList.querySelectorAll('input[type="checkbox"]:checked');
-                        // Jeśli są zaznaczeni klienci, a grupa nie jest zaznaczona – błąd
                         if (childClients.length > 0 && !group.checked) {
                             showFlashMessage('error', 'Zaznacz etykiety (potencjalni klienci)!');
                             return false;
                         }
                     }
                 }
-
                 return true;
             }
 
-            // Funkcja do obsługi kliknięć na imię i nazwisko użytkownika w notatkach
             function attachUserNameClickListeners() {
                 document.querySelectorAll('.user-name').forEach(function(userNameSpan) {
                     userNameSpan.style.cursor = 'pointer';
@@ -3627,18 +3606,15 @@ def index():
                         const userName = this.textContent.trim();
                         const userEmail = this.getAttribute('data-email');
 
-                        // Sprawdzenie, czy użytkownik jest już dodany
                         const alreadySelected = Array.from(document.querySelectorAll('#selected-users .selected-item'))
                             .some(item => item.getAttribute('data-email') === userEmail);
 
                         if (!alreadySelected) {
-                            // Tworzenie elementu tagu użytkownika
                             const userSpan = document.createElement('span');
                             userSpan.className = 'selected-item';
                             userSpan.setAttribute('data-email', userEmail);
                             userSpan.textContent = userName;
 
-                            // Dodanie przycisku usuwania
                             const removeBtn = document.createElement('span');
                             removeBtn.className = 'remove-item';
                             removeBtn.textContent = '×';
@@ -3647,19 +3623,100 @@ def index():
                             });
                             userSpan.appendChild(removeBtn);
 
-                            // Dodanie ukrytego inputa do formularza
                             const hiddenInput = document.createElement('input');
                             hiddenInput.type = 'hidden';
                             hiddenInput.name = 'selected_users';
                             hiddenInput.value = userEmail;
                             userSpan.appendChild(hiddenInput);
 
-                            // Dodanie tagu do kontenera
                             document.getElementById('selected-users').appendChild(userSpan);
                         }
                     });
                 });
             }
+
+            // ---------------------------------------------------------------------------------------
+            // -------------------------- ZMIANY DLA ZAŁĄCZNIKÓW PONIŻEJ -----------------------------
+            // ---------------------------------------------------------------------------------------
+
+            // Globalna tablica przechowująca WYBRANE pliki
+            let attachmentsArray = [];
+            const maxAttachments = {{ max_attachments }};  // Pobiera np. 5 z app.config['MAX_ATTACHMENTS']
+
+            // Elementy HTML związane z załącznikami
+            const attachmentsInput = document.getElementById('attachments');
+            const dropzone = document.getElementById('dropzone');
+            const attachmentsPreview = document.getElementById('attachments-preview');
+            const attachmentsCount = document.getElementById('attachments-count');
+
+            // Funkcja dodająca nowe pliki do attachmentsArray
+            function handleFilesSelected(files) {
+                for (let file of files) {
+                    // Sprawdź czy już nie istnieje w tablicy (po nazwie i rozmiarze)
+                    const exists = attachmentsArray.some(att => att.name === file.name && att.size === file.size);
+                    if (!exists) {
+                        if (attachmentsArray.length < maxAttachments) {
+                            attachmentsArray.push(file);
+                        } else {
+                            showFlashMessage('error', 'Możesz dodać maksymalnie ' + maxAttachments + ' załączników.');
+                        }
+                    }
+                }
+                renderAttachmentsPreview();
+            }
+
+            // Wyświetlanie podglądu aktualnych załączników
+            function renderAttachmentsPreview() {
+                attachmentsPreview.innerHTML = '';
+                attachmentsCount.textContent = 'Załączników: ' + attachmentsArray.length + '/' + maxAttachments;
+
+                attachmentsArray.forEach((file, index) => {
+                    const item = document.createElement('div');
+                    item.classList.add('attachment-item');
+
+                    const fileNameSpan = document.createElement('span');
+                    fileNameSpan.textContent = file.name;
+                    item.appendChild(fileNameSpan);
+
+                    // Przycisk do usuwania z podglądu
+                    const removeBtn = document.createElement('button');
+                    removeBtn.innerHTML = '&times;';
+                    removeBtn.addEventListener('click', () => {
+                        attachmentsArray.splice(index, 1);
+                        renderAttachmentsPreview();
+                    });
+                    item.appendChild(removeBtn);
+
+                    attachmentsPreview.appendChild(item);
+                });
+            }
+
+            // Gdy user zmienia pliki przez <input>
+            attachmentsInput.addEventListener('change', function() {
+                handleFilesSelected(this.files);
+                // Wyczyść input, aby można było ponownie dodać np. ten sam plik, jeśli wcześniej go usuniemy
+                attachmentsInput.value = '';
+            });
+
+            // Obsługa kliknięcia w dropzone -> klikamy input[type="file"]
+            dropzone.addEventListener('click', function() {
+                attachmentsInput.click();
+            });
+
+            // Drag & drop
+            dropzone.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                dropzone.classList.add('dragover');
+            });
+            dropzone.addEventListener('dragleave', function(e) {
+                dropzone.classList.remove('dragover');
+            });
+            dropzone.addEventListener('drop', function(e) {
+                e.preventDefault();
+                dropzone.classList.remove('dragover');
+                handleFilesSelected(e.dataTransfer.files);
+            });
+            // ---------------------------------------------------------------------------------------
         </script>
     </head>
     <body>
@@ -3684,16 +3741,12 @@ def index():
                 <!-- Panel boczny -->
                 <div class="sidebar">
                     <div class="toggle-buttons-container">
-                        <!-- Przyciski toggle -->
                         <button type="button" class="toggle-segments-btn" onclick="toggleSegmentsList(this)">
                             <img src="{{ url_for('static', filename='hammer.png') }}" alt="Toggle Segments">
                         </button>
-
                         <button type="button" class="toggle-possibilities-btn" onclick="togglePossibilitiesList(this)">
                             <img src="{{ url_for('static', filename='greek_key.png') }}" alt="Toggle Possibilities">
                         </button>
-                        
-                        <!-- Zmiana obrazka na 'money.png' i zmiana etykiety -->
                         <button type="button" class="toggle-potential-clients-btn" onclick="togglePotentialClientsList(this)">
                             <img src="{{ url_for('static', filename='money.png') }}" alt="Toggle Potential Clients">
                         </button>
@@ -3701,13 +3754,8 @@ def index():
 
                     <!-- Kontener segmentów -->
                     <div id="segments-container" class="segments-container">
-                        <!-- Przycisk Zaznacz/Odznacz Wszystkie Segmenty -->
                         <button type="button" id="select-all-segments-btn" class="yellow-btn" onclick="toggleSelectAllSegments(this)">Zaznacz wszystkie segmenty</button>
-
-                        <!-- Przycisk Rozwiń/Zwiń Wszystkie Segmenty -->
                         <button type="button" class="yellow-btn" onclick="toggleAllSegmentsExpandCollapse(this)">Rozwiń wszystkie segmenty</button>
-
-                        <!-- Lista segmentów i adresów e-mail -->
                         <ul class="segment-list">
                             {% for segment, counts in segments.items() %}
                                 {% set segment_index = loop.index %}
@@ -3718,9 +3766,7 @@ def index():
                                     </span>
                                 </li>
                                 <ul class="email-list" id="emails-{{ segment_index }}">
-                                    <!-- Przycisk Zaznacz/Odznacz Wszystkie Adresy w Tym Segmencie -->
                                     <button type="button" class="yellow-btn select-deselect-emails-btn" onclick="toggleSelectAllEmailsInSegment('emails-{{ segment_index }}')">Zaznacz Wszystkie</button>
-                                    
                                     {% set emails_companies_polski = get_email_company_pairs_for_segment(data, segment, "Polski") %}
                                     {% set emails_companies_zagraniczny = get_email_company_pairs_for_segment(data, segment, "Zagraniczny") %}
                                     {% for pair in emails_companies_polski %}
@@ -3742,13 +3788,8 @@ def index():
 
                     <!-- Kontener możliwości -->
                     <div id="possibilities-container" class="possibilities-container">
-                        <!-- Przycisk Zaznacz/Odznacz Wszystkie Możliwości -->
                         <button type="button" id="select-all-possibilities-btn" class="yellow-btn" onclick="toggleSelectAllPossibilities(this)">Zaznacz wszystkie możliwości</button>
-
-                        <!-- Przycisk Rozwiń/Zwiń Wszystkie Możliwości -->
                         <button type="button" class="yellow-btn" onclick="toggleAllPossibilitiesExpandCollapse(this)">Rozwiń wszystkie możliwości</button>
-
-                        <!-- Lista możliwości i firm -->
                         <ul class="possibility-list">
                             {% for possibility, companies in possibilities.items() %}
                                 {% set possibility_index = loop.index %}
@@ -3759,9 +3800,7 @@ def index():
                                     </span>
                                 </li>
                                 <ul class="company-list" id="companies-{{ possibility_index }}">
-                                    <!-- Przycisk Zaznacz/Odznacz Wszystkie Firmy w Tej Możliwości -->
                                     <button type="button" class="yellow-btn select-deselect-companies-btn" onclick="toggleSelectAllCompaniesInPossibility('companies-{{ possibility_index }}')">Zaznacz Wszystkie</button>
-                    
                                     {% for company in companies %}
                                         <li class="company-item">
                                             <input type="checkbox" name="include_emails" value="{{ company.email }}" id="company-{{ possibility_index }}-{{ loop.index }}">
@@ -3772,16 +3811,11 @@ def index():
                             {% endfor %}
                         </ul>
                     </div>
-                    
+
                     <!-- Kontener potencjalnych klientów -->
                     <div id="potential-clients-container" class="potential-clients-container">
-                        <!-- Przycisk Zaznacz/Odznacz Wszystkich Potencjalnych Klientów -->
                         <button type="button" class="yellow-btn select-deselect-potential-clients-btn" onclick="toggleSelectAllPotentialClients(this)">Zaznacz wszystkich klientów</button>
-                        
-                        <!-- Przycisk Rozwiń/Zwiń Wszystkich Potencjalnych Klientów -->
                         <button type="button" class="yellow-btn" onclick="toggleAllPotentialClientsExpandCollapse(this)">Rozwiń wszystkich potencjalnych klientów</button>
-
-                        <!-- Lista potencjalnych klientów -->
                         <ul class="potential-clients-list">
                             {% for group, clients in potential_clients.items() %}
                                 {% set group_index = loop.index %}
@@ -3794,7 +3828,6 @@ def index():
                                 <ul class="clients-list" id="clients-{{ group_index }}">
                                     {% for client in clients %}
                                         <li class="client-item">
-                                            <!-- Wyświetlanie tylko nazwy firmy i języka -->
                                             <input type="checkbox" name="include_potential_emails" value="{{ client.email }}" id="client-{{ group_index }}-{{ loop.index }}">
                                             <label for="client-{{ group_index }}-{{ loop.index }}">{{ client.company }} ({{ client.language }})</label>
                                         </li>

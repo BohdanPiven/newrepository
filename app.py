@@ -1995,6 +1995,7 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if 'user_id' not in session:
@@ -2692,7 +2693,7 @@ def index():
         <script>
             // Funkcje wspólne
             function showFlashMessage(category, message) {
-                const flashMessage = document.querySelector(`.flash-message.${category}`);
+                const flashMessage = document.querySelector('.flash-message.' + category);
                 if (flashMessage) {
                     flashMessage.textContent = message;
                     flashMessage.classList.add('show');
@@ -2881,8 +2882,8 @@ def index():
                             });
                         if (checkbox) {
                             checkbox.checked = false;
-                            // Jeśli wszystkie klienci w grupie są odznaczeni, odznacz również checkbox grupy
-                            const groupIndex = checkbox.id.split('-')[2];
+                            // Jeśli wszyscy klienci w grupie są odznaczeni, odznacz również checkbox grupy
+                            const groupIndex = checkbox.id.split('-')[1];
                             const groupCheckbox = document.getElementById(`potential-group-${groupIndex}`);
                             const siblingCheckboxes = document.querySelectorAll(`#clients-${groupIndex} .client-item input[type="checkbox"]`);
                             const allUnchecked = Array.from(siblingCheckboxes).every(cb => !cb.checked);
@@ -2898,7 +2899,7 @@ def index():
                     selectedPotentialClientsDiv.appendChild(clientSpan);
                 });
 
-                // Wybrane użytkownicy (nowo dodane)
+                // Wybrani użytkownicy
                 const selectedUsersDiv = document.getElementById('selected-users');
                 selectedUsersDiv.innerHTML = '';
 
@@ -3159,6 +3160,14 @@ def index():
                             const allRecipients = emails.concat(selectedUserEmails);
                             formData.set('recipients', allRecipients.join(','));
 
+                            // === Zmiany w załącznikach (START) ===
+                            // Dodajemy wybrane przez użytkownika pliki (z listy selectedFiles) do formData,
+                            // żeby zostały faktycznie wysłane do send_message_ajax.
+                            selectedFiles.forEach((file) => {
+                                formData.append('attachments', file);
+                            });
+                            // === Zmiany w załącznikach (KONIEC) ===
+
                             fetch('{{ url_for("send_message_ajax") }}', {
                                 method: 'POST',
                                 body: formData,
@@ -3171,9 +3180,14 @@ def index():
                                     showFlashMessage('success', data.message);
                                     form.reset();
                                     document.getElementById('attachments-preview').innerHTML = '';
-                                    document.getElementById('attachments-count').textContent = `Załączników: 0/{{ max_attachments }}`;
+                                    document.getElementById('attachments-count').textContent = "Załączników: 0/{{ max_attachments }}";
                                     editor.setData('');
                                     updateSelectedItems();
+
+                                    // === Zmiany w załącznikach (START) ===
+                                    // Czyścimy tablicę z wybranymi plikami, żeby po wysyłce wszystko się resetowało.
+                                    selectedFiles = [];
+                                    // === Zmiany w załącznikach (KONIEC) ===
                                 } else {
                                     showFlashMessage('error', data.message);
                                 }
@@ -3236,15 +3250,6 @@ def index():
                     }
                 });
 
-                // Obsługa otwierania edycji notatki
-                document.querySelectorAll('.edit-btn').forEach(function(button) {
-                    button.addEventListener('click', function() {
-                        const noteId = this.getAttribute('data-note-id');
-                        const noteContent = this.getAttribute('data-note-content');
-                        openEditModal(noteId, noteContent);
-                    });
-                });
-
                 // Obsługa kliknięć na imię i nazwisko użytkownika w notatkach
                 document.querySelector('.note-section').addEventListener('click', function(event) {
                     if (event.target && event.target.classList.contains('user-name')) {
@@ -3301,13 +3306,13 @@ def index():
                     showSpinner('note-spinner');
 
                     // Wyślij AJAX POST request
-                    fetch('{{ url_for("add_note_ajax") }}', { // Upewnij się, że używasz url_for dla odpowiedniej ścieżki
+                    fetch('{{ url_for("add_note_ajax") }}', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({ note: noteContent }),
-                        credentials: 'same-origin' // Umożliwia wysyłanie cookies, jeśli są potrzebne
+                        credentials: 'same-origin'
                     })
                     .then(response => response.json())
                     .then(data => {
@@ -3327,8 +3332,97 @@ def index():
                     });
                 });
 
-                // Obsługa otwierania edycji notatki
-                // (dublowanie z wcześniejszego event listener jest usunięte)
+                // === Zmiany w załącznikach (START) ===
+                // Obsługa załączników: klik, drag & drop, brak duplikatów, limit 5 załączników.
+
+                const attachmentsInput = document.getElementById('attachments');
+                const dropzone = document.getElementById('dropzone');
+                const attachmentsPreview = document.getElementById('attachments-preview');
+                const attachmentsCount = document.getElementById('attachments-count');
+                // Pobierz wartość max_attachments z kontekstu
+                const maxAttachments = {{ max_attachments }};
+                
+                // Tablica, w której przechowujemy wybrane pliki
+                window.selectedFiles = [];
+
+                // Kliknięcie w dropzone -> klik na ukrytym <input type="file">
+                dropzone.addEventListener('click', () => {
+                    attachmentsInput.click();
+                });
+
+                // Zmiana w input[type="file"]
+                attachmentsInput.addEventListener('change', (e) => {
+                    handleFiles(e.target.files);
+                    // Wyzeruj input, żeby można było dodać ten sam plik, jeśli został usunięty
+                    e.target.value = '';
+                });
+
+                // Funkcja zapobiegająca domyślnemu zachowaniu dla drag & drop
+                function preventDefaults(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+
+                ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                    dropzone.addEventListener(eventName, preventDefaults, false);
+                    document.body.addEventListener(eventName, preventDefaults, false);
+                });
+
+                // Podświetlanie dropzone w trakcie przeciągania
+                ['dragenter', 'dragover'].forEach(eventName => {
+                    dropzone.addEventListener(eventName, () => dropzone.classList.add('dragover'), false);
+                });
+                ['dragleave', 'drop'].forEach(eventName => {
+                    dropzone.addEventListener(eventName, () => dropzone.classList.remove('dragover'), false);
+                });
+
+                // Obsługa upuszczenia plików
+                dropzone.addEventListener('drop', (e) => {
+                    handleFiles(e.dataTransfer.files);
+                });
+
+                function handleFiles(files) {
+                    for (let file of files) {
+                        if (selectedFiles.length >= maxAttachments) {
+                            alert("Możesz dodać maksymalnie " + maxAttachments + " załączników.");
+                            break;
+                        }
+                        // Sprawdzamy duplikaty (porównujemy name, size, lastModified)
+                        const isDuplicate = selectedFiles.some(f =>
+                            f.name === file.name &&
+                            f.size === file.size &&
+                            f.lastModified === file.lastModified
+                        );
+                        if (!isDuplicate) {
+                            selectedFiles.push(file);
+                        }
+                    }
+                    updatePreview();
+                }
+
+                function updatePreview() {
+                    attachmentsPreview.innerHTML = '';
+                    selectedFiles.forEach((file, index) => {
+                        const item = document.createElement('div');
+                        item.classList.add('attachment-item');
+
+                        const span = document.createElement('span');
+                        span.textContent = file.name;
+                        item.appendChild(span);
+
+                        const removeButton = document.createElement('button');
+                        removeButton.innerHTML = '&times;';
+                        removeButton.addEventListener('click', () => {
+                            selectedFiles.splice(index, 1);
+                            updatePreview();
+                        });
+                        item.appendChild(removeButton);
+
+                        attachmentsPreview.appendChild(item);
+                    });
+                    attachmentsCount.textContent = `Załączników: ${selectedFiles.length}/${maxAttachments}`;
+                }
+                // === Zmiany w załącznikach (KONIEC) ===
             });
 
             // Funkcje do obsługi edycji notatek
@@ -3360,7 +3454,7 @@ def index():
             }
 
             function editNote(noteId, newContent) {
-                showSpinner(`edit-spinner`);
+                showSpinner('edit-spinner');
 
                 fetch('{{ url_for("edit_note_ajax") }}', {
                     method: 'POST',
@@ -3375,19 +3469,19 @@ def index():
                 })
                 .then(response => response.json())
                 .then(data => {
-                    hideSpinner(`edit-spinner`);
+                    hideSpinner('edit-spinner');
 
                     if (data.success) {
                         showFlashMessage('success', data.message);
-                        const noteSpan = document.querySelector(`.note[data-note-id="${noteId}"] .note-content`);
+                        const noteSpan = document.querySelector('.note[data-note-id="'+ noteId +'"] .note-content');
                         if (noteSpan) {
                             noteSpan.textContent = data.note.content;
                         }
-                        const editBtn = document.querySelector(`.note[data-note-id="${noteId}"] .edit-btn`);
+                        const editBtn = document.querySelector('.note[data-note-id="'+ noteId +'"] .edit-btn');
                         if (editBtn) {
                             editBtn.setAttribute('data-note-content', data.note.content);
                         }
-                        const transferBtn = document.querySelector(`.note[data-note-id="${noteId}"] .transfer-note-btn`);
+                        const transferBtn = document.querySelector('.note[data-note-id="'+ noteId +'"] .transfer-note-btn');
                         if (transferBtn) {
                             transferBtn.setAttribute('data-note-content', data.note.content);
                         }
@@ -3399,7 +3493,7 @@ def index():
                 })
                 .catch(error => {
                     console.error('Błąd podczas edytowania notatki:', error);
-                    hideSpinner(`edit-spinner`);
+                    hideSpinner('edit-spinner');
                     showFlashMessage('error', 'Wystąpił błąd podczas edytowania notatki.');
                 });
             }
@@ -3411,7 +3505,6 @@ def index():
                     const form = event.target;
                     const noteId = form.getAttribute('data-note-id');
                     const newContent = document.getElementById('edit-note-input').value.trim();
-                    const spinnerId = `edit-spinner`;
 
                     if (newContent === '') {
                         showFlashMessage('error', 'Nowa treść notatki nie może być pusta.');
@@ -3427,7 +3520,7 @@ def index():
                 if (event.target && event.target.classList.contains('delete-note-form')) {
                     event.preventDefault();
                     const noteId = event.target.getAttribute('data-note-id');
-                    const spinnerId = `note-spinner-${noteId}`;
+                    const spinnerId = 'note-spinner-' + noteId;
 
                     showSpinner(spinnerId);
 
@@ -3918,8 +4011,6 @@ def index():
         data=data,
         max_attachments=app.config['MAX_ATTACHMENTS']
     )
-
-
 
 
 

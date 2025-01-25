@@ -1995,7 +1995,6 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if 'user_id' not in session:
@@ -2391,6 +2390,7 @@ def index():
                 user-select: none;
                 color: #ffffff;
             }
+            /* Uniemożliwienie kliknięcia na etykietę zaznaczania checkboxa */
             .segment-label,
             .possibility-label,
             .potential-client-group-label {
@@ -2421,6 +2421,7 @@ def index():
                 font-size: 14px;
                 user-select: none;
             }
+            /* Zwinięte listy domyślnie */
             .clients-list,
             .email-list,
             .company-list {
@@ -2575,8 +2576,6 @@ def index():
             .modal-form button:active {
                 transform: scale(0.95);
             }
-
-            /* ----------- DROPZONE i ZAŁĄCZNIKI ----------- */
             .dropzone {
                 border: 2px dashed #cccccc;
                 border-radius: 5px;
@@ -2621,7 +2620,6 @@ def index():
                 font-size: 14px;
                 color: #555555;
             }
-
             .progress-container {
                 width: 100%;
                 background-color: #f3f3f3;
@@ -2691,6 +2689,978 @@ def index():
         </style>
         <!-- Dodaj CKEditor -->
         <script src="https://cdn.ckeditor.com/ckeditor5/39.0.1/classic/ckeditor.js"></script>
+        <script>
+            // Funkcje wspólne
+            function showFlashMessage(category, message) {
+                const flashMessage = document.querySelector(`.flash-message.${category}`);
+                if (flashMessage) {
+                    flashMessage.textContent = message;
+                    flashMessage.classList.add('show');
+
+                    setTimeout(() => {
+                        flashMessage.classList.remove('show');
+                    }, 5000);
+                }
+            }
+
+            function showSpinner(spinnerId) {
+                const spinner = document.getElementById(spinnerId);
+                if (spinner) {
+                    spinner.style.display = 'inline-block';
+                }
+            }
+
+            function hideSpinner(spinnerId) {
+                const spinner = document.getElementById(spinnerId);
+                if (spinner) {
+                    spinner.style.display = 'none';
+                }
+            }
+
+            function updateNotesList(notes) {
+                const notesList = document.querySelector('.note-section ul');
+                notesList.innerHTML = '';
+
+                notes.forEach(note => {
+                    const li = document.createElement('li');
+                    li.className = 'note';
+                    li.setAttribute('data-note-id', note.id);
+                    li.innerHTML = `
+                        <div class="note-content">${escapeHtml(note.content)}</div>
+                        <div class="note-footer">
+                            <div class="note-actions">
+                                <button type="button" class="transfer-note-btn" data-note-content="${escapeHtml(note.content)}">Transfer</button>
+                                <button type="button" class="edit-btn" data-note-id="${note.id}" data-note-content="${escapeHtml(note.content)}">Edytuj</button>
+                                <form class="delete-note-form" data-note-id="${note.id}">
+                                    <button type="submit" class="delete-btn">Usuń</button>
+                                    <div class="spinner" id="note-spinner-${note.id}" style="display: none;"></div>
+                                </form>
+                            </div>
+                            <span class="user-name" style="background-color: ${note.user.color};" data-email="${escapeHtml(note.user.email)}">
+                                ${escapeHtml(note.user.first_name)} ${escapeHtml(note.user.last_name)}
+                            </span>
+                        </div>
+                    `;
+                    notesList.appendChild(li);
+                });
+
+                // Reattach event listeners for .user-name
+                attachUserNameClickListeners();
+            }
+
+            function escapeHtml(text) {
+                var map = {
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#039;'
+                };
+                return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+            }
+
+            function transferToMessageField(content) {
+                console.log('Transferowanie treści:', content);
+                if (window.editor) {
+                    window.editor.setData(content);
+                    console.log('Treść załadowana do CKEditor.');
+                } else {
+                    console.log('CKEditor nie jest zainicjalizowany. Aktualizacja pola tekstowego.');
+                    document.getElementById('message').value = content;
+                }
+            }
+
+            function updateSelectedItems() {
+                // Segmenty
+                const selectedSegments = Array.from(document.querySelectorAll('.segment-item input[type="checkbox"]:checked'))
+                    .map(cb => cb.value);
+                const selectedSegmentsDiv = document.getElementById('selected-segments');
+                selectedSegmentsDiv.innerHTML = '';
+
+                selectedSegments.forEach(segment => {
+                    const segmentSpan = document.createElement('span');
+                    segmentSpan.className = 'selected-item';
+                    segmentSpan.textContent = segment;
+
+                    const removeSpan = document.createElement('span');
+                    removeSpan.className = 'remove-item';
+                    removeSpan.textContent = '×';
+                    removeSpan.setAttribute('data-item', segment);
+                    removeSpan.addEventListener('click', function() {
+                        const itemToRemove = this.getAttribute('data-item');
+                        const checkbox = Array.from(document.querySelectorAll('.segment-item input[type="checkbox"]'))
+                            .find(cb => cb.value === itemToRemove);
+                        if (checkbox) {
+                            checkbox.checked = false;
+                            const segmentIndex = checkbox.id.split('-')[1];
+                            const emailList = document.getElementById(`emails-${segmentIndex}`);
+                            if (emailList) {
+                                const emailCheckboxes = emailList.querySelectorAll('input[type="checkbox"]');
+                                emailCheckboxes.forEach(emailCb => {
+                                    emailCb.checked = false;
+                                });
+                            }
+                        }
+                        this.parentElement.remove();
+                        updateSelectedItems();
+                        updateSelectAllButtons();
+                    });
+
+                    segmentSpan.appendChild(removeSpan);
+                    selectedSegmentsDiv.appendChild(segmentSpan);
+                });
+
+                // Możliwości
+                const selectedPossibilities = Array.from(document.querySelectorAll('.possibility-item input[type="checkbox"]:checked'))
+                    .map(cb => cb.value);
+                const selectedPossibilitiesDiv = document.getElementById('selected-possibilities');
+                selectedPossibilitiesDiv.innerHTML = '';
+
+                selectedPossibilities.forEach(possibility => {
+                    const possibilitySpan = document.createElement('span');
+                    possibilitySpan.className = 'selected-item';
+                    possibilitySpan.textContent = possibility;
+
+                    const removeSpan = document.createElement('span');
+                    removeSpan.className = 'remove-item';
+                    removeSpan.textContent = '×';
+                    removeSpan.setAttribute('data-item', possibility);
+                    removeSpan.addEventListener('click', function() {
+                        const itemToRemove = this.getAttribute('data-item');
+                        const checkbox = Array.from(document.querySelectorAll('.possibility-item input[type="checkbox"]'))
+                            .find(cb => cb.value === itemToRemove);
+                        if (checkbox) {
+                            checkbox.checked = false;
+                            const possibilityIndex = checkbox.id.split('-')[1];
+                            const companyList = document.getElementById(`companies-${possibilityIndex}`);
+                            if (companyList) {
+                                const companyCheckboxes = companyList.querySelectorAll('input[type="checkbox"]');
+                                companyCheckboxes.forEach(companyCb => {
+                                    companyCb.checked = false;
+                                });
+                            }
+                        }
+                        this.parentElement.remove();
+                        updateSelectedItems();
+                    });
+
+                    possibilitySpan.appendChild(removeSpan);
+                    selectedPossibilitiesDiv.appendChild(possibilitySpan);
+                });
+
+                // Potencjalni Klienci
+                const selectedPotentialClients = Array.from(document.querySelectorAll('.potential-clients-list .client-item input[type="checkbox"]:checked'))
+                    .map(cb => {
+                        const label = document.querySelector(`label[for="${cb.id}"]`);
+                        if (label) {
+                            const text = label.textContent;
+                            const companyName = text.split(' (')[0];
+                            return { companyName };
+                        }
+                        return { companyName: cb.value };
+                    });
+
+                const selectedPotentialClientsDiv = document.getElementById('selected-potential-clients');
+                selectedPotentialClientsDiv.innerHTML = '';
+
+                selectedPotentialClients.forEach(client => {
+                    const clientSpan = document.createElement('span');
+                    clientSpan.className = 'selected-item';
+                    clientSpan.textContent = client.companyName;
+
+                    const removeSpan = document.createElement('span');
+                    removeSpan.className = 'remove-item';
+                    removeSpan.textContent = '×';
+                    removeSpan.setAttribute('data-company', client.companyName);
+                    removeSpan.addEventListener('click', function() {
+                        const companyToRemove = this.getAttribute('data-company');
+                        const checkbox = Array.from(document.querySelectorAll('.potential-clients-list .client-item input[type="checkbox"]'))
+                            .find(cb => {
+                                const label = document.querySelector(`label[for="${cb.id}"]`);
+                                return label && label.textContent.split(' (')[0] === companyToRemove;
+                            });
+                        if (checkbox) {
+                            checkbox.checked = false;
+                            // Jeśli wszystkie klienci w grupie są odznaczeni, odznacz również checkbox grupy
+                            const groupIndex = checkbox.id.split('-')[2];
+                            const groupCheckbox = document.getElementById(`potential-group-${groupIndex}`);
+                            const siblingCheckboxes = document.querySelectorAll(`#clients-${groupIndex} .client-item input[type="checkbox"]`);
+                            const allUnchecked = Array.from(siblingCheckboxes).every(cb => !cb.checked);
+                            if (allUnchecked && groupCheckbox) {
+                                groupCheckbox.checked = false;
+                            }
+                        }
+                        this.parentElement.remove();
+                        updateSelectedItems();
+                    });
+
+                    clientSpan.appendChild(removeSpan);
+                    selectedPotentialClientsDiv.appendChild(clientSpan);
+                });
+
+                // Wybrane użytkownicy (nowo dodane)
+                const selectedUsersDiv = document.getElementById('selected-users');
+                selectedUsersDiv.innerHTML = '';
+
+                updateSelectAllButtons();
+            }
+
+            // Funkcje do togglowania list
+            function toggleSegmentsList(button) {
+                var segmentsContainer = document.getElementById('segments-container');
+                var img = button.querySelector('img');
+                segmentsContainer.classList.toggle('show');
+                img.classList.toggle('rotate');
+            }
+
+            function togglePossibilitiesList(button) {
+                var possibilitiesContainer = document.getElementById('possibilities-container');
+                var img = button.querySelector('img');
+                possibilitiesContainer.classList.toggle('show');
+                img.classList.toggle('rotate');
+            }
+
+            function togglePotentialClientsList(button) {
+                var potentialClientsContainer = document.getElementById('potential-clients-container');
+                var img = button.querySelector('img');
+                potentialClientsContainer.classList.toggle('show');
+                img.classList.toggle('rotate');
+            }
+
+            // Funkcje do zaznaczania/odznaczania wszystkich segmentów
+            function toggleSelectAllSegments(button) {
+                var segmentCheckboxes = document.querySelectorAll('.segment-item input[type="checkbox"]');
+                var allChecked = Array.from(segmentCheckboxes).every(cb => cb.checked);
+
+                segmentCheckboxes.forEach(function(checkbox) {
+                    checkbox.checked = !allChecked;
+                    handleSegmentChange(checkbox);
+                });
+
+                button.textContent = !allChecked ? 'Odznacz wszystkie segmenty' : 'Zaznacz wszystkie segmenty';
+
+                updateSelectedItems();
+            }
+
+            // Funkcje do zaznaczania/odznaczania wszystkich możliwości
+            function toggleSelectAllPossibilities(button) {
+                var possibilityCheckboxes = document.querySelectorAll('.possibility-item input[type="checkbox"]');
+                var allChecked = Array.from(possibilityCheckboxes).every(cb => cb.checked);
+
+                possibilityCheckboxes.forEach(function(checkbox) {
+                    checkbox.checked = !allChecked;
+                    handlePossibilityChange(checkbox);
+                });
+
+                button.textContent = !allChecked ? 'Odznacz wszystkie możliwości' : 'Zaznacz wszystkie możliwości';
+
+                updateSelectedItems();
+            }
+
+            // Funkcje do zaznaczania/odznaczania wszystkich potencjalnych klientów
+            function toggleSelectAllPotentialClients(button) {
+                var groupCheckboxes = document.querySelectorAll('.potential-client-group input[type="checkbox"]');
+                var clientCheckboxes = document.querySelectorAll('.potential-clients-list .client-item input[type="checkbox"]');
+                var allChecked = Array.from(groupCheckboxes).every(cb => cb.checked) && Array.from(clientCheckboxes).every(cb => cb.checked);
+
+                // Zaznacz lub odznacz wszystkie group checkboxes
+                groupCheckboxes.forEach(function(groupCheckbox) {
+                    groupCheckbox.checked = !allChecked;
+                });
+
+                // Zaznacz lub odznacz wszystkie client checkboxes
+                clientCheckboxes.forEach(function(clientCheckbox) {
+                    clientCheckbox.checked = !allChecked;
+                });
+
+                button.textContent = !allChecked ? 'Odznacz wszystkich klientów' : 'Zaznacz wszystkich klientów';
+
+                updateSelectedItems();
+            }
+
+            // Funkcje do zaznaczania/odznaczania wszystkich e-maili w segmencie
+            function toggleSelectAllEmailsInSegment(emailListId) {
+                var emailList = document.getElementById(emailListId);
+                var emailCheckboxes = emailList.querySelectorAll('input[type="checkbox"]');
+                var toggleBtn = emailList.querySelector('.select-deselect-emails-btn');
+
+                var allChecked = Array.from(emailCheckboxes).every(cb => cb.checked);
+
+                emailCheckboxes.forEach(function(checkbox) {
+                    checkbox.checked = !allChecked;
+                });
+
+                toggleBtn.textContent = !allChecked ? 'Odznacz Wszystkie' : 'Zaznacz Wszystkie';
+
+                updateSelectedItems();
+            }
+
+            // Funkcje do zaznaczania/odznaczania wszystkich firm w możliwości
+            function toggleSelectAllCompaniesInPossibility(companyListId) {
+                var companyList = document.getElementById(companyListId);
+                var companyCheckboxes = companyList.querySelectorAll('input[type="checkbox"]');
+                var toggleBtn = companyList.querySelector('.select-deselect-companies-btn');
+
+                var allChecked = Array.from(companyCheckboxes).every(cb => cb.checked);
+
+                companyCheckboxes.forEach(function(checkbox) {
+                    checkbox.checked = !allChecked;
+                });
+
+                toggleBtn.textContent = !allChecked ? 'Odznacz Wszystkie' : 'Zaznacz Wszystkie';
+
+                updateSelectedItems();
+            }
+
+            // Funkcje do rozwijania/zwijania wszystkich list
+            function toggleAllSegmentsExpandCollapse(button) {
+                var emailLists = document.querySelectorAll('.email-list');
+                var allExpanded = Array.from(emailLists).every(list => list.classList.contains('show'));
+
+                emailLists.forEach(list => {
+                    if (allExpanded) {
+                        list.classList.remove('show');
+                    } else {
+                        list.classList.add('show');
+                    }
+                });
+
+                // Zmiana etykiety przycisku w zależności od stanu
+                button.textContent = allExpanded ? 'Rozwiń wszystkie segmenty' : 'Zwiń wszystkie segmenty';
+            }
+
+            function toggleAllPossibilitiesExpandCollapse(button) {
+                var companyLists = document.querySelectorAll('.company-list');
+                var allExpanded = Array.from(companyLists).every(list => list.classList.contains('show'));
+
+                companyLists.forEach(list => {
+                    if (allExpanded) {
+                        list.classList.remove('show');
+                    } else {
+                        list.classList.add('show');
+                    }
+                });
+
+                button.textContent = allExpanded ? 'Rozwiń wszystkie możliwości' : 'Zwiń wszystkie możliwości';
+            }
+
+            function toggleAllPotentialClientsExpandCollapse(button) {
+                var clientLists = document.querySelectorAll('.clients-list');
+                var allExpanded = Array.from(clientLists).every(list => list.classList.contains('show'));
+
+                clientLists.forEach(list => {
+                    if (allExpanded) {
+                        list.classList.remove('show');
+                    } else {
+                        list.classList.add('show');
+                    }
+                });
+
+                button.textContent = allExpanded ? 'Rozwiń wszystkich potencjalnych klientów' : 'Zwiń wszystkich potencjalnych klientów';
+            }
+
+            // Funkcje do obsługi zmian checkboxów
+            function handleSegmentChange(segmentCheckbox) {
+                toggleEmailsInSegment(segmentCheckbox);
+                updateSelectedItems();
+            }
+
+            function handlePossibilityChange(possibilityCheckbox) {
+                toggleCompaniesInPossibility(possibilityCheckbox);
+                updateSelectedItems();
+            }
+
+            function handlePotentialClientGroupChange(groupCheckbox) {
+                toggleClientsInGroup(groupCheckbox);
+                updateSelectedItems();
+            }
+
+            // Funkcje do togglowania e-maili, firm i klientów
+            function toggleEmailsInSegment(segmentCheckbox) {
+                var segmentIndex = segmentCheckbox.id.split('-')[1];
+                var emailList = document.getElementById(`emails-${segmentIndex}`);
+                if (emailList) {
+                    var emailCheckboxes = emailList.querySelectorAll('input[type="checkbox"]');
+                    emailCheckboxes.forEach(function(emailCheckbox) {
+                        emailCheckbox.checked = segmentCheckbox.checked;
+                    });
+                }
+            }
+
+            function toggleCompaniesInPossibility(possibilityCheckbox) {
+                var possibilityIndex = possibilityCheckbox.id.split('-')[1];
+                var companyList = document.getElementById(`companies-${possibilityIndex}`);
+                if (companyList) {
+                    var companyCheckboxes = companyList.querySelectorAll('input[type="checkbox"]');
+                    companyCheckboxes.forEach(function(companyCheckbox) {
+                        companyCheckbox.checked = possibilityCheckbox.checked;
+                    });
+                }
+            }
+
+            function toggleClientsInGroup(groupCheckbox) {
+                var groupIndex = groupCheckbox.id.split('-')[2];
+                var clientsList = document.getElementById(`clients-${groupIndex}`);
+                if (clientsList) {
+                    var clientCheckboxes = clientsList.querySelectorAll('input[type="checkbox"]');
+                    clientCheckboxes.forEach(function(clientCheckbox) {
+                        clientCheckbox.checked = groupCheckbox.checked;
+                    });
+                }
+            }
+
+            // Funkcje do obsługi edycji notatek
+            document.addEventListener('DOMContentLoaded', function() {
+                // Inicjalizacja CKEditor
+                ClassicEditor
+                    .create(document.querySelector('#message-editor'), {
+                        toolbar: ['bold', 'italic', 'underline', 'bulletedList', 'numberedList', 'link']
+                    })
+                    .then(editor => {
+                        window.editor = editor;
+                        console.log('CKEditor został zainicjalizowany.');
+
+                        const form = document.getElementById('main-form');
+                        form.addEventListener('submit', (event) => {
+                            event.preventDefault();
+
+                            // Pobieranie treści edytora
+                            const data = editor.getData();
+                            document.querySelector('#message').value = data;
+
+                            // Sprawdzanie czy pole wiadomości jest puste
+                            const tempElement = document.createElement('div');
+                            tempElement.innerHTML = data;
+                            const textContent = tempElement.textContent || tempElement.innerText || '';
+                            if (textContent.trim() === '') {
+                                showFlashMessage('error', 'Pole "Wiadomość" nie może być puste.');
+                                editor.editing.view.focus();
+                                return;
+                            }
+
+                            // Walidacja zaznaczeń segmentów, możliwości i potencjalnych klientów
+                            if (!validateParentChildSelection()) {
+                                // Jeśli walidacja nie przeszła, to wyświetlamy komunikat (już wyświetlony w funkcji) i nie wysyłamy
+                                return;
+                            }
+
+                            showSpinner('spinner');
+                            const formData = new FormData(form);
+
+                            // Pobieranie zaznaczonych adresów e-mail
+                            const emailCheckboxes = document.querySelectorAll('input[name="include_emails"]:checked, input[name="include_potential_emails"]:checked');
+                            const emails = Array.from(emailCheckboxes).map(cb => cb.value);
+
+                            // Pobieranie wybranych użytkowników
+                            const selectedUserEmails = Array.from(document.querySelectorAll('input[name="selected_users"]'))
+                                .map(input => input.value);
+                            
+                            // Łączenie wszystkich odbiorców
+                            const allRecipients = emails.concat(selectedUserEmails);
+                            formData.set('recipients', allRecipients.join(','));
+
+                            fetch('{{ url_for("send_message_ajax") }}', {
+                                method: 'POST',
+                                body: formData,
+                                credentials: 'same-origin'
+                            })
+                            .then(response => response.json())
+                            .then(data => {
+                                hideSpinner('spinner');
+                                if (data.success) {
+                                    showFlashMessage('success', data.message);
+                                    form.reset();
+                                    document.getElementById('attachments-preview').innerHTML = '';
+                                    document.getElementById('attachments-count').textContent = `Załączników: 0/{{ max_attachments }}`;
+                                    editor.setData('');
+                                    updateSelectedItems();
+                                } else {
+                                    showFlashMessage('error', data.message);
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Błąd:', error);
+                                hideSpinner('spinner');
+                                showFlashMessage('error', 'Wystąpił błąd podczas wysyłania wiadomości.');
+                            });
+                        });
+                    })
+                    .catch(error => {
+                        console.error('Błąd inicjalizacji CKEditor:', error);
+                    });
+
+                // Obsługa kliknięć na etykiety możliwości
+                document.querySelectorAll('.possibility-label').forEach(function(label) {
+                    label.addEventListener('click', function(event) {
+                        var index = this.getAttribute('data-index');
+                        toggleCompanyList(index);
+                        event.stopPropagation(); // Zapobiega zaznaczeniu checkboxa
+                    });
+                });
+
+                // Obsługa kliknięć na etykiety segmentów
+                document.querySelectorAll('.segment-label').forEach(function(label) {
+                    label.addEventListener('click', function(event) {
+                        var index = this.getAttribute('data-index');
+                        toggleEmailsList(index);
+                        event.stopPropagation();
+                    });
+                });
+
+                // Obsługa kliknięć na etykiety potencjalnych klientów
+                document.querySelectorAll('.potential-client-group-label').forEach(function(label) {
+                    label.addEventListener('click', function(event) {
+                        var index = this.getAttribute('data-index');
+                        toggleClientsList(index);
+                        event.stopPropagation();
+                    });
+                });
+
+                // Obsługa otwierania edycji notatek
+                document.addEventListener('click', function(event) {
+                    if (event.target && event.target.classList.contains('edit-btn')) {
+                        const noteId = event.target.getAttribute('data-note-id');
+                        const noteContent = event.target.getAttribute('data-note-content');
+                        console.log('Kliknięto przycisk Edytuj dla notatki:', noteId);
+                        openEditModal(noteId, noteContent);
+                    }
+                });
+
+                // Obsługa transferu notatek do pola wiadomości
+                document.addEventListener('click', function(event) {
+                    if (event.target && event.target.classList.contains('transfer-note-btn')) {
+                        const noteContent = event.target.getAttribute('data-note-content');
+                        console.log('Kliknięto przycisk Transfer. Treść notatki:', noteContent);
+                        transferToMessageField(noteContent);
+                        showFlashMessage('success', 'Treść notatki została przeniesiona do pola "Wiadomość".');
+                    }
+                });
+
+                // Obsługa otwierania edycji notatki
+                document.querySelectorAll('.edit-btn').forEach(function(button) {
+                    button.addEventListener('click', function() {
+                        const noteId = this.getAttribute('data-note-id');
+                        const noteContent = this.getAttribute('data-note-content');
+                        openEditModal(noteId, noteContent);
+                    });
+                });
+
+                // Obsługa kliknięć na imię i nazwisko użytkownika w notatkach
+                document.querySelector('.note-section').addEventListener('click', function(event) {
+                    if (event.target && event.target.classList.contains('user-name')) {
+                        const userName = event.target.textContent.trim();
+                        const userEmail = event.target.getAttribute('data-email');
+
+                        // Sprawdzenie, czy użytkownik jest już dodany
+                        const alreadySelected = Array.from(document.querySelectorAll('#selected-users .selected-item'))
+                            .some(item => item.getAttribute('data-email') === userEmail);
+
+                        if (!alreadySelected) {
+                            // Tworzenie elementu tagu użytkownika
+                            const userSpan = document.createElement('span');
+                            userSpan.className = 'selected-item';
+                            userSpan.setAttribute('data-email', userEmail);
+                            userSpan.textContent = userName;
+
+                            // Dodanie przycisku usuwania
+                            const removeBtn = document.createElement('span');
+                            removeBtn.className = 'remove-item';
+                            removeBtn.textContent = '×';
+                            removeBtn.addEventListener('click', function() {
+                                userSpan.remove();
+                            });
+                            userSpan.appendChild(removeBtn);
+
+                            // Dodanie ukrytego inputa do formularza
+                            const hiddenInput = document.createElement('input');
+                            hiddenInput.type = 'hidden';
+                            hiddenInput.name = 'selected_users';
+                            hiddenInput.value = userEmail;
+                            userSpan.appendChild(hiddenInput);
+
+                            // Dodanie tagu do kontenera
+                            document.getElementById('selected-users').appendChild(userSpan);
+                        }
+                    }
+                });
+
+                // Obsługa submit dla formularza dodawania notatki
+                const addNoteForm = document.getElementById('add-note-form');
+                addNoteForm.addEventListener('submit', function(event) {
+                    event.preventDefault(); // Zapobiega tradycyjnemu wysłaniu formularza
+
+                    const noteInput = this.querySelector('input[name="note"]');
+                    const noteContent = noteInput.value.trim();
+
+                    if (noteContent === '') {
+                        showFlashMessage('error', 'Nie można dodać pustej notatki.');
+                        return;
+                    }
+
+                    // Pokaż spinner
+                    showSpinner('note-spinner');
+
+                    // Wyślij AJAX POST request
+                    fetch('{{ url_for("add_note_ajax") }}', { // Upewnij się, że używasz url_for dla odpowiedniej ścieżki
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ note: noteContent }),
+                        credentials: 'same-origin' // Umożliwia wysyłanie cookies, jeśli są potrzebne
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        hideSpinner('note-spinner');
+                        if (data.success) {
+                            showFlashMessage('success', data.message);
+                            updateNotesList(data.notes); // Aktualizuj listę notatek
+                            noteInput.value = ''; // Wyczyść pole input
+                        } else {
+                            showFlashMessage('error', data.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Błąd:', error);
+                        hideSpinner('note-spinner');
+                        showFlashMessage('error', 'Wystąpił błąd podczas dodawania notatki.');
+                    });
+                });
+
+                // Obsługa otwierania edycji notatki
+                // (dublowanie z wcześniejszego event listener jest usunięte)
+            });
+
+            // Funkcje do obsługi edycji notatek
+            function openEditModal(noteId, currentContent) {
+                const modal = document.getElementById('editModal');
+                const editForm = document.getElementById('edit-note-form');
+                const editInput = document.getElementById('edit-note-input');
+                const closeModalBtn = document.getElementById('closeEditModal');
+
+                editInput.value = currentContent;
+                editForm.setAttribute('data-note-id', noteId);
+
+                modal.style.display = 'block';
+
+                closeModalBtn.onclick = function() {
+                    closeEditModal();
+                }
+
+                window.onclick = function(event) {
+                    if (event.target == modal) {
+                        closeEditModal();
+                    }
+                }
+            }
+
+            function closeEditModal() {
+                const modal = document.getElementById('editModal');
+                modal.style.display = 'none';
+            }
+
+            function editNote(noteId, newContent) {
+                showSpinner(`edit-spinner`);
+
+                fetch('{{ url_for("edit_note_ajax") }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        note_id: noteId,
+                        new_content: newContent
+                    }),
+                    credentials: 'same-origin'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    hideSpinner(`edit-spinner`);
+
+                    if (data.success) {
+                        showFlashMessage('success', data.message);
+                        const noteSpan = document.querySelector(`.note[data-note-id="${noteId}"] .note-content`);
+                        if (noteSpan) {
+                            noteSpan.textContent = data.note.content;
+                        }
+                        const editBtn = document.querySelector(`.note[data-note-id="${noteId}"] .edit-btn`);
+                        if (editBtn) {
+                            editBtn.setAttribute('data-note-content', data.note.content);
+                        }
+                        const transferBtn = document.querySelector(`.note[data-note-id="${noteId}"] .transfer-note-btn`);
+                        if (transferBtn) {
+                            transferBtn.setAttribute('data-note-content', data.note.content);
+                        }
+                    } else {
+                        showFlashMessage('error', data.message);
+                    }
+
+                    closeEditModal();
+                })
+                .catch(error => {
+                    console.error('Błąd podczas edytowania notatki:', error);
+                    hideSpinner(`edit-spinner`);
+                    showFlashMessage('error', 'Wystąpił błąd podczas edytowania notatki.');
+                });
+            }
+
+            // Obsługa submit form do edytowania notatki
+            document.addEventListener('submit', function(event) {
+                if (event.target && event.target.id === 'edit-note-form') {
+                    event.preventDefault();
+                    const form = event.target;
+                    const noteId = form.getAttribute('data-note-id');
+                    const newContent = document.getElementById('edit-note-input').value.trim();
+                    const spinnerId = `edit-spinner`;
+
+                    if (newContent === '') {
+                        showFlashMessage('error', 'Nowa treść notatki nie może być pusta.');
+                        return;
+                    }
+
+                    editNote(noteId, newContent);
+                }
+            });
+
+            // Obsługa submit form do usuwania notatek
+            document.addEventListener('submit', function(event) {
+                if (event.target && event.target.classList.contains('delete-note-form')) {
+                    event.preventDefault();
+                    const noteId = event.target.getAttribute('data-note-id');
+                    const spinnerId = `note-spinner-${noteId}`;
+
+                    showSpinner(spinnerId);
+
+                    fetch('{{ url_for("delete_note_ajax") }}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ note_id: noteId }),
+                        credentials: 'same-origin'
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        hideSpinner(spinnerId);
+
+                        if (data.success) {
+                            showFlashMessage('success', data.message);
+                            updateNotesList(data.notes);
+                            updateSelectedItems();
+                        } else {
+                            showFlashMessage('error', data.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Błąd podczas usuwania notatki:', error);
+                        hideSpinner(spinnerId);
+                        showFlashMessage('error', 'Wystąpił błąd podczas usuwania notatki.');
+                    });
+                }
+            });
+
+            // Obsługa submit form do usuwania wszystkich notatek
+            document.addEventListener('submit', function(event) {
+                if (event.target && event.target.id === 'delete-all-notes-form') {
+                    event.preventDefault();
+                    const spinnerId = 'delete-all-spinner';
+
+                    showSpinner(spinnerId);
+
+                    fetch('{{ url_for("delete_all_notes_ajax") }}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({}),
+                        credentials: 'same-origin'
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        hideSpinner(spinnerId);
+
+                        if (data.success) {
+                            showFlashMessage('success', data.message);
+                            updateNotesList(data.notes);
+                            updateSelectedItems();
+                        } else {
+                            showFlashMessage('error', data.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Błąd podczas usuwania wszystkich notatek:', error);
+                        hideSpinner(spinnerId);
+                        showFlashMessage('error', 'Wystąpił błąd podczas usuwania notatek.');
+                    });
+                }
+            });
+
+            // Funkcje do zarządzania przyciskami "Zaznacz Wszystkie"
+            function updateSelectAllButtons() {
+                // Aktualizacja przycisków "Zaznacz Wszystkie" dla segmentów
+                var selectAllSegmentsBtn = document.getElementById('select-all-segments-btn');
+                var segmentCheckboxes = document.querySelectorAll('.segment-item input[type="checkbox"]');
+                var allSegmentsChecked = Array.from(segmentCheckboxes).every(cb => cb.checked);
+                selectAllSegmentsBtn.textContent = allSegmentsChecked ? 'Odznacz wszystkie segmenty' : 'Zaznacz wszystkie segmenty';
+
+                // Aktualizacja przycisków "Zaznacz Wszystkie" dla możliwości
+                var selectAllPossibilitiesBtn = document.getElementById('select-all-possibilities-btn');
+                var possibilityCheckboxes = document.querySelectorAll('.possibility-item input[type="checkbox"]');
+                var allPossibilitiesChecked = Array.from(possibilityCheckboxes).every(cb => cb.checked);
+                selectAllPossibilitiesBtn.textContent = allPossibilitiesChecked ? 'Odznacz wszystkie możliwości' : 'Zaznacz wszystkie możliwości';
+
+                // Aktualizacja przycisków "Zaznacz Wszystkich" dla potencjalnych klientów
+                var selectAllPotentialClientsBtn = document.querySelector('.select-deselect-potential-clients-btn');
+                var groupCheckboxes = document.querySelectorAll('.potential-client-group input[type="checkbox"]');
+                var clientCheckboxes = document.querySelectorAll('.potential-clients-list .client-item input[type="checkbox"]');
+                var allPotentialClientsChecked = Array.from(groupCheckboxes).every(cb => cb.checked) && Array.from(clientCheckboxes).every(cb => cb.checked);
+                selectAllPotentialClientsBtn.textContent = allPotentialClientsChecked ? 'Odznacz wszystkich klientów' : 'Zaznacz wszystkich klientów';
+            }
+
+            function updateEmailToggleButtons() {
+                // Aktualizacja przycisków togglingu e-maili w segmentach
+                var emailLists = document.querySelectorAll('.email-list');
+                emailLists.forEach(function(emailList) {
+                    var toggleBtn = emailList.querySelector('.select-deselect-emails-btn');
+                    var emailCheckboxes = emailList.querySelectorAll('input[type="checkbox"]');
+                    var allChecked = Array.from(emailCheckboxes).every(cb => cb.checked);
+                    toggleBtn.textContent = allChecked ? 'Odznacz Wszystkie' : 'Zaznacz Wszystkie';
+                });
+            }
+
+            function updateCompanyToggleButtons() {
+                // Aktualizacja przycisków togglingu firm w możliwościach
+                var companyLists = document.querySelectorAll('.company-list');
+                companyLists.forEach(function(companyList) {
+                    var toggleBtn = companyList.querySelector('.select-deselect-companies-btn');
+                    var companyCheckboxes = companyList.querySelectorAll('input[type="checkbox"]');
+                    var allChecked = Array.from(companyCheckboxes).every(cb => cb.checked);
+                    toggleBtn.textContent = allChecked ? 'Odznacz Wszystkie' : 'Zaznacz Wszystkie';
+                });
+            }
+
+            // Funkcja do toggle panelu bocznego
+            function toggleSidebar(button) {
+                var sidebar = document.querySelector('.sidebar');
+                sidebar.classList.toggle('active');
+                var mainContent = document.querySelector('.main-content');
+                mainContent.classList.toggle('sidebar-active');
+            }
+
+            // Funkcje do togglowania list e-maili, firm i klientów
+            function toggleEmailsList(segmentIndex) {
+                var emailList = document.getElementById(`emails-${segmentIndex}`);
+                if (emailList) {
+                    emailList.classList.toggle('show');
+                }
+            }
+
+            function toggleCompanyList(possibilityIndex) {
+                var companyList = document.getElementById(`companies-${possibilityIndex}`);
+                if (companyList) {
+                    companyList.classList.toggle('show');
+                }
+            }
+
+            function toggleClientsList(groupIndex) {
+                var clientsList = document.getElementById(`clients-${groupIndex}`);
+                if (clientsList) {
+                    clientsList.classList.toggle('show');
+                }
+            }
+
+            // Funkcja walidująca zaznaczenia rodzic-dziecko
+            function validateParentChildSelection() {
+                // Sprawdzanie segmentów
+                const segmentCheckboxes = document.querySelectorAll('.segment-item input[type="checkbox"]');
+                for (const segment of segmentCheckboxes) {
+                    const segmentIndex = segment.id.split('-')[1];
+                    const emailList = document.getElementById(`emails-${segmentIndex}`);
+                    if (emailList) {
+                        const childEmails = emailList.querySelectorAll('input[type="checkbox"]:checked');
+                        // Jeśli są zaznaczone maile, a segment nie jest zaznaczony – błąd
+                        if (childEmails.length > 0 && !segment.checked) {
+                            showFlashMessage('error', 'Zaznacz etykiety (segmenty)!');
+                            return false;
+                        }
+                    }
+                }
+
+                // Sprawdzanie możliwości
+                const possibilityCheckboxes = document.querySelectorAll('.possibility-item input[type="checkbox"]');
+                for (const possibility of possibilityCheckboxes) {
+                    const possibilityIndex = possibility.id.split('-')[1];
+                    const companyList = document.getElementById(`companies-${possibilityIndex}`);
+                    if (companyList) {
+                        const childCompanies = companyList.querySelectorAll('input[type="checkbox"]:checked');
+                        // Jeśli są zaznaczone firmy, a możliwość nie jest zaznaczona – błąd
+                        if (childCompanies.length > 0 && !possibility.checked) {
+                            showFlashMessage('error', 'Zaznacz etykiety (możliwości)!');
+                            return false;
+                        }
+                    }
+                }
+
+                // Sprawdzanie potencjalnych klientów
+                const groupCheckboxes = document.querySelectorAll('.potential-client-group input[type="checkbox"]');
+                for (const group of groupCheckboxes) {
+                    const groupIndex = group.id.split('-')[2];
+                    const clientsList = document.getElementById(`clients-${groupIndex}`);
+                    if (clientsList) {
+                        const childClients = clientsList.querySelectorAll('input[type="checkbox"]:checked');
+                        // Jeśli są zaznaczeni klienci, a grupa nie jest zaznaczona – błąd
+                        if (childClients.length > 0 && !group.checked) {
+                            showFlashMessage('error', 'Zaznacz etykiety (potencjalni klienci)!');
+                            return false;
+                        }
+                    }
+                }
+
+                return true;
+            }
+
+            // Funkcja do obsługi kliknięć na imię i nazwisko użytkownika w notatkach
+            function attachUserNameClickListeners() {
+                document.querySelectorAll('.user-name').forEach(function(userNameSpan) {
+                    userNameSpan.style.cursor = 'pointer';
+                    userNameSpan.addEventListener('click', function() {
+                        const userName = this.textContent.trim();
+                        const userEmail = this.getAttribute('data-email');
+
+                        // Sprawdzenie, czy użytkownik jest już dodany
+                        const alreadySelected = Array.from(document.querySelectorAll('#selected-users .selected-item'))
+                            .some(item => item.getAttribute('data-email') === userEmail);
+
+                        if (!alreadySelected) {
+                            // Tworzenie elementu tagu użytkownika
+                            const userSpan = document.createElement('span');
+                            userSpan.className = 'selected-item';
+                            userSpan.setAttribute('data-email', userEmail);
+                            userSpan.textContent = userName;
+
+                            // Dodanie przycisku usuwania
+                            const removeBtn = document.createElement('span');
+                            removeBtn.className = 'remove-item';
+                            removeBtn.textContent = '×';
+                            removeBtn.addEventListener('click', function() {
+                                userSpan.remove();
+                            });
+                            userSpan.appendChild(removeBtn);
+
+                            // Dodanie ukrytego inputa do formularza
+                            const hiddenInput = document.createElement('input');
+                            hiddenInput.type = 'hidden';
+                            hiddenInput.name = 'selected_users';
+                            hiddenInput.value = userEmail;
+                            userSpan.appendChild(hiddenInput);
+
+                            // Dodanie tagu do kontenera
+                            document.getElementById('selected-users').appendChild(userSpan);
+                        }
+                    });
+                });
+            }
+        </script>
     </head>
     <body>
         <!-- Nagłówek -->
@@ -2711,23 +3681,33 @@ def index():
         <!-- Formularz główny -->
         <form id="main-form" class="main-form" enctype="multipart/form-data">
             <div class="content-wrapper">
-                <!-- Panel boczny (Segmenty, Możliwości, Pot. klienci) -->
+                <!-- Panel boczny -->
                 <div class="sidebar">
                     <div class="toggle-buttons-container">
+                        <!-- Przyciski toggle -->
                         <button type="button" class="toggle-segments-btn" onclick="toggleSegmentsList(this)">
                             <img src="{{ url_for('static', filename='hammer.png') }}" alt="Toggle Segments">
                         </button>
+
                         <button type="button" class="toggle-possibilities-btn" onclick="togglePossibilitiesList(this)">
                             <img src="{{ url_for('static', filename='greek_key.png') }}" alt="Toggle Possibilities">
                         </button>
+                        
+                        <!-- Zmiana obrazka na 'money.png' i zmiana etykiety -->
                         <button type="button" class="toggle-potential-clients-btn" onclick="togglePotentialClientsList(this)">
                             <img src="{{ url_for('static', filename='money.png') }}" alt="Toggle Potential Clients">
                         </button>
                     </div>
 
+                    <!-- Kontener segmentów -->
                     <div id="segments-container" class="segments-container">
+                        <!-- Przycisk Zaznacz/Odznacz Wszystkie Segmenty -->
                         <button type="button" id="select-all-segments-btn" class="yellow-btn" onclick="toggleSelectAllSegments(this)">Zaznacz wszystkie segmenty</button>
+
+                        <!-- Przycisk Rozwiń/Zwiń Wszystkie Segmenty -->
                         <button type="button" class="yellow-btn" onclick="toggleAllSegmentsExpandCollapse(this)">Rozwiń wszystkie segmenty</button>
+
+                        <!-- Lista segmentów i adresów e-mail -->
                         <ul class="segment-list">
                             {% for segment, counts in segments.items() %}
                                 {% set segment_index = loop.index %}
@@ -2738,7 +3718,9 @@ def index():
                                     </span>
                                 </li>
                                 <ul class="email-list" id="emails-{{ segment_index }}">
+                                    <!-- Przycisk Zaznacz/Odznacz Wszystkie Adresy w Tym Segmencie -->
                                     <button type="button" class="yellow-btn select-deselect-emails-btn" onclick="toggleSelectAllEmailsInSegment('emails-{{ segment_index }}')">Zaznacz Wszystkie</button>
+                                    
                                     {% set emails_companies_polski = get_email_company_pairs_for_segment(data, segment, "Polski") %}
                                     {% set emails_companies_zagraniczny = get_email_company_pairs_for_segment(data, segment, "Zagraniczny") %}
                                     {% for pair in emails_companies_polski %}
@@ -2758,9 +3740,15 @@ def index():
                         </ul>
                     </div>
 
+                    <!-- Kontener możliwości -->
                     <div id="possibilities-container" class="possibilities-container">
+                        <!-- Przycisk Zaznacz/Odznacz Wszystkie Możliwości -->
                         <button type="button" id="select-all-possibilities-btn" class="yellow-btn" onclick="toggleSelectAllPossibilities(this)">Zaznacz wszystkie możliwości</button>
+
+                        <!-- Przycisk Rozwiń/Zwiń Wszystkie Możliwości -->
                         <button type="button" class="yellow-btn" onclick="toggleAllPossibilitiesExpandCollapse(this)">Rozwiń wszystkie możliwości</button>
+
+                        <!-- Lista możliwości i firm -->
                         <ul class="possibility-list">
                             {% for possibility, companies in possibilities.items() %}
                                 {% set possibility_index = loop.index %}
@@ -2771,7 +3759,9 @@ def index():
                                     </span>
                                 </li>
                                 <ul class="company-list" id="companies-{{ possibility_index }}">
+                                    <!-- Przycisk Zaznacz/Odznacz Wszystkie Firmy w Tej Możliwości -->
                                     <button type="button" class="yellow-btn select-deselect-companies-btn" onclick="toggleSelectAllCompaniesInPossibility('companies-{{ possibility_index }}')">Zaznacz Wszystkie</button>
+                    
                                     {% for company in companies %}
                                         <li class="company-item">
                                             <input type="checkbox" name="include_emails" value="{{ company.email }}" id="company-{{ possibility_index }}-{{ loop.index }}">
@@ -2782,10 +3772,16 @@ def index():
                             {% endfor %}
                         </ul>
                     </div>
-
+                    
+                    <!-- Kontener potencjalnych klientów -->
                     <div id="potential-clients-container" class="potential-clients-container">
+                        <!-- Przycisk Zaznacz/Odznacz Wszystkich Potencjalnych Klientów -->
                         <button type="button" class="yellow-btn select-deselect-potential-clients-btn" onclick="toggleSelectAllPotentialClients(this)">Zaznacz wszystkich klientów</button>
+                        
+                        <!-- Przycisk Rozwiń/Zwiń Wszystkich Potencjalnych Klientów -->
                         <button type="button" class="yellow-btn" onclick="toggleAllPotentialClientsExpandCollapse(this)">Rozwiń wszystkich potencjalnych klientów</button>
+
+                        <!-- Lista potencjalnych klientów -->
                         <ul class="potential-clients-list">
                             {% for group, clients in potential_clients.items() %}
                                 {% set group_index = loop.index %}
@@ -2798,6 +3794,7 @@ def index():
                                 <ul class="clients-list" id="clients-{{ group_index }}">
                                     {% for client in clients %}
                                         <li class="client-item">
+                                            <!-- Wyświetlanie tylko nazwy firmy i języka -->
                                             <input type="checkbox" name="include_potential_emails" value="{{ client.email }}" id="client-{{ group_index }}-{{ loop.index }}">
                                             <label for="client-{{ group_index }}-{{ loop.index }}">{{ client.company }} ({{ client.language }})</label>
                                         </li>
@@ -2808,7 +3805,7 @@ def index():
                     </div>
                 </div>
 
-                <!-- Główna treść -->
+                <!-- Główna treść strony -->
                 <div class="main-content">
                     <div class="form-container">
                         <h1>e-Communicator</h1>
@@ -2852,7 +3849,7 @@ def index():
             </div>
         </form>
 
-        <!-- Sekcja notatek -->
+        <!-- Sekcja notatek i modale -->
         <div class="note-section">
             <h3>Notatki</h3>
             <form id="add-note-form">
@@ -2906,799 +3903,6 @@ def index():
         <footer class="footer">
             © DigitDrago
         </footer>
-
-        <!-- ==================== PEŁEN SKRYPT JS ===================== -->
-        <script>
-            // -----------------------------------------------------------------------------------
-            // ----------------------------- DOMContentLoaded -------------------------------------
-            // -----------------------------------------------------------------------------------
-            document.addEventListener('DOMContentLoaded', function() {
-                // -------------------------------- CKEDITOR --------------------------------
-                ClassicEditor
-                    .create(document.querySelector('#message-editor'), {
-                        toolbar: ['bold', 'italic', 'underline', 'bulletedList', 'numberedList', 'link']
-                    })
-                    .then(editor => {
-                        window.editor = editor;
-                        console.log('CKEditor został zainicjalizowany.');
-
-                        const form = document.getElementById('main-form');
-                        form.addEventListener('submit', (event) => {
-                            event.preventDefault();
-
-                            // Pobieranie treści edytora
-                            const data = editor.getData();
-                            document.querySelector('#message').value = data;
-
-                            // Sprawdzanie czy pole wiadomości jest puste
-                            const tempElement = document.createElement('div');
-                            tempElement.innerHTML = data;
-                            const textContent = tempElement.textContent || tempElement.innerText || '';
-                            if (textContent.trim() === '') {
-                                showFlashMessage('error', 'Pole "Wiadomość" nie może być puste.');
-                                editor.editing.view.focus();
-                                return;
-                            }
-
-                            // Walidacja zaznaczeń segmentów, możliwości i potencjalnych klientów
-                            if (!validateParentChildSelection()) {
-                                return; // Komunikat błędu jest w środku validateParentChildSelection
-                            }
-
-                            showSpinner('spinner');
-                            // Tworzymy FormData ręcznie (poza attachments, bo obsłużymy je osobno)
-                            const newFormData = new FormData();
-                            const originalFormData = new FormData(form);
-
-                            for (let [name, value] of originalFormData.entries()) {
-                                if (name !== 'attachments') {
-                                    newFormData.append(name, value);
-                                }
-                            }
-
-                            // Doklejamy wszystkie pliki z attachmentsArray
-                            attachmentsArray.forEach(file => {
-                                newFormData.append('attachments', file);
-                            });
-
-                            // Pobieranie zaznaczonych adresów e-mail
-                            const emailCheckboxes = document.querySelectorAll('input[name="include_emails"]:checked, input[name="include_potential_emails"]:checked');
-                            const emails = Array.from(emailCheckboxes).map(cb => cb.value);
-
-                            // Pobieranie wybranych użytkowników
-                            const selectedUserEmails = Array.from(document.querySelectorAll('input[name="selected_users"]'))
-                                .map(input => input.value);
-
-                            // Łączenie odbiorców
-                            const allRecipients = emails.concat(selectedUserEmails);
-                            newFormData.set('recipients', allRecipients.join(','));
-
-                            fetch('{{ url_for("send_message_ajax") }}', {
-                                method: 'POST',
-                                body: newFormData,
-                                credentials: 'same-origin'
-                            })
-                            .then(response => response.json())
-                            .then(data => {
-                                hideSpinner('spinner');
-                                if (data.success) {
-                                    showFlashMessage('success', data.message);
-                                    form.reset();
-                                    attachmentsArray = [];
-                                    renderAttachmentsPreview();
-                                    editor.setData('');
-                                    updateSelectedItems();
-                                } else {
-                                    showFlashMessage('error', data.message);
-                                }
-                            })
-                            .catch(error => {
-                                console.error('Błąd:', error);
-                                hideSpinner('spinner');
-                                showFlashMessage('error', 'Wystąpił błąd podczas wysyłania wiadomości.');
-                            });
-                        });
-                    })
-                    .catch(error => {
-                        console.error('Błąd inicjalizacji CKEditor:', error);
-                    });
-
-                // ----------------- ATTACHMENTS ------------------
-                let attachmentsArray = [];
-                const maxAttachments = {{ max_attachments }};  // Pobierane z configu
-                const attachmentsInput = document.getElementById('attachments');
-                const dropzone = document.getElementById('dropzone');
-                const attachmentsPreview = document.getElementById('attachments-preview');
-                const attachmentsCount = document.getElementById('attachments-count');
-
-                function renderAttachmentsPreview() {
-                    attachmentsPreview.innerHTML = '';
-                    attachmentsCount.textContent = 'Załączników: ' + attachmentsArray.length + '/' + maxAttachments;
-                    attachmentsArray.forEach((file, index) => {
-                        const item = document.createElement('div');
-                        item.classList.add('attachment-item');
-
-                        const fileNameSpan = document.createElement('span');
-                        fileNameSpan.textContent = file.name;
-                        item.appendChild(fileNameSpan);
-
-                        const removeBtn = document.createElement('button');
-                        removeBtn.innerHTML = '&times;';
-                        removeBtn.addEventListener('click', () => {
-                            attachmentsArray.splice(index, 1);
-                            renderAttachmentsPreview();
-                        });
-                        item.appendChild(removeBtn);
-
-                        attachmentsPreview.appendChild(item);
-                    });
-                }
-
-                function handleFilesSelected(files) {
-                    for (let file of files) {
-                        // sprawdzamy, czy taki plik już jest (nazwa + rozmiar)
-                        const isDuplicate = attachmentsArray.some(a => a.name === file.name && a.size === file.size);
-                        if (!isDuplicate) {
-                            if (attachmentsArray.length < maxAttachments) {
-                                attachmentsArray.push(file);
-                            } else {
-                                showFlashMessage('error', 'Możesz dodać maksymalnie ' + maxAttachments + ' załączników.');
-                                break;
-                            }
-                        }
-                    }
-                    renderAttachmentsPreview();
-                }
-
-                dropzone.addEventListener('click', () => {
-                    attachmentsInput.click();
-                });
-
-                attachmentsInput.addEventListener('change', function() {
-                    handleFilesSelected(this.files);
-                    // czyścimy input – umożliwia ponowne dodanie usuniętych plików
-                    this.value = '';
-                });
-
-                dropzone.addEventListener('dragover', (e) => {
-                    e.preventDefault();
-                    dropzone.classList.add('dragover');
-                });
-                dropzone.addEventListener('dragleave', () => {
-                    dropzone.classList.remove('dragover');
-                });
-                dropzone.addEventListener('drop', (e) => {
-                    e.preventDefault();
-                    dropzone.classList.remove('dragover');
-                    handleFilesSelected(e.dataTransfer.files);
-                });
-
-                // ----------------- RESZTA KODU (NOTATKI, BOCZNY PANEL itd.) -----------------
-
-                function showFlashMessage(category, message) {
-                    const flashMessage = document.querySelector('.flash-message.' + category);
-                    if (flashMessage) {
-                        flashMessage.textContent = message;
-                        flashMessage.classList.add('show');
-                        setTimeout(() => {
-                            flashMessage.classList.remove('show');
-                        }, 5000);
-                    } else {
-                        alert(category.toUpperCase() + ': ' + message);
-                    }
-                }
-                function showSpinner(spinnerId) {
-                    const spinner = document.getElementById(spinnerId);
-                    if (spinner) {
-                        spinner.style.display = 'inline-block';
-                    }
-                }
-                function hideSpinner(spinnerId) {
-                    const spinner = document.getElementById(spinnerId);
-                    if (spinner) {
-                        spinner.style.display = 'none';
-                    }
-                }
-
-                // Cały kod do notatek (edit, delete, add), bocznego panelu (updateSelectedItems, itp.)
-                // Poniżej wklejam Twoje funkcje tak, jak były:
-
-                // ---------------------------------------------------------------------
-                // 1) Toggling bocznego panelu
-                function toggleSidebar(button) {
-                    var sidebar = document.querySelector('.sidebar');
-                    sidebar.classList.toggle('active');
-                    var mainContent = document.querySelector('.main-content');
-                    mainContent.classList.toggle('sidebar-active');
-                }
-
-                // 2) Segmenty / możliwości / klienci – otwieranie, rozwijanie, itp.
-                function toggleSegmentsList(button) {
-                    var segmentsContainer = document.getElementById('segments-container');
-                    var img = button.querySelector('img');
-                    segmentsContainer.classList.toggle('show');
-                    img.classList.toggle('rotate');
-                }
-                function togglePossibilitiesList(button) {
-                    var possibilitiesContainer = document.getElementById('possibilities-container');
-                    var img = button.querySelector('img');
-                    possibilitiesContainer.classList.toggle('show');
-                    img.classList.toggle('rotate');
-                }
-                function togglePotentialClientsList(button) {
-                    var potentialClientsContainer = document.getElementById('potential-clients-container');
-                    var img = button.querySelector('img');
-                    potentialClientsContainer.classList.toggle('show');
-                    img.classList.toggle('rotate');
-                }
-                function toggleAllSegmentsExpandCollapse(button) {
-                    var emailLists = document.querySelectorAll('.email-list');
-                    var allExpanded = Array.from(emailLists).every(list => list.classList.contains('show'));
-                    emailLists.forEach(list => {
-                        if (allExpanded) {
-                            list.classList.remove('show');
-                        } else {
-                            list.classList.add('show');
-                        }
-                    });
-                    button.textContent = allExpanded ? 'Rozwiń wszystkie segmenty' : 'Zwiń wszystkie segmenty';
-                }
-                function toggleAllPossibilitiesExpandCollapse(button) {
-                    var companyLists = document.querySelectorAll('.company-list');
-                    var allExpanded = Array.from(companyLists).every(list => list.classList.contains('show'));
-                    companyLists.forEach(list => {
-                        if (allExpanded) {
-                            list.classList.remove('show');
-                        } else {
-                            list.classList.add('show');
-                        }
-                    });
-                    button.textContent = allExpanded ? 'Rozwiń wszystkie możliwości' : 'Zwiń wszystkie możliwości';
-                }
-                function toggleAllPotentialClientsExpandCollapse(button) {
-                    var clientLists = document.querySelectorAll('.clients-list');
-                    var allExpanded = Array.from(clientLists).every(list => list.classList.contains('show'));
-                    clientLists.forEach(list => {
-                        if (allExpanded) {
-                            list.classList.remove('show');
-                        } else {
-                            list.classList.add('show');
-                        }
-                    });
-                    button.textContent = allExpanded ? 'Rozwiń wszystkich potencjalnych klientów' : 'Zwiń wszystkich potencjalnych klientów';
-                }
-
-                // 3) Zaznaczanie / odznaczanie segmentów, możliwości, klientów
-                function toggleSelectAllSegments(button) {
-                    var segmentCheckboxes = document.querySelectorAll('.segment-item input[type="checkbox"]');
-                    var allChecked = Array.from(segmentCheckboxes).every(cb => cb.checked);
-                    segmentCheckboxes.forEach(function(checkbox) {
-                        checkbox.checked = !allChecked;
-                        handleSegmentChange(checkbox);
-                    });
-                    button.textContent = !allChecked ? 'Odznacz wszystkie segmenty' : 'Zaznacz wszystkie segmenty';
-                    updateSelectedItems();
-                }
-                function toggleSelectAllPossibilities(button) {
-                    var possibilityCheckboxes = document.querySelectorAll('.possibility-item input[type="checkbox"]');
-                    var allChecked = Array.from(possibilityCheckboxes).every(cb => cb.checked);
-                    possibilityCheckboxes.forEach(function(checkbox) {
-                        checkbox.checked = !allChecked;
-                        handlePossibilityChange(checkbox);
-                    });
-                    button.textContent = !allChecked ? 'Odznacz wszystkie możliwości' : 'Zaznacz wszystkie możliwości';
-                    updateSelectedItems();
-                }
-                function toggleSelectAllPotentialClients(button) {
-                    var groupCheckboxes = document.querySelectorAll('.potential-client-group input[type="checkbox"]');
-                    var clientCheckboxes = document.querySelectorAll('.potential-clients-list .client-item input[type="checkbox"]');
-                    var allChecked = Array.from(groupCheckboxes).every(cb => cb.checked) && Array.from(clientCheckboxes).every(cb => cb.checked);
-                    groupCheckboxes.forEach(function(groupCheckbox) {
-                        groupCheckbox.checked = !allChecked;
-                    });
-                    clientCheckboxes.forEach(function(clientCheckbox) {
-                        clientCheckbox.checked = !allChecked;
-                    });
-                    button.textContent = !allChecked ? 'Odznacz wszystkich klientów' : 'Zaznacz wszystkich klientów';
-                    updateSelectedItems();
-                }
-
-                // 4) Obsługa checkboksów dzieci / rodzic
-                function handleSegmentChange(segmentCheckbox) {
-                    toggleEmailsInSegment(segmentCheckbox);
-                    updateSelectedItems();
-                }
-                function handlePossibilityChange(possibilityCheckbox) {
-                    toggleCompaniesInPossibility(possibilityCheckbox);
-                    updateSelectedItems();
-                }
-                function handlePotentialClientGroupChange(groupCheckbox) {
-                    toggleClientsInGroup(groupCheckbox);
-                    updateSelectedItems();
-                }
-                function toggleEmailsInSegment(segmentCheckbox) {
-                    var segmentIndex = segmentCheckbox.id.split('-')[1];
-                    var emailList = document.getElementById('emails-' + segmentIndex);
-                    if (emailList) {
-                        var emailCheckboxes = emailList.querySelectorAll('input[type="checkbox"]');
-                        emailCheckboxes.forEach(function(emailCheckbox) {
-                            emailCheckbox.checked = segmentCheckbox.checked;
-                        });
-                    }
-                }
-                function toggleCompaniesInPossibility(possibilityCheckbox) {
-                    var possibilityIndex = possibilityCheckbox.id.split('-')[1];
-                    var companyList = document.getElementById('companies-' + possibilityIndex);
-                    if (companyList) {
-                        var companyCheckboxes = companyList.querySelectorAll('input[type="checkbox"]');
-                        companyCheckboxes.forEach(function(companyCheckbox) {
-                            companyCheckbox.checked = possibilityCheckbox.checked;
-                        });
-                    }
-                }
-                function toggleClientsInGroup(groupCheckbox) {
-                    var groupIndex = groupCheckbox.id.split('-')[2];
-                    var clientsList = document.getElementById('clients-' + groupIndex);
-                    if (clientsList) {
-                        var clientCheckboxes = clientsList.querySelectorAll('input[type="checkbox"]');
-                        clientCheckboxes.forEach(function(clientCheckbox) {
-                            clientCheckbox.checked = groupCheckbox.checked;
-                        });
-                    }
-                }
-
-                // 5) Walidacja parent-child
-                function validateParentChildSelection() {
-                    // Segmenty
-                    const segmentCheckboxes = document.querySelectorAll('.segment-item input[type="checkbox"]');
-                    for (const segment of segmentCheckboxes) {
-                        const segmentIndex = segment.id.split('-')[1];
-                        const emailList = document.getElementById('emails-' + segmentIndex);
-                        if (emailList) {
-                            const childEmails = emailList.querySelectorAll('input[type="checkbox"]:checked');
-                            if (childEmails.length > 0 && !segment.checked) {
-                                showFlashMessage('error', 'Zaznacz etykiety (segmenty)!');
-                                return false;
-                            }
-                        }
-                    }
-                    // Możliwości
-                    const possibilityCheckboxes = document.querySelectorAll('.possibility-item input[type="checkbox"]');
-                    for (const possibility of possibilityCheckboxes) {
-                        const possibilityIndex = possibility.id.split('-')[1];
-                        const companyList = document.getElementById('companies-' + possibilityIndex);
-                        if (companyList) {
-                            const childCompanies = companyList.querySelectorAll('input[type="checkbox"]:checked');
-                            if (childCompanies.length > 0 && !possibility.checked) {
-                                showFlashMessage('error', 'Zaznacz etykiety (możliwości)!');
-                                return false;
-                            }
-                        }
-                    }
-                    // Potencjalni klienci
-                    const groupCheckboxes = document.querySelectorAll('.potential-client-group input[type="checkbox"]');
-                    for (const group of groupCheckboxes) {
-                        const groupIndex = group.id.split('-')[2];
-                        const clientsList = document.getElementById('clients-' + groupIndex);
-                        if (clientsList) {
-                            const childClients = clientsList.querySelectorAll('input[type="checkbox"]:checked');
-                            if (childClients.length > 0 && !group.checked) {
-                                showFlashMessage('error', 'Zaznacz etykiety (potencjalni klienci)!');
-                                return false;
-                            }
-                        }
-                    }
-                    return true;
-                }
-
-                // 6) updateSelectedItems
-                function updateSelectedItems() {
-                    // Segmenty
-                    const selectedSegments = Array.from(document.querySelectorAll('.segment-item input[type="checkbox"]:checked'))
-                        .map(cb => cb.value);
-                    const selectedSegmentsDiv = document.getElementById('selected-segments');
-                    if (selectedSegmentsDiv) selectedSegmentsDiv.innerHTML = '';
-
-                    selectedSegments.forEach(segment => {
-                        const segmentSpan = document.createElement('span');
-                        segmentSpan.className = 'selected-item';
-                        segmentSpan.textContent = segment;
-
-                        const removeSpan = document.createElement('span');
-                        removeSpan.className = 'remove-item';
-                        removeSpan.textContent = '×';
-                        removeSpan.setAttribute('data-item', segment);
-                        removeSpan.addEventListener('click', function() {
-                            const itemToRemove = this.getAttribute('data-item');
-                            const checkbox = Array.from(document.querySelectorAll('.segment-item input[type="checkbox"]'))
-                                .find(cb => cb.value === itemToRemove);
-                            if (checkbox) {
-                                checkbox.checked = false;
-                                const segmentIndex = checkbox.id.split('-')[1];
-                                const emailList = document.getElementById('emails-' + segmentIndex);
-                                if (emailList) {
-                                    const emailCheckboxes = emailList.querySelectorAll('input[type="checkbox"]');
-                                    emailCheckboxes.forEach(emailCb => { emailCb.checked = false; });
-                                }
-                            }
-                            this.parentElement.remove();
-                            updateSelectedItems();
-                            updateSelectAllButtons();
-                        });
-                        segmentSpan.appendChild(removeSpan);
-                        if (selectedSegmentsDiv) selectedSegmentsDiv.appendChild(segmentSpan);
-                    });
-
-                    // Możliwości
-                    const selectedPossibilities = Array.from(document.querySelectorAll('.possibility-item input[type="checkbox"]:checked'))
-                        .map(cb => cb.value);
-                    const selectedPossibilitiesDiv = document.getElementById('selected-possibilities');
-                    if (selectedPossibilitiesDiv) selectedPossibilitiesDiv.innerHTML = '';
-
-                    selectedPossibilities.forEach(possibility => {
-                        const possibilitySpan = document.createElement('span');
-                        possibilitySpan.className = 'selected-item';
-                        possibilitySpan.textContent = possibility;
-
-                        const removeSpan = document.createElement('span');
-                        removeSpan.className = 'remove-item';
-                        removeSpan.textContent = '×';
-                        removeSpan.setAttribute('data-item', possibility);
-                        removeSpan.addEventListener('click', function() {
-                            const itemToRemove = this.getAttribute('data-item');
-                            const checkbox = Array.from(document.querySelectorAll('.possibility-item input[type="checkbox"]'))
-                                .find(cb => cb.value === itemToRemove);
-                            if (checkbox) {
-                                checkbox.checked = false;
-                                const possibilityIndex = checkbox.id.split('-')[1];
-                                const companyList = document.getElementById('companies-' + possibilityIndex);
-                                if (companyList) {
-                                    const companyCheckboxes = companyList.querySelectorAll('input[type="checkbox"]');
-                                    companyCheckboxes.forEach(companyCb => { companyCb.checked = false; });
-                                }
-                            }
-                            this.parentElement.remove();
-                            updateSelectedItems();
-                        });
-                        possibilitySpan.appendChild(removeSpan);
-                        if (selectedPossibilitiesDiv) selectedPossibilitiesDiv.appendChild(possibilitySpan);
-                    });
-
-                    // Potencjalni Klienci
-                    const selectedPotentialClients = Array.from(document.querySelectorAll('.potential-clients-list .client-item input[type="checkbox"]:checked'))
-                        .map(cb => {
-                            const label = document.querySelector('label[for="' + cb.id + '"]');
-                            if (label) {
-                                const text = label.textContent;
-                                const companyName = text.split(' (')[0];
-                                return { companyName };
-                            }
-                            return { companyName: cb.value };
-                        });
-                    const selectedPotentialClientsDiv = document.getElementById('selected-potential-clients');
-                    if (selectedPotentialClientsDiv) selectedPotentialClientsDiv.innerHTML = '';
-
-                    selectedPotentialClients.forEach(client => {
-                        const clientSpan = document.createElement('span');
-                        clientSpan.className = 'selected-item';
-                        clientSpan.textContent = client.companyName;
-
-                        const removeSpan = document.createElement('span');
-                        removeSpan.className = 'remove-item';
-                        removeSpan.textContent = '×';
-                        removeSpan.setAttribute('data-company', client.companyName);
-                        removeSpan.addEventListener('click', function() {
-                            const companyToRemove = this.getAttribute('data-company');
-                            const checkbox = Array.from(document.querySelectorAll('.potential-clients-list .client-item input[type="checkbox"]'))
-                                .find(cb => {
-                                    const label = document.querySelector('label[for="' + cb.id + '"]');
-                                    return label && label.textContent.split(' (')[0] === companyToRemove;
-                                });
-                            if (checkbox) {
-                                checkbox.checked = false;
-                                const groupIndex = checkbox.id.split('-')[2];
-                                const groupCheckbox = document.getElementById('potential-group-' + groupIndex);
-                                const siblingCheckboxes = document.querySelectorAll('#clients-' + groupIndex + ' .client-item input[type="checkbox"]');
-                                const allUnchecked = Array.from(siblingCheckboxes).every(cb => !cb.checked);
-                                if (allUnchecked && groupCheckbox) {
-                                    groupCheckbox.checked = false;
-                                }
-                            }
-                            this.parentElement.remove();
-                            updateSelectedItems();
-                        });
-                        clientSpan.appendChild(removeSpan);
-                        if (selectedPotentialClientsDiv) selectedPotentialClientsDiv.appendChild(clientSpan);
-                    });
-
-                    // Wybrani użytkownicy
-                    const selectedUsersDiv = document.getElementById('selected-users');
-                    if (selectedUsersDiv) {
-                        selectedUsersDiv.innerHTML = '';
-                    }
-
-                    updateSelectAllButtons();
-                }
-
-                function updateSelectAllButtons() {
-                    var selectAllSegmentsBtn = document.getElementById('select-all-segments-btn');
-                    if (selectAllSegmentsBtn) {
-                        var segmentCheckboxes = document.querySelectorAll('.segment-item input[type="checkbox"]');
-                        var allSegmentsChecked = Array.from(segmentCheckboxes).every(cb => cb.checked);
-                        selectAllSegmentsBtn.textContent = allSegmentsChecked ? 'Odznacz wszystkie segmenty' : 'Zaznacz wszystkie segmenty';
-                    }
-                    var selectAllPossibilitiesBtn = document.getElementById('select-all-possibilities-btn');
-                    if (selectAllPossibilitiesBtn) {
-                        var possibilityCheckboxes = document.querySelectorAll('.possibility-item input[type="checkbox"]');
-                        var allPossibilitiesChecked = Array.from(possibilityCheckboxes).every(cb => cb.checked);
-                        selectAllPossibilitiesBtn.textContent = allPossibilitiesChecked ? 'Odznacz wszystkie możliwości' : 'Zaznacz wszystkie możliwości';
-                    }
-                    var selectAllPotentialClientsBtn = document.querySelector('.select-deselect-potential-clients-btn');
-                    if (selectAllPotentialClientsBtn) {
-                        var groupCheckboxes = document.querySelectorAll('.potential-client-group input[type="checkbox"]');
-                        var clientCheckboxes = document.querySelectorAll('.potential-clients-list .client-item input[type="checkbox"]');
-                        var allPotentialClientsChecked = Array.from(groupCheckboxes).every(cb => cb.checked) && Array.from(clientCheckboxes).every(cb => cb.checked);
-                        selectAllPotentialClientsBtn.textContent = allPotentialClientsChecked ? 'Odznacz wszystkich klientów' : 'Zaznacz wszystkich klientów';
-                    }
-                }
-
-                // 7) Obsługa notatek
-                document.addEventListener('click', function(event) {
-                    if (event.target && event.target.classList.contains('edit-btn')) {
-                        const noteId = event.target.getAttribute('data-note-id');
-                        const noteContent = event.target.getAttribute('data-note-content');
-                        openEditModal(noteId, noteContent);
-                    } else if (event.target && event.target.classList.contains('transfer-note-btn')) {
-                        const noteContent = event.target.getAttribute('data-note-content');
-                        transferToMessageField(noteContent);
-                        showFlashMessage('success', 'Treść notatki została przeniesiona do pola "Wiadomość".');
-                    }
-                });
-
-                function transferToMessageField(content) {
-                    if (window.editor) {
-                        window.editor.setData(content);
-                    } else {
-                        document.getElementById('message').value = content;
-                    }
-                }
-                function openEditModal(noteId, currentContent) {
-                    const modal = document.getElementById('editModal');
-                    const editForm = document.getElementById('edit-note-form');
-                    const editInput = document.getElementById('edit-note-input');
-                    const closeModalBtn = document.getElementById('closeEditModal');
-
-                    editInput.value = currentContent;
-                    editForm.setAttribute('data-note-id', noteId);
-
-                    modal.style.display = 'block';
-
-                    closeModalBtn.onclick = function() {
-                        closeEditModal();
-                    };
-                    window.onclick = function(event) {
-                        if (event.target == modal) {
-                            closeEditModal();
-                        }
-                    };
-                }
-                function closeEditModal() {
-                    const modal = document.getElementById('editModal');
-                    modal.style.display = 'none';
-                }
-                function editNote(noteId, newContent) {
-                    showSpinner('edit-spinner');
-                    fetch('{{ url_for("edit_note_ajax") }}', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ note_id: noteId, new_content: newContent }),
-                        credentials: 'same-origin'
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        hideSpinner('edit-spinner');
-                        if (data.success) {
-                            showFlashMessage('success', data.message);
-                            const noteSpan = document.querySelector('.note[data-note-id="' + noteId + '"] .note-content');
-                            if (noteSpan) noteSpan.textContent = data.note.content;
-                            const editBtn = document.querySelector('.note[data-note-id="' + noteId + '"] .edit-btn');
-                            if (editBtn) editBtn.setAttribute('data-note-content', data.note.content);
-                            const transferBtn = document.querySelector('.note[data-note-id="' + noteId + '"] .transfer-note-btn');
-                            if (transferBtn) transferBtn.setAttribute('data-note-content', data.note.content);
-                        } else {
-                            showFlashMessage('error', data.message);
-                        }
-                        closeEditModal();
-                    })
-                    .catch(error => {
-                        console.error('Błąd podczas edytowania notatki:', error);
-                        hideSpinner('edit-spinner');
-                        showFlashMessage('error', 'Wystąpił błąd podczas edytowania notatki.');
-                    });
-                }
-                document.addEventListener('submit', function(event) {
-                    if (event.target && event.target.id === 'edit-note-form') {
-                        event.preventDefault();
-                        const form = event.target;
-                        const noteId = form.getAttribute('data-note-id');
-                        const newContent = document.getElementById('edit-note-input').value.trim();
-                        if (newContent === '') {
-                            showFlashMessage('error', 'Nowa treść notatki nie może być pusta.');
-                            return;
-                        }
-                        editNote(noteId, newContent);
-                    }
-                });
-
-                // Usuwanie notatek
-                document.addEventListener('submit', function(event) {
-                    if (event.target && event.target.classList.contains('delete-note-form')) {
-                        event.preventDefault();
-                        const noteId = event.target.getAttribute('data-note-id');
-                        const spinnerId = 'note-spinner-' + noteId;
-                        showSpinner(spinnerId);
-                        fetch('{{ url_for("delete_note_ajax") }}', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ note_id: noteId }),
-                            credentials: 'same-origin'
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            hideSpinner(spinnerId);
-                            if (data.success) {
-                                showFlashMessage('success', data.message);
-                                updateNotesList(data.notes);
-                                updateSelectedItems();
-                            } else {
-                                showFlashMessage('error', data.message);
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Błąd podczas usuwania notatki:', error);
-                            hideSpinner(spinnerId);
-                            showFlashMessage('error', 'Wystąpił błąd podczas usuwania notatki.');
-                        });
-                    }
-                });
-                function updateNotesList(notes) {
-                    const notesList = document.querySelector('.note-section ul');
-                    notesList.innerHTML = '';
-                    notes.forEach(note => {
-                        const li = document.createElement('li');
-                        li.className = 'note';
-                        li.setAttribute('data-note-id', note.id);
-                        li.innerHTML = `
-                            <div class="note-content">${escapeHtml(note.content)}</div>
-                            <div class="note-footer">
-                                <div class="note-actions">
-                                    <button type="button" class="transfer-note-btn" data-note-content="${escapeHtml(note.content)}">Transfer</button>
-                                    <button type="button" class="edit-btn" data-note-id="${note.id}" data-note-content="${escapeHtml(note.content)}">Edytuj</button>
-                                    <form class="delete-note-form" data-note-id="${note.id}">
-                                        <button type="submit" class="delete-btn">Usuń</button>
-                                        <div class="spinner" id="note-spinner-${note.id}" style="display: none;"></div>
-                                    </form>
-                                </div>
-                                <span class="user-name" style="background-color: ${note.user.color};" data-email="${escapeHtml(note.user.email)}">
-                                    ${escapeHtml(note.user.first_name)} ${escapeHtml(note.user.last_name)}
-                                </span>
-                            </div>
-                        `;
-                        notesList.appendChild(li);
-                    });
-                    attachUserNameClickListeners();
-                }
-                function escapeHtml(text) {
-                    var map = {
-                        '&': '&amp;',
-                        '<': '&lt;',
-                        '>': '&gt;',
-                        '"': '&quot;',
-                        "'": '&#039;'
-                    };
-                    return text.replace(/[&<>"']/g, function(m) { return map[m]; });
-                }
-                function attachUserNameClickListeners() {
-                    document.querySelectorAll('.user-name').forEach(function(userNameSpan) {
-                        userNameSpan.style.cursor = 'pointer';
-                        userNameSpan.addEventListener('click', function() {
-                            const userName = this.textContent.trim();
-                            const userEmail = this.getAttribute('data-email');
-                            const alreadySelected = Array.from(document.querySelectorAll('#selected-users .selected-item'))
-                                .some(item => item.getAttribute('data-email') === userEmail);
-                            if (!alreadySelected) {
-                                const userSpan = document.createElement('span');
-                                userSpan.className = 'selected-item';
-                                userSpan.setAttribute('data-email', userEmail);
-                                userSpan.textContent = userName;
-
-                                const removeBtn = document.createElement('span');
-                                removeBtn.className = 'remove-item';
-                                removeBtn.textContent = '×';
-                                removeBtn.addEventListener('click', function() {
-                                    userSpan.remove();
-                                });
-                                userSpan.appendChild(removeBtn);
-
-                                const hiddenInput = document.createElement('input');
-                                hiddenInput.type = 'hidden';
-                                hiddenInput.name = 'selected_users';
-                                hiddenInput.value = userEmail;
-                                userSpan.appendChild(hiddenInput);
-
-                                document.getElementById('selected-users').appendChild(userSpan);
-                            }
-                        });
-                    });
-                }
-
-                // Dodawanie notatek
-                const addNoteForm = document.getElementById('add-note-form');
-                addNoteForm.addEventListener('submit', function(event) {
-                    event.preventDefault();
-                    const noteInput = this.querySelector('input[name="note"]');
-                    const noteContent = noteInput.value.trim();
-                    if (noteContent === '') {
-                        showFlashMessage('error', 'Nie można dodać pustej notatki.');
-                        return;
-                    }
-                    showSpinner('note-spinner');
-                    fetch('{{ url_for("add_note_ajax") }}', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ note: noteContent }),
-                        credentials: 'same-origin'
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        hideSpinner('note-spinner');
-                        if (data.success) {
-                            showFlashMessage('success', data.message);
-                            updateNotesList(data.notes);
-                            noteInput.value = '';
-                        } else {
-                            showFlashMessage('error', data.message);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Błąd:', error);
-                        hideSpinner('note-spinner');
-                        showFlashMessage('error', 'Wystąpił błąd podczas dodawania notatki.');
-                    });
-                });
-
-                // Usuwanie wszystkich notatek
-                const deleteAllNotesForm = document.getElementById('delete-all-notes-form');
-                if (deleteAllNotesForm) {
-                    deleteAllNotesForm.addEventListener('submit', function(event) {
-                        event.preventDefault();
-                        showSpinner('delete-all-spinner');
-                        fetch('{{ url_for("delete_all_notes_ajax") }}', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({}),
-                            credentials: 'same-origin'
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            hideSpinner('delete-all-spinner');
-                            if (data.success) {
-                                showFlashMessage('success', data.message);
-                                updateNotesList(data.notes);
-                                updateSelectedItems();
-                            } else {
-                                showFlashMessage('error', data.message);
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Błąd podczas usuwania notatek:', error);
-                            hideSpinner('delete-all-spinner');
-                            showFlashMessage('error', 'Wystąpił błąd podczas usuwania notatek.');
-                        });
-                    });
-                }
-            });
-        </script>
     </body>
     </html>
     '''
@@ -3714,6 +3918,8 @@ def index():
         data=data,
         max_attachments=app.config['MAX_ATTACHMENTS']
     )
+
+
 
 
 

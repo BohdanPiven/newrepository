@@ -259,7 +259,6 @@ EMAIL_SIGNATURE_TEMPLATE = """
 </table>
 """
 
-
 # Przykładowa funkcja pobierająca dane z Google Sheet (jeśli potrzebne)
 def get_data_from_sheet():
     credentials_b64 = os.getenv('GOOGLE_CREDENTIALS_BASE64')
@@ -276,14 +275,19 @@ def get_data_from_sheet():
     
     result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range=RANGE_NAME).execute()
     data = result.get('values', [])
-    
+
     # Uzupełnianie brakujących kolumn do 50
     for i, row in enumerate(data):
         if len(row) < 50:
             row.extend([''] * (50 - len(row)))
         print(f"Wiersz {i+1} ma {len(row)} kolumn")
+
+    # Pomijamy pierwszy wiersz (nagłówek), aby zignorować m.in. komórki Z1..AH1
+    if data:
+        data = data[1:]
     
     return data
+
 
 # Funkcja zwracająca listę segmentów
 def get_segments():

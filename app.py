@@ -487,14 +487,42 @@ def send_email(to_email, subject, body, user, attachments=None):
         )
 
         # Budowa treści z jeszcze mniejszym odstępem między wierszami
-        # Ustawienie line-height na 1.0 lub niższy, aby skrócić odstępy
+        # Ustawienie line-height na 0.9 i usunięcie marginesów dla treści
+        # Resetowanie marginesów dla p i innych tagów wewnątrz message-body
         body_with_signature = f'''
-        <div style="font-family: Calibri, sans-serif; font-size: 11pt; line-height: 1.0; margin: 0;">
-            {body}
-        </div>
-        <div class="signature" style="font-family: Calibri, sans-serif; font-size: 11pt; line-height: normal; margin-top: 20px;">
-            {signature}
-        </div>
+        <html>
+        <head>
+            <style>
+                .message-body {{
+                    font-family: Calibri, sans-serif;
+                    font-size: 11pt;
+                    line-height: 0.9; /* Dalsze skrócenie odstępów */
+                    margin: 0;
+                }}
+                .message-body p {{
+                    margin: 0; /* Resetowanie marginesów paragrafów */
+                    line-height: 0.9; /* Dalsze skrócenie odstępów */
+                }}
+                .message-body br {{
+                    line-height: 0.9; /* Dalsze skrócenie odstępów */
+                }}
+                .signature {{
+                    font-family: Calibri, sans-serif;
+                    font-size: 11pt;
+                    line-height: normal; /* Zachowanie normalnego odstępu dla podpisu */
+                    margin-top: 20px; /* Dodanie odstępu przed podpisem */
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="message-body">
+                {body}
+            </div>
+            <div class="signature">
+                {signature}
+            </div>
+        </body>
+        </html>
         '''
 
         # Tworzenie wiadomości MIME

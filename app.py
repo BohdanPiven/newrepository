@@ -486,11 +486,10 @@ def send_email(to_email, subject, body, user, attachments=None):
             email_address=user.email_address
         )
 
-        # Budowa treści z dostosowanym odstępem między wierszami
-        # Zastosowanie line-height: 1.15 do treści wiadomości
-        # Zachowanie podpisu w oddzielnym divie z line-height: normal
+        # Budowa treści z jeszcze mniejszym odstępem między wierszami
+        # Ustawienie line-height na 1.0 lub niższy, aby skrócić odstępy
         body_with_signature = f'''
-        <div style="font-family: Calibri, sans-serif; font-size: 11pt; line-height: 1.15;">
+        <div style="font-family: Calibri, sans-serif; font-size: 11pt; line-height: 1.0; margin: 0;">
             {body}
         </div>
         <div class="signature" style="font-family: Calibri, sans-serif; font-size: 11pt; line-height: normal; margin-top: 20px;">

@@ -486,9 +486,9 @@ def send_email(to_email, subject, body, user, attachments=None):
             email_address=user.email_address
         )
 
-        # Budowa treści z jeszcze mniejszym odstępem między wierszami
-        # Ustawienie line-height na 0.9 i usunięcie marginesów dla treści
-        # Resetowanie marginesów dla p i innych tagów wewnątrz message-body
+        # Budowa treści z dostosowanym odstępem między wierszami
+        # Ustawienie line-height na 1.15 dla treści wiadomości
+        # Zachowanie podpisu w oddzielnym divie z line-height: normal
         body_with_signature = f'''
         <html>
         <head>
@@ -496,15 +496,15 @@ def send_email(to_email, subject, body, user, attachments=None):
                 .message-body {{
                     font-family: Calibri, sans-serif;
                     font-size: 11pt;
-                    line-height: 0.9; /* Dalsze skrócenie odstępów */
+                    line-height: 1.15; /* Delikatniejsze skrócenie odstępów */
                     margin: 0;
                 }}
                 .message-body p {{
                     margin: 0; /* Resetowanie marginesów paragrafów */
-                    line-height: 0.9; /* Dalsze skrócenie odstępów */
+                    line-height: 1.15; /* Utrzymanie spójnego odstępu */
                 }}
                 .message-body br {{
-                    line-height: 0.9; /* Dalsze skrócenie odstępów */
+                    line-height: 1.15; /* Utrzymanie spójnego odstępu przy łamaniu linii */
                 }}
                 .signature {{
                     font-family: Calibri, sans-serif;

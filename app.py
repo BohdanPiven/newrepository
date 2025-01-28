@@ -488,7 +488,7 @@ def send_email(to_email, subject, body, user, attachments=None):
 
         # Budowa treści z dostosowanym odstępem między wierszami
         # Ustawienie line-height na 1.15 dla treści wiadomości
-        # Zachowanie podpisu w oddzielnym divie z line-height: normal
+        # Zmniejszenie margin-top do 10px, aby podciągnąć podpis bliżej treści
         body_with_signature = f'''
         <html>
         <head>
@@ -510,7 +510,7 @@ def send_email(to_email, subject, body, user, attachments=None):
                     font-family: Calibri, sans-serif;
                     font-size: 11pt;
                     line-height: normal; /* Zachowanie normalnego odstępu dla podpisu */
-                    margin-top: 20px; /* Dodanie odstępu przed podpisem */
+                    margin-top: 10px; /* Zmniejszenie odstępu przed podpisem */
                 }}
             </style>
         </head>

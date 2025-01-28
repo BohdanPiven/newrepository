@@ -3227,11 +3227,11 @@ def index():
                                 if (data.success) {
                                     showFlashMessage('success', data.message);
                                     #form.reset();
-                                    #document.getElementById('attachments-preview').innerHTML = '';
-                                    #document.getElementById('attachments-count').textContent = "Załączników: 0/{{ max_attachments }}";
+                                    document.getElementById('attachments-preview').innerHTML = '';
+                                    document.getElementById('attachments-count').textContent = "Załączników: 0/{{ max_attachments }}";
                                     editor.setData('');
                                     updateSelectedItems();
-                                    #selectedFiles = [];
+                                    selectedFiles = [];
                                 } else {
                                     showFlashMessage('error', data.message);
                                 }

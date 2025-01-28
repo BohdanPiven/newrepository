@@ -486,12 +486,16 @@ def send_email(to_email, subject, body, user, attachments=None):
             email_address=user.email_address
         )
 
-        # Budowa treści
+        # Budowa treści z dostosowanym odstępem między wierszami
+        # Zastosowanie line-height: 1.15 do treści wiadomości
+        # Zachowanie podpisu w oddzielnym divie z line-height: normal
         body_with_signature = f'''
-        <div style="font-family: Calibri, sans-serif; font-size: 11pt;">
+        <div style="font-family: Calibri, sans-serif; font-size: 11pt; line-height: 1.15;">
             {body}
         </div>
-        {signature}
+        <div class="signature" style="font-family: Calibri, sans-serif; font-size: 11pt; line-height: normal; margin-top: 20px;">
+            {signature}
+        </div>
         '''
 
         # Tworzenie wiadomości MIME
@@ -507,7 +511,7 @@ def send_email(to_email, subject, body, user, attachments=None):
                 try:
                     file_content = base64.b64decode(attach['content_b64'])
                     part = MIMEApplication(file_content, Name=attach['filename'])
-                    # Ewentualnie, jeśli chcesz ustawić MIME:
+                    # Opcjonalnie ustaw MIME type, jeśli potrzebne:
                     # part.set_type(attach['mime_type'])
 
                     part['Content-Disposition'] = f'attachment; filename="{attach["filename"]}"'

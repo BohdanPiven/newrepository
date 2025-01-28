@@ -3226,7 +3226,6 @@ def index():
                                 hideSpinner('spinner');
                                 if (data.success) {
                                     showFlashMessage('success', data.message);
-                                    form.reset();
                                     document.getElementById('attachments-preview').innerHTML = '';
                                     document.getElementById('attachments-count').textContent = "Załączników: 0/{{ max_attachments }}";
                                     editor.setData('');

@@ -2116,7 +2116,7 @@ def index():
     # Potencjalni klienci
     potential_clients = get_potential_clients(data)
 
-    # Poniżej znajduje się cały szablon index_template – bez zmian
+    # Poniżej znajduje się cały szablon index_template – z dodaną wyszukiwarką
     index_template = '''
     <!DOCTYPE html>
     <html lang="pl">
@@ -2606,188 +2606,49 @@ def index():
             .selected-item:hover {
                 background-color: #34495e;
             }
-            .modal {
-                display: none;
-                position: fixed;
-                z-index: 1002;
-                left: 0;
-                top: 0;
-                width: 100%;
-                height: 100%;
-                overflow: auto;
-                background-color: rgba(0,0,0,0.5);
-            }
-            .modal-content {
-                background-color: #fefefe;
-                margin: 10% auto;
-                padding: 20px;
-                border: 1px solid #888;
-                width: 80%;
-                max-width: 500px;
-                border-radius: 10px;
-                box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-                position: relative;
-            }
-            .close-modal {
-                color: #aaa;
-                float: right;
-                font-size: 28px;
-                font-weight: bold;
-                position: absolute;
-                top: 10px;
-                right: 20px;
-                cursor: pointer;
-            }
-            .close-modal:hover,
-            .close-modal:focus {
-                color: black;
-                text-decoration: none;
-                cursor: pointer;
-            }
-            .modal-form input[type="text"] {
-                width: 100%;
-                padding: 10px;
-                margin-top: 10px;
-                border: 1px solid #cccccc;
-                border-radius: 5px;
-                box-sizing: border-box;
-                font-size: 16px;
-                background-color: #fafafa;
-                color: #333333;
-                transition: border-color 0.3s;
-            }
-            .modal-form input[type="text"]:focus {
-                outline: none;
-                border-color: #007BFF;
-                box-shadow: 0 0 5px rgba(0,123,255,0.5);
-            }
-            .modal-form button {
-                background-color: #28a745;
-                color: #ffffff;
-                padding: 10px 20px;
-                border: none;
-                border-radius: 5px;
-                cursor: pointer;
-                font-size: 16px;
+            /* Dodane style dla wyszukiwarki */
+            /* Styl dla kontenera wyszukiwania */
+            .search-container {
                 margin-top: 20px;
-                transition: background-color 0.3s, transform 0.2s;
-                width: 100%;
-            }
-            .modal-form button:hover {
-                background-color: #218838;
-                transform: scale(1.05);
-            }
-            .modal-form button:active {
-                transform: scale(0.95);
-            }
-            .dropzone {
-                border: 2px dashed #cccccc;
-                border-radius: 5px;
-                padding: 20px;
-                text-align: center;
-                color: #999999;
-                cursor: pointer;
-                transition: background-color 0.3s, border-color 0.3s;
-            }
-            .dropzone.dragover {
-                background-color: #e9ecef;
-                border-color: #007BFF;
-                color: #333333;
-            }
-            .attachments-preview {
                 display: flex;
-                flex-wrap: wrap;
-                gap: 10px;
-                margin-top: 10px;
+                flex-direction: column;
+                align-items: stretch;
             }
-            .attachment-item {
-                background-color: #f1f1f1;
+
+            /* Styl dla pola wyszukiwania */
+            #sidebar-search {
                 padding: 5px 10px;
-                border-radius: 5px;
-                display: flex;
-                align-items: center;
-                gap: 5px;
-            }
-            .attachment-item span {
+                border: 1px solid #ccc;
+                border-radius: 4px;
                 font-size: 14px;
-            }
-            .attachment-item button {
-                background: none;
-                border: none;
-                color: #dc3545;
-                font-size: 16px;
-                cursor: pointer;
-                padding: 0;
-            }
-            .attachments-count {
-                margin-top: 5px;
-                font-size: 14px;
-                color: #555555;
-            }
-            .progress-container {
                 width: 100%;
-                background-color: #f3f3f3;
-                border-radius: 5px;
-                margin-top: 10px;
-                display: none;
+                box-sizing: border-box;
             }
-            .progress-bar {
-                width: 0%;
-                height: 20px;
-                background-color: #28a745;
-                border-radius: 5px;
-                text-align: center;
-                color: white;
-                line-height: 20px;
-                transition: width 0.4s ease;
-            }
-            .spinner {
-                border: 4px solid #f3f3f3;
-                border-top: 4px solid #007BFF;
-                border-radius: 50%;
-                width: 24px;
-                height: 24px;
-                animation: spin 1s linear infinite;
-                display: none;
-                margin-left: 10px;
-            }
-            @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-            }
-            .footer {
-                background-color: transparent;
-                color: #aaaaaa;
-                text-align: center;
-                padding: 10px;
+
+            /* Styl dla licznika wyników */
+            .search-count {
+                margin-top: 5px;
                 font-size: 12px;
-                margin-top: auto;
+                color: #555;
+                text-align: right;
             }
+
+            /* Styl dla podświetlanych etykiet */
+            .highlighted {
+                background-color: #FFD700; /* Ciemnożółty kolor */
+                color: #000; /* Czarny tekst dla kontrastu */
+                padding: 2px 4px;
+                border-radius: 2px;
+            }
+
+            /* Responsywność Wyszukiwarki */
             @media (max-width: 768px) {
-                .content-wrapper {
-                    flex-direction: column;
-                }
-                .sidebar {
+                .search-container {
                     width: 100%;
-                    height: auto;
-                    left: -100%;
-                    bottom: 0;
                 }
-                .main-content.sidebar-active {
-                    margin-left: 0;
-                }
-                .main-content {
-                    padding-top: 70px;
-                }
-                .note-section {
-                    margin: 20px 10px;
-                }
-                .top-header {
-                    justify-content: space-between;
-                }
-                #selected-segments, #selected-possibilities, #selected-potential-clients, #selected-users {
-                    position: static;
-                    margin-top: 10px;
+
+                #sidebar-search {
+                    width: 100%;
                 }
             }
         </style>
@@ -3467,552 +3328,254 @@ def index():
                     });
                     attachmentsCount.textContent = `Załączników: ${selectedFiles.length}/${maxAttachments}`;
                 }
-            });
-
-            function openEditModal(noteId, currentContent) {
-                const modal = document.getElementById('editModal');
-                const editForm = document.getElementById('edit-note-form');
-                const editInput = document.getElementById('edit-note-input');
-                const closeModalBtn = document.getElementById('closeEditModal');
-
-                editInput.value = currentContent;
-                editForm.setAttribute('data-note-id', noteId);
-
-                modal.style.display = 'block';
-
-                closeModalBtn.onclick = function() {
-                    closeEditModal();
-                }
-
-                window.onclick = function(event) {
-                    if (event.target == modal) {
-                        closeEditModal();
-                    }
-                }
-            }
-
-            function closeEditModal() {
-                const modal = document.getElementById('editModal');
-                modal.style.display = 'none';
-            }
-
-            function editNote(noteId, newContent) {
-                showSpinner('edit-spinner');
-
-                fetch('{{ url_for("edit_note_ajax") }}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        note_id: noteId,
-                        new_content: newContent
-                    }),
-                    credentials: 'same-origin'
-                })
-                .then(response => response.json())
-                .then(data => {
-                    hideSpinner('edit-spinner');
-
-                    if (data.success) {
-                        showFlashMessage('success', data.message);
-                        const noteSpan = document.querySelector('.note[data-note-id="'+ noteId +'"] .note-content');
-                        if (noteSpan) {
-                            noteSpan.textContent = data.note.content;
-                        }
-                        const editBtn = document.querySelector('.note[data-note-id="'+ noteId +'"] .edit-btn');
-                        if (editBtn) {
-                            editBtn.setAttribute('data-note-content', data.note.content);
-                        }
-                        const transferBtn = document.querySelector('.note[data-note-id="'+ noteId +'"] .transfer-note-btn');
-                        if (transferBtn) {
-                            transferBtn.setAttribute('data-note-content', data.note.content);
-                        }
-                    } else {
-                        showFlashMessage('error', data.message);
-                    }
-
-                    closeEditModal();
-                })
-                .catch(error => {
-                    console.error('Błąd podczas edytowania notatki:', error);
-                    hideSpinner('edit-spinner');
-                    showFlashMessage('error', 'Wystąpił błąd podczas edytowania notatki.');
-                });
-            }
-
-            document.addEventListener('submit', function(event) {
-                if (event.target && event.target.id === 'edit-note-form') {
-                    event.preventDefault();
-                    const form = event.target;
-                    const noteId = form.getAttribute('data-note-id');
-                    const newContent = document.getElementById('edit-note-input').value.trim();
-
-                    if (newContent === '') {
-                        showFlashMessage('error', 'Nowa treść notatki nie może być pusta.');
-                        return;
-                    }
-
-                    editNote(noteId, newContent);
-                }
-            });
-
-            document.addEventListener('submit', function(event) {
-                if (event.target && event.target.classList.contains('delete-note-form')) {
-                    event.preventDefault();
-                    const noteId = event.target.getAttribute('data-note-id');
-                    const spinnerId = 'note-spinner-' + noteId;
-
-                    showSpinner(spinnerId);
-
-                    fetch('{{ url_for("delete_note_ajax") }}', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ note_id: noteId }),
-                        credentials: 'same-origin'
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        hideSpinner(spinnerId);
-
-                        if (data.success) {
-                            showFlashMessage('success', data.message);
-                            updateNotesList(data.notes);
-                            updateSelectedItems();
-                        } else {
-                            showFlashMessage('error', data.message);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Błąd podczas usuwania notatki:', error);
-                        hideSpinner(spinnerId);
-                        showFlashMessage('error', 'Wystąpił błąd podczas usuwania notatki.');
-                    });
-                }
-            });
-
-            document.addEventListener('submit', function(event) {
-                if (event.target && event.target.id === 'delete-all-notes-form') {
-                    event.preventDefault();
-                    const spinnerId = 'delete-all-spinner';
-
-                    showSpinner(spinnerId);
-
-                    fetch('{{ url_for("delete_all_notes_ajax") }}', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({}),
-                        credentials: 'same-origin'
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        hideSpinner(spinnerId);
-
-                        if (data.success) {
-                            showFlashMessage('success', data.message);
-                            updateNotesList(data.notes);
-                            updateSelectedItems();
-                        } else {
-                            showFlashMessage('error', data.message);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Błąd podczas usuwania wszystkich notatek:', error);
-                        hideSpinner(spinnerId);
-                        showFlashMessage('error', 'Wystąpił błąd podczas usuwania notatek.');
-                    });
-                }
-            });
-
-            function updateSelectAllButtons() {
-                var selectAllSegmentsBtn = document.getElementById('select-all-segments-btn');
-                var segmentCheckboxes = document.querySelectorAll('.segment-item input[type="checkbox"]');
-                var allSegmentsChecked = Array.from(segmentCheckboxes).every(cb => cb.checked);
-                selectAllSegmentsBtn.textContent = allSegmentsChecked ? 'Odznacz wszystkie segmenty' : 'Zaznacz wszystkie segmenty';
-
-                var selectAllPossibilitiesBtn = document.getElementById('select-all-possibilities-btn');
-                var possibilityCheckboxes = document.querySelectorAll('.possibility-item input[type="checkbox"]');
-                var allPossibilitiesChecked = Array.from(possibilityCheckboxes).every(cb => cb.checked);
-                selectAllPossibilitiesBtn.textContent = allPossibilitiesChecked ? 'Odznacz wszystkie możliwości' : 'Zaznacz wszystkie możliwości';
-
-                var selectAllPotentialClientsBtn = document.querySelector('.select-deselect-potential-clients-btn');
-                var groupCheckboxes = document.querySelectorAll('.potential-client-group input[type="checkbox"]');
-                var clientCheckboxes = document.querySelectorAll('.potential-clients-list .client-item input[type="checkbox"]');
-                var allPotentialClientsChecked = Array.from(groupCheckboxes).every(cb => cb.checked) && Array.from(clientCheckboxes).every(cb => cb.checked);
-                selectAllPotentialClientsBtn.textContent = allPotentialClientsChecked ? 'Odznacz wszystkich klientów' : 'Zaznacz wszystkich klientów';
-            }
-
-            function updateEmailToggleButtons() {
-                var emailLists = document.querySelectorAll('.email-list');
-                emailLists.forEach(function(emailList) {
-                    var toggleBtn = emailList.querySelector('.select-deselect-emails-btn');
-                    var emailCheckboxes = emailList.querySelectorAll('input[type="checkbox"]');
-                    var allChecked = Array.from(emailCheckboxes).every(cb => cb.checked);
-                    toggleBtn.textContent = allChecked ? 'Odznacz Wszystkie' : 'Zaznacz Wszystkie';
-                });
-            }
-
-            function updateCompanyToggleButtons() {
-                var companyLists = document.querySelectorAll('.company-list');
-                companyLists.forEach(function(companyList) {
-                    var toggleBtn = companyList.querySelector('.select-deselect-companies-btn');
-                    var companyCheckboxes = companyList.querySelectorAll('input[type="checkbox"]');
-                    var allChecked = Array.from(companyCheckboxes).every(cb => cb.checked);
-                    toggleBtn.textContent = allChecked ? 'Odznacz Wszystkie' : 'Zaznacz Wszystkie';
-                });
-            }
-
-            function toggleSidebar(button) {
-                var sidebar = document.querySelector('.sidebar');
-                sidebar.classList.toggle('active');
-                var mainContent = document.querySelector('.main-content');
-                mainContent.classList.toggle('sidebar-active');
-            }
-
-            function toggleEmailsList(segmentIndex) {
-                var emailList = document.getElementById(`emails-${segmentIndex}`);
-                if (emailList) {
-                    emailList.classList.toggle('show');
-                }
-            }
-
-            function toggleCompanyList(possibilityIndex) {
-                var companyList = document.getElementById(`companies-${possibilityIndex}`);
-                if (companyList) {
-                    companyList.classList.toggle('show');
-                }
-            }
-
-            function toggleClientsList(groupIndex) {
-                var clientsList = document.getElementById(`clients-${groupIndex}`);
-                if (clientsList) {
-                    clientsList.classList.toggle('show');
-                }
-            }
-
-            function validateParentChildSelection() {
-                const segmentCheckboxes = document.querySelectorAll('.segment-item input[type="checkbox"]');
-                for (const segment of segmentCheckboxes) {
-                    const segmentIndex = segment.id.split('-')[1];
-                    const emailList = document.getElementById(`emails-${segmentIndex}`);
-                    if (emailList) {
-                        const childEmails = emailList.querySelectorAll('input[type="checkbox"]:checked');
-                        if (childEmails.length > 0 && !segment.checked) {
-                            showFlashMessage('error', 'Zaznacz etykiety (segmenty)!');
-                            return false;
-                        }
-                    }
-                }
-
-                const possibilityCheckboxes = document.querySelectorAll('.possibility-item input[type="checkbox"]');
-                for (const possibility of possibilityCheckboxes) {
-                    const possibilityIndex = possibility.id.split('-')[1];
-                    const companyList = document.getElementById(`companies-${possibilityIndex}`);
-                    if (companyList) {
-                        const childCompanies = companyList.querySelectorAll('input[type="checkbox"]:checked');
-                        if (childCompanies.length > 0 && !possibility.checked) {
-                            showFlashMessage('error', 'Zaznacz etykiety (możliwości)!');
-                            return false;
-                        }
-                    }
-                }
-
-                const groupCheckboxes = document.querySelectorAll('.potential-client-group input[type="checkbox"]');
-                for (const group of groupCheckboxes) {
-                    const groupIndex = group.id.split('-')[2];
-                    const clientsList = document.getElementById(`clients-${groupIndex}`);
-                    if (clientsList) {
-                        const childClients = clientsList.querySelectorAll('input[type="checkbox"]:checked');
-                        if (childClients.length > 0 && !group.checked) {
-                            showFlashMessage('error', 'Zaznacz etykiety (potencjalni klienci)!');
-                            return false;
-                        }
-                    }
-                }
-
-                return true;
-            }
-
-            function attachUserNameClickListeners() {
-                document.querySelectorAll('.user-name').forEach(function(userNameSpan) {
-                    userNameSpan.style.cursor = 'pointer';
-                    userNameSpan.addEventListener('click', function() {
-                        const userName = this.textContent.trim();
-                        const userEmail = this.getAttribute('data-email');
-                        const alreadySelected = Array.from(document.querySelectorAll('#selected-users .selected-item'))
-                            .some(item => item.getAttribute('data-email') === userEmail);
-
-                        if (!alreadySelected) {
-                            const userSpan = document.createElement('span');
-                            userSpan.className = 'selected-item';
-                            userSpan.setAttribute('data-email', userEmail);
-                            userSpan.textContent = userName;
-
-                            const removeBtn = document.createElement('span');
-                            removeBtn.className = 'remove-item';
-                            removeBtn.textContent = '×';
-                            removeBtn.addEventListener('click', function() {
-                                userSpan.remove();
-                            });
-                            userSpan.appendChild(removeBtn);
-
-                            const hiddenInput = document.createElement('input');
-                            hiddenInput.type = 'hidden';
-                            hiddenInput.name = 'selected_users';
-                            hiddenInput.value = userEmail;
-                            userSpan.appendChild(hiddenInput);
-
-                            document.getElementById('selected-users').appendChild(userSpan);
-                        }
-                    });
-                });
-            }
-        </script>
-    </head>
-    <body>
-        <!-- Nagłówek -->
-        <header class="top-header">
-            <div class="header-left">
-                <button id="sidebar-toggle" class="sidebar-toggle-btn" onclick="toggleSidebar(this)">&#9776;</button>
-                <span class="header-title">Ranges</span>
-            </div>
-            <div class="header-right">
-                <div class="user-info">
-                    <span>Witaj, {{ user.username }}!</span> 
-                    <a href="{{ url_for('logout') }}">Wyloguj się</a> | 
-                    <a href="{{ url_for('settings') }}">Ustawienia konta</a>
+            </script>
+        </head>
+        <body>
+            <!-- Nagłówek -->
+            <header class="top-header">
+                <div class="header-left">
+                    <button id="sidebar-toggle" class="sidebar-toggle-btn" onclick="toggleSidebar(this)">&#9776;</button>
+                    <span class="header-title">Ranges</span>
                 </div>
-            </div>
-        </header>
-        
-        <!-- Formularz główny -->
-        <form id="main-form" class="main-form" enctype="multipart/form-data">
-            <div class="content-wrapper">
-                <!-- Panel boczny -->
-                <div class="sidebar">
-                    <div class="toggle-buttons-container">
-                        <!-- Przyciski toggle -->
-                        <button type="button" class="toggle-segments-btn" onclick="toggleSegmentsList(this)">
-                            <img src="{{ url_for('static', filename='hammer.png') }}" alt="Toggle Segments">
-                        </button>
-
-                        <button type="button" class="toggle-possibilities-btn" onclick="togglePossibilitiesList(this)">
-                            <img src="{{ url_for('static', filename='greek_key.png') }}" alt="Toggle Possibilities">
-                        </button>
-                        
-                        <button type="button" class="toggle-potential-clients-btn" onclick="togglePotentialClientsList(this)">
-                            <img src="{{ url_for('static', filename='money.png') }}" alt="Toggle Potential Clients">
-                        </button>
+                <div class="header-right">
+                    <div class="user-info">
+                        <span>Witaj, {{ user.username }}!</span> 
+                        <a href="{{ url_for('logout') }}">Wyloguj się</a> | 
+                        <a href="{{ url_for('settings') }}">Ustawienia konta</a>
                     </div>
+                </div>
+            </header>
+            
+            <!-- Formularz główny -->
+            <form id="main-form" class="main-form" enctype="multipart/form-data">
+                <div class="content-wrapper">
+                    <!-- Panel boczny -->
+                    <div class="sidebar">
+                        <div class="toggle-buttons-container">
+                            <!-- Przyciski toggle -->
+                            <button type="button" class="toggle-segments-btn" onclick="toggleSegmentsList(this)">
+                                <img src="{{ url_for('static', filename='hammer.png') }}" alt="Toggle Segments">
+                            </button>
 
-                    <!-- Kontener segmentów -->
-                    <div id="segments-container" class="segments-container">
-                        <!-- Przycisk Zaznacz/Odznacz Wszystkie Segmenty -->
-                        <button type="button" id="select-all-segments-btn" class="yellow-btn" onclick="toggleSelectAllSegments(this)">Zaznacz wszystkie segmenty</button>
-                        <button type="button" class="yellow-btn" onclick="toggleAllSegmentsExpandCollapse(this)">Rozwiń wszystkie segmenty</button>
+                            <button type="button" class="toggle-possibilities-btn" onclick="togglePossibilitiesList(this)">
+                                <img src="{{ url_for('static', filename='greek_key.png') }}" alt="Toggle Possibilities">
+                            </button>
+                            
+                            <button type="button" class="toggle-potential-clients-btn" onclick="togglePotentialClientsList(this)">
+                                <img src="{{ url_for('static', filename='money.png') }}" alt="Toggle Potential Clients">
+                            </button>
+                        </div>
 
-                        <ul class="segment-list">
-                            {% for segment, counts in segments %}
-                                {% set segment_index = loop.index %}
-                                <li class="segment-item">
-                                    <input type="checkbox" name="segments" value="{{ segment }}" id="segment-{{ segment_index }}" onchange="handleSegmentChange(this)">
-                                    <span class="segment-label" data-index="{{ segment_index }}">
-                                        {{ segment }} <span class="segment-count">(Polski: {{ counts['Polski'] }}, Zagraniczny: {{ counts['Zagraniczny'] }})</span>
-                                    </span>
-                                </li>
-                                <ul class="email-list" id="emails-{{ segment_index }}">
-                                    <button type="button" class="yellow-btn select-deselect-emails-btn" onclick="toggleSelectAllEmailsInSegment('emails-{{ segment_index }}')">Zaznacz Wszystkie</button>
-                                    
-                                    {% set emails_companies_polski = get_email_company_pairs_for_segment(data, segment, "Polski") %}
-                                    {% set emails_companies_zagraniczny = get_email_company_pairs_for_segment(data, segment, "Zagraniczny") %}
-                                    {% for pair in emails_companies_polski %}
-                                        <li class="email-item">
-                                            <input type="checkbox" name="include_emails" value="{{ pair.email }}" id="email-{{ segment_index }}-polski-{{ loop.index }}">
-                                            <label for="email-{{ segment_index }}-polski-{{ loop.index }}">{{ pair.company }} (Polski)</label>
-                                        </li>
-                                    {% endfor %}
-                                    {% for pair in emails_companies_zagraniczny %}
-                                        <li class="email-item">
-                                            <input type="checkbox" name="include_emails" value="{{ pair.email }}" id="email-{{ segment_index }}-zagraniczny-{{ loop.index }}">
-                                            <label for="email-{{ segment_index }}-zagraniczny-{{ loop.index }}">{{ pair.company }} (Zagraniczny)</label>
-                                        </li>
-                                    {% endfor %}
-                                </ul>
-                            {% endfor %}
-                        </ul>
-                    </div>
+                        <!-- Dodanie Wyszukiwarki -->
+                        <div class="search-container">
+                            <input type="text" id="sidebar-search" placeholder="Szukaj etykiet..." oninput="handleSidebarSearch()" />
+                            <div id="search-count" class="search-count">0/0</div>
+                        </div>
 
-                    <!-- Kontener możliwości -->
-                    <div id="possibilities-container" class="possibilities-container">
-                        <button type="button" id="select-all-possibilities-btn" class="yellow-btn" onclick="toggleSelectAllPossibilities(this)">Zaznacz wszystkie możliwości</button>
-                        <button type="button" class="yellow-btn" onclick="toggleAllPossibilitiesExpandCollapse(this)">Rozwiń wszystkie możliwości</button>
+                        <!-- Kontener segmentów -->
+                        <div id="segments-container" class="segments-container">
+                            <!-- Przycisk Zaznacz/Odznacz Wszystkie Segmenty -->
+                            <button type="button" id="select-all-segments-btn" class="yellow-btn" onclick="toggleSelectAllSegments(this)">Zaznacz wszystkie segmenty</button>
+                            <button type="button" class="yellow-btn" onclick="toggleAllSegmentsExpandCollapse(this)">Rozwiń wszystkie segmenty</button>
 
-                        <ul class="possibility-list">
-                            {% for possibility, details in possibilities %}
-                                {% set possibility_index = loop.index %}
-                                <li class="possibility-item">
-                                    <input type="checkbox" name="possibilities" value="{{ possibility }}" id="possibility-{{ possibility_index }}" onchange="handlePossibilityChange(this)">
-                                    <span class="possibility-label" data-index="{{ possibility_index }}">
-                                        {{ possibility }}
-                                        <span class="company-count">
-                                            (Polski: {{ details['Polski'] }}, Zagraniczny: {{ details['Zagraniczny'] }})
+                            <ul class="segment-list">
+                                {% for segment, counts in segments %}
+                                    {% set segment_index = loop.index %}
+                                    <li class="segment-item">
+                                        <input type="checkbox" name="segments" value="{{ segment }}" id="segment-{{ segment_index }}" onchange="handleSegmentChange(this)">
+                                        <span class="segment-label" data-index="{{ segment_index }}">
+                                            {{ segment }} <span class="segment-count">(Polski: {{ counts['Polski'] }}, Zagraniczny: {{ counts['Zagraniczny'] }})</span>
                                         </span>
-                                    </span>
-                                </li>
-                                <ul class="company-list" id="companies-{{ possibility_index }}">
-                                    <button type="button" class="yellow-btn select-deselect-companies-btn" onclick="toggleSelectAllCompaniesInPossibility('companies-{{ possibility_index }}')">Zaznacz Wszystkie</button>
-                    
-                                    {% for entry in details['entries'] %}
-                                        <li class="company-item">
-                                            <input type="checkbox" name="include_emails" value="{{ entry.email }}" id="company-{{ possibility_index }}-{{ loop.index }}">
-                                            <label for="company-{{ possibility_index }}-{{ loop.index }}">{{ entry.company }}</label>
-                                        </li>
-                                    {% endfor %}
-                                </ul>
-                            {% endfor %}
-                        </ul>
-                    </div>
-                    
-                    <!-- Kontener potencjalnych klientów -->
-                    <div id="potential-clients-container" class="potential-clients-container">
-                        <button type="button" class="yellow-btn select-deselect-potential-clients-btn" onclick="toggleSelectAllPotentialClients(this)">Zaznacz wszystkich klientów</button>
-                        <button type="button" class="yellow-btn" onclick="toggleAllPotentialClientsExpandCollapse(this)">Rozwiń wszystkich potencjalnych klientów</button>
-
-                        <ul class="potential-clients-list">
-                            {% for group, clients in potential_clients.items() %}
-                                {% set group_index = loop.index %}
-                                <li class="potential-client-group">
-                                    <input type="checkbox" name="potential_clients" value="{{ group }}" id="potential-group-{{ group_index }}" onchange="handlePotentialClientGroupChange(this)">
-                                    <span class="potential-client-group-label" data-index="{{ group_index }}">
-                                        {{ group }}
-                                    </span>
-                                </li>
-                                <ul class="clients-list" id="clients-{{ group_index }}">
-                                    {% for client in clients %}
-                                        <li class="client-item">
-                                            <input type="checkbox" name="include_potential_emails" value="{{ client.email }}" id="client-{{ group_index }}-{{ loop.index }}">
-                                            <label for="client-{{ group_index }}-{{ loop.index }}">{{ client.company }} ({{ client.language }})</label>
-                                        </li>
-                                    {% endfor %}
-                                </ul>
-                            {% endfor %}
-                        </ul>
-                    </div>
-                </div>
-
-                <!-- Główna treść strony -->
-                <div class="main-content">
-                    <div class="form-container">
-                        <h1>e-Communicator</h1>
-
-                        <div class="flash-message success"></div>
-                        <div class="flash-message error"></div>
-                        <div class="flash-message warning"></div>
-
-                        <label for="subject">Temat:</label>
-                        <input type="text" id="subject" name="subject" required>
-
-                        <label for="message-editor">Wiadomość:</label>
-                        <div id="message-editor"></div>
-                        <textarea name="message" id="message" style="display: none;"></textarea>
-
-                        <label for="attachments">Załączniki:</label>
-                        <input type="file" name="attachments" id="attachments" multiple style="display: none;">
-                        <div id="dropzone" class="dropzone">
-                            Przeciągnij i upuść pliki tutaj lub kliknij, aby wybrać.
+                                    </li>
+                                    <ul class="email-list" id="emails-{{ segment_index }}">
+                                        <button type="button" class="yellow-btn select-deselect-emails-btn" onclick="toggleSelectAllEmailsInSegment('emails-{{ segment_index }}')">Zaznacz Wszystkie</button>
+                                        
+                                        {% set emails_companies_polski = get_email_company_pairs_for_segment(data, segment, "Polski") %}
+                                        {% set emails_companies_zagraniczny = get_email_company_pairs_for_segment(data, segment, "Zagraniczny") %}
+                                        {% for pair in emails_companies_polski %}
+                                            <li class="email-item">
+                                                <input type="checkbox" name="include_emails" value="{{ pair.email }}" id="email-{{ segment_index }}-polski-{{ loop.index }}">
+                                                <label for="email-{{ segment_index }}-polski-{{ loop.index }}">{{ pair.company }} (Polski)</label>
+                                            </li>
+                                        {% endfor %}
+                                        {% for pair in emails_companies_zagraniczny %}
+                                            <li class="email-item">
+                                                <input type="checkbox" name="include_emails" value="{{ pair.email }}" id="email-{{ segment_index }}-zagraniczny-{{ loop.index }}">
+                                                <label for="email-{{ segment_index }}-zagraniczny-{{ loop.index }}">{{ pair.company }} (Zagraniczny)</label>
+                                            </li>
+                                        {% endfor %}
+                                    </ul>
+                                {% endfor %}
+                            </ul>
                         </div>
-                        <div id="attachments-preview" class="attachments-preview"></div>
-                        <div id="attachments-count" class="attachments-count">Załączników: 0/{{ max_attachments }}</div>
 
-                        <label for="language">Wybierz język:</label>
-                        <select id="language" name="language" required>
-                            <option value="" disabled selected>Wybierz język</option>
-                            <option value="Polski">Polski</option>
-                            <option value="Zagraniczny">Zagraniczny</option>
-                        </select>
+                        <!-- Kontener możliwości -->
+                        <div id="possibilities-container" class="possibilities-container">
+                            <button type="button" id="select-all-possibilities-btn" class="yellow-btn" onclick="toggleSelectAllPossibilities(this)">Zaznacz wszystkie możliwości</button>
+                            <button type="button" class="yellow-btn" onclick="toggleAllPossibilitiesExpandCollapse(this)">Rozwiń wszystkie możliwości</button>
 
-                        <div class="button-container" style="display: flex; align-items: flex-start; flex-wrap: wrap; margin-top: 20px;">
-                            <button type="submit" id="send-button">Wyślij</button>
-                            <div id="selected-segments" style="display: flex; gap: 5px; flex-wrap: wrap;"></div>
-                            <div id="selected-possibilities" style="display: flex; gap: 5px; flex-wrap: wrap;"></div>
-                            <div id="selected-potential-clients" style="display: flex; gap: 5px; flex-wrap: wrap; margin-left: 10px;"></div>
-                            <div id="selected-users" style="display: flex; gap: 5px; flex-wrap: wrap;"></div>
-                            <div class="spinner" id="spinner" style="display: none;"></div>
+                            <ul class="possibility-list">
+                                {% for possibility, details in possibilities %}
+                                    {% set possibility_index = loop.index %}
+                                    <li class="possibility-item">
+                                        <input type="checkbox" name="possibilities" value="{{ possibility }}" id="possibility-{{ possibility_index }}" onchange="handlePossibilityChange(this)">
+                                        <span class="possibility-label" data-index="{{ possibility_index }}">
+                                            {{ possibility }}
+                                            <span class="company-count">
+                                                (Polski: {{ details['Polski'] }}, Zagraniczny: {{ details['Zagraniczny'] }})
+                                            </span>
+                                        </span>
+                                    </li>
+                                    <ul class="company-list" id="companies-{{ possibility_index }}">
+                                        <button type="button" class="yellow-btn select-deselect-companies-btn" onclick="toggleSelectAllCompaniesInPossibility('companies-{{ possibility_index }}')">Zaznacz Wszystkie</button>
+                        
+                                        {% for entry in details['entries'] %}
+                                            <li class="company-item">
+                                                <input type="checkbox" name="include_emails" value="{{ entry.email }}" id="company-{{ possibility_index }}-{{ loop.index }}">
+                                                <label for="company-{{ possibility_index }}-{{ loop.index }}">{{ entry.company }}</label>
+                                            </li>
+                                        {% endfor %}
+                                    </ul>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        
+                        <!-- Kontener potencjalnych klientów -->
+                        <div id="potential-clients-container" class="potential-clients-container">
+                            <button type="button" class="yellow-btn select-deselect-potential-clients-btn" onclick="toggleSelectAllPotentialClients(this)">Zaznacz wszystkich klientów</button>
+                            <button type="button" class="yellow-btn" onclick="toggleAllPotentialClientsExpandCollapse(this)">Rozwiń wszystkich potencjalnych klientów</button>
+
+                            <ul class="potential-clients-list">
+                                {% for group, clients in potential_clients.items() %}
+                                    {% set group_index = loop.index %}
+                                    <li class="potential-client-group">
+                                        <input type="checkbox" name="potential_clients" value="{{ group }}" id="potential-group-{{ group_index }}" onchange="handlePotentialClientGroupChange(this)">
+                                        <span class="potential-client-group-label" data-index="{{ group_index }}">
+                                            {{ group }}
+                                        </span>
+                                    </li>
+                                    <ul class="clients-list" id="clients-{{ group_index }}">
+                                        <button type="button" class="yellow-btn select-deselect-companies-btn" onclick="toggleSelectAllCompaniesInPossibility('clients-{{ group_index }}')">Zaznacz Wszystkie</button>
+        
+                                        {% for client in clients %}
+                                            <li class="client-item">
+                                                <input type="checkbox" name="include_potential_emails" value="{{ client.email }}" id="client-{{ group_index }}-{{ loop.index }}">
+                                                <label for="client-{{ group_index }}-{{ loop.index }}">{{ client.company }} ({{ client.language }})</label>
+                                            </li>
+                                        {% endfor %}
+                                    </ul>
+                                {% endfor %}
+                            </ul>
                         </div>
                     </div>
-                </div>
-            </div>
-        </form>
 
-        <!-- Sekcja notatek i modale -->
-        <div class="note-section">
-            <h3>Notatki</h3>
-            <form id="add-note-form">
-                <input type="text" name="note" placeholder="Dodaj notatkę..." required>
-                <button type="submit">Dodaj notatkę</button>
-                <div class="spinner" id="note-spinner" style="display: none;"></div>
-            </form>
-            <ul>
-                {% for note in notes %}
-                    <li class="note" data-note-id="{{ note.id }}">
-                        <div class="note-content">{{ note.content }}</div>
-                        <div class="note-footer">
-                            <div class="note-actions">
-                                <button type="button" class="transfer-note-btn" data-note-content="{{ note.content|e }}">Transfer</button>
-                                <button type="button" class="edit-btn" data-note-id="{{ note.id }}" data-note-content="{{ note.content|e }}">Edytuj</button>
-                                <form class="delete-note-form" data-note-id="{{ note.id }}">
-                                    <button type="submit" class="delete-btn">Usuń</button>
-                                    <div class="spinner" id="note-spinner-{{ note.id }}" style="display: none;"></div>
-                                </form>
+                    <!-- Główna treść strony -->
+                    <div class="main-content">
+                        <div class="form-container">
+                            <h1>e-Communicator</h1>
+
+                            <div class="flash-message success"></div>
+                            <div class="flash-message error"></div>
+                            <div class="flash-message warning"></div>
+
+                            <label for="subject">Temat:</label>
+                            <input type="text" id="subject" name="subject" required>
+
+                            <label for="message-editor">Wiadomość:</label>
+                            <div id="message-editor"></div>
+                            <textarea name="message" id="message" style="display: none;"></textarea>
+
+                            <label for="attachments">Załączniki:</label>
+                            <input type="file" name="attachments" id="attachments" multiple style="display: none;">
+                            <div id="dropzone" class="dropzone">
+                                Przeciągnij i upuść pliki tutaj lub kliknij, aby wybrać.
                             </div>
-                            <span class="user-name" style="background-color: {{ note.user.color }};" data-email="{{ note.user.email }}">
-                                {{ note.user.first_name }} {{ note.user.last_name }}
-                            </span>
+                            <div id="attachments-preview" class="attachments-preview"></div>
+                            <div id="attachments-count" class="attachments-count">Załączników: 0/{{ max_attachments }}</div>
+
+                            <label for="language">Wybierz język:</label>
+                            <select id="language" name="language" required>
+                                <option value="" disabled selected>Wybierz język</option>
+                                <option value="Polski">Polski</option>
+                                <option value="Zagraniczny">Zagraniczny</option>
+                            </select>
+
+                            <div class="button-container" style="display: flex; align-items: flex-start; flex-wrap: wrap; margin-top: 20px;">
+                                <button type="submit" id="send-button">Wyślij</button>
+                                <div id="selected-segments" style="display: flex; gap: 5px; flex-wrap: wrap;"></div>
+                                <div id="selected-possibilities" style="display: flex; gap: 5px; flex-wrap: wrap;"></div>
+                                <div id="selected-potential-clients" style="display: flex; gap: 5px; flex-wrap: wrap; margin-left: 10px;"></div>
+                                <div id="selected-users" style="display: flex; gap: 5px; flex-wrap: wrap;"></div>
+                                <div class="spinner" id="spinner" style="display: none;"></div>
+                            </div>
                         </div>
-                    </li>
-                {% endfor %}
-            </ul>
-            {% if notes %}
-                <form class="delete-all-notes-form" id="delete-all-notes-form">
-                    <button type="submit">Usuń wszystkie notatki</button>
-                    <div class="spinner" id="delete-all-spinner" style="display: none;"></div>
-                </form>
-            {% endif %}
-        </div>
+                    </div>
+                </div>
+            </form>
 
-        <!-- Modal do edycji notatki -->
-        <div id="editModal" class="modal">
-            <div class="modal-content">
-                <span id="closeEditModal" class="close-modal">&times;</span>
-                <h2>Edytuj Notatkę</h2>
-                <form id="edit-note-form" class="modal-form">
-                    <label for="edit-note-input">Treść Notatki:</label>
-                    <input type="text" id="edit-note-input" name="new_content" required>
-                    <button type="submit">Zapisz Zmiany</button>
-                    <div class="spinner" id="edit-spinner" style="display: none;"></div>
+            <!-- Sekcja notatek i modale -->
+            <div class="note-section">
+                <h3>Notatki</h3>
+                <form id="add-note-form">
+                    <input type="text" name="note" placeholder="Dodaj notatkę..." required>
+                    <button type="submit">Dodaj notatkę</button>
+                    <div class="spinner" id="note-spinner" style="display: none;"></div>
                 </form>
+                <ul>
+                    {% for note in notes %}
+                        <li class="note" data-note-id="{{ note.id }}">
+                            <div class="note-content">{{ note.content }}</div>
+                            <div class="note-footer">
+                                <div class="note-actions">
+                                    <button type="button" class="transfer-note-btn" data-note-content="{{ note.content|e }}">Transfer</button>
+                                    <button type="button" class="edit-btn" data-note-id="{{ note.id }}" data-note-content="{{ note.content|e }}">Edytuj</button>
+                                    <form class="delete-note-form" data-note-id="{{ note.id }}">
+                                        <button type="submit" class="delete-btn">Usuń</button>
+                                        <div class="spinner" id="note-spinner-{{ note.id }}" style="display: none;"></div>
+                                    </form>
+                                </div>
+                                <span class="user-name" style="background-color: {{ note.user.color }};" data-email="{{ note.user.email }}">
+                                    {{ note.user.first_name }} {{ note.user.last_name }}
+                                </span>
+                            </div>
+                        </li>
+                    {% endfor %}
+                </ul>
+                {% if notes %}
+                    <form class="delete-all-notes-form" id="delete-all-notes-form">
+                        <button type="submit">Usuń wszystkie notatki</button>
+                        <div class="spinner" id="delete-all-spinner" style="display: none;"></div>
+                    </form>
+                {% endif %}
             </div>
-        </div>
 
-        <!-- Stopka -->
-        <footer class="footer">
-            © DigitDrago
-        </footer>
-    </body>
-    </html>
-    '''
+            <!-- Modal do edycji notatki -->
+            <div id="editModal" class="modal">
+                <div class="modal-content">
+                    <span id="closeEditModal" class="close-modal">&times;</span>
+                    <h2>Edytuj Notatkę</h2>
+                    <form id="edit-note-form" class="modal-form">
+                        <label for="edit-note-input">Treść Notatki:</label>
+                        <input type="text" id="edit-note-input" name="new_content" required>
+                        <button type="submit">Zapisz Zmiany</button>
+                        <div class="spinner" id="edit-spinner" style="display: none;"></div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Stopka -->
+            <footer class="footer">
+                © DigitDrago
+            </footer>
+        </body>
+        </html>
+        '''
 
     return render_template_string(
         index_template,
         user=user,
-        # zamiast segments=segments_dict.items(), przekazujemy posortowaną listę
         segments=sorted_segments,
         notes=notes,
-        # zamiast possibilities=possibilities_dict.items(), przekazujemy posortowaną listę
         possibilities=sorted_possibilities,
         potential_clients=potential_clients,
         get_email_company_pairs_for_segment=get_email_company_pairs_for_segment,

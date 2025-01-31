@@ -212,11 +212,8 @@ def upload_file_to_gcs(file, expiration=3600):
 
 @app.errorhandler(RequestEntityTooLarge)
 def handle_file_too_large(e):
-    return jsonify({
-        'success': False,
-        'message': 'Przesłany plik przekracza limit 16 MB!'
-    }), 413
-
+    flash('Przesłany plik jest za duży. Maksymalny rozmiar to 16 MB.', 'error')
+    return redirect(url_for('index'))
 
 
 # Szablon podpisu do e-maila
@@ -748,16 +745,26 @@ def handle_request_entity_too_large(e):
 # Asynchroniczne API do wysyłania e-maili (przykład)
 @app.route('/send_message_ajax', methods=['POST'])
 def send_message_ajax():
+    """
+    Przyjmuje wiadomość i załączniki przez AJAX.
+    Zamiast zapisywać pliki na dysk, koduje je w base64 i przekazuje do Celery.
+    """
+
+    # --- DEBUG 1: Start funkcji
+    print("DEBUG: Rozpoczynam send_message_ajax")
+
+    # 1. Sprawdzenie, czy użytkownik jest zalogowany
     print("DEBUG: 'user_id' in session? =>", 'user_id' in session)
     if 'user_id' not in session:
-        print("DEBUG: Brak user_id, zwracam 401")
+        print("DEBUG: Brak user_id w sesji, zwracam 401 JSON")
         return jsonify({'success': False, 'message': 'Nie jesteś zalogowany.'}), 401
 
     user_id = session['user_id']
     user = db.session.get(User, user_id)
     print("DEBUG: user =", user)
+
     if not user:
-        print("DEBUG: user not found w DB => 404")
+        print("DEBUG: Użytkownik o podanym user_id nie istnieje w DB => 404 JSON")
         return jsonify({'success': False, 'message': 'Użytkownik nie istnieje.'}), 404
 
     # 2. Pobranie danych z formularza
@@ -766,14 +773,19 @@ def send_message_ajax():
     recipients = request.form.get('recipients', '')
     language = request.form.get('language', '').strip()
 
+    print("DEBUG: subject=", subject, " message=", (message[:50] + '...' if message else ""), 
+          " recipients=", recipients, " language=", language)
+
     # Walidacja
     if not subject or not message:
+        print("DEBUG: Brakuje subject lub message => 400 JSON")
         return jsonify({
             'success': False,
             'message': 'Wypełnij wszystkie wymagane pola (temat i treść).'
         }), 400
 
     if not language:
+        print("DEBUG: Brak parametru language => 400 JSON")
         return jsonify({
             'success': False,
             'message': 'Nie wybrano języka (Polski / Zagraniczny).'
@@ -788,6 +800,7 @@ def send_message_ajax():
             valid_emails.append(clean)
 
     if not valid_emails:
+        print("DEBUG: Nie podano żadnych odbiorców => 400 JSON")
         return jsonify({
             'success': False,
             'message': 'Proszę wybrać przynajmniej jeden adres e-mail.'
@@ -800,7 +813,7 @@ def send_message_ajax():
         if file and is_allowed_file(file):
             # Odczyt całego pliku do pamięci
             file_bytes = file.read()
-            file.seek(0)  # Można przywrócić wskaźnik, ale nie jest to już krytyczne
+            file.seek(0)  # przywracamy wskaźnik
 
             # Ustalenie nazwy i MIME
             filename = secure_filename(file.filename)
@@ -816,15 +829,28 @@ def send_message_ajax():
                 'mime_type': mime_type,
                 'content_b64': encoded
             })
-
+            print(f"DEBUG: Załącznik dodany: {filename} (MIME: {mime_type})")
         elif file.filename != '':
+            # Plik o niedozwolonym typie
+            print(f"DEBUG: Niedozwolony typ pliku => {file.filename} => 400 JSON")
             return jsonify({
                 'success': False,
                 'message': f'Nieprawidłowy typ pliku: {file.filename}'
             }), 400
 
-    # 5. (Przykład) – pobranie arkusza Google i sprawdzanie, czy e-mail ma ten sam język, co user wybrał
-    data = get_data_from_sheet()
+    # 5. Pobranie arkusza Google i sprawdzanie języka (przykład)
+    try:
+        print("DEBUG: Wywołuję get_data_from_sheet()...")
+        data = get_data_from_sheet()
+        print("DEBUG: get_data_from_sheet zakończone, len(data) =", len(data))
+    except Exception as e:
+        # Jeśli w tym miejscu wystąpi błąd, możesz wyświetlić go w logu:
+        print(f"DEBUG: Wyjątek w get_data_from_sheet: {repr(e)} => 500 JSON")
+        return jsonify({
+            'success': False,
+            'message': f'Błąd podczas pobierania danych z arkusza: {str(e)}'
+        }), 500
+
     email_language_map = {}
 
     for row_index, row in enumerate(data):
@@ -848,6 +874,7 @@ def send_message_ajax():
             filtered_emails.append(e)
 
     if not filtered_emails:
+        print("DEBUG: Żaden adres nie pasuje do języka => 400 JSON")
         return jsonify({
             'success': False,
             'message': f'Żaden z zaznaczonych adresów nie pasuje do języka: {language}.'
@@ -860,14 +887,16 @@ def send_message_ajax():
         stop_event = threading.Event()
         email_sending_stop_events[task_id] = stop_event
 
+        print(f"DEBUG: Uruchamiam send_bulk_emails.delay(...) -> filtered_emails={len(filtered_emails)} szt.")
         task = send_bulk_emails.delay(
             filtered_emails,
             subject,
             message,
             user_id,
-            attachment_data  # <-- tu kluczowa zmiana
+            attachment_data
         )
 
+        print(f"DEBUG: Zadanie Celery utworzone, task_id={task.id}")
         return jsonify({
             'success': True,
             'message': f'Rozpoczęto wysyłanie wiadomości (język: {language}).',
@@ -875,6 +904,7 @@ def send_message_ajax():
         }), 200
 
     except Exception as e:
+        print(f"DEBUG: Wyjątek przy uruchamianiu Celery: {repr(e)} => 500 JSON")
         app.logger.error(f'Błąd: {e}')
         return jsonify({
             'success': False,

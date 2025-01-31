@@ -216,6 +216,7 @@ def handle_file_too_large(e):
     return redirect(url_for('index'))
 
 
+
 # Szablon podpisu do e-maila
 EMAIL_SIGNATURE_TEMPLATE = """
 <br><br>
@@ -799,6 +800,10 @@ def send_message_ajax():
         if clean:
             valid_emails.append(clean)
 
+    print(f"DEBUG: Valid emails count before filtering: {len(valid_emails)}")
+    for idx, em in enumerate(valid_emails, start=1):
+        print(f"DEBUG:  -> #{idx} = {repr(em)}")
+
     if not valid_emails:
         print("DEBUG: Nie podano żadnych odbiorców => 400 JSON")
         return jsonify({
@@ -870,8 +875,11 @@ def send_message_ajax():
     filtered_emails = []
     for e in valid_emails:
         mail_lang = email_language_map.get(e, "")
+        print(f"DEBUG: sprawdzam {repr(e)} => mail_lang='{mail_lang}'")
         if mail_lang == language:
             filtered_emails.append(e)
+
+    print("DEBUG: po filtrze =>", len(filtered_emails), "adresów")
 
     if not filtered_emails:
         print("DEBUG: Żaden adres nie pasuje do języka => 400 JSON")
@@ -910,6 +918,14 @@ def send_message_ajax():
             'success': False,
             'message': 'Błąd podczas wysyłania.'
         }), 500
+
+@app.errorhandler(Exception)
+def handle_all_exceptions(e):
+    app.logger.error(f'Unhandled Exception: {e}')
+    return jsonify({
+        'success': False,
+        'message': 'Wewnętrzny błąd serwera.'
+    }), 500
 
 
 # Funkcja zatrzymująca proces wysyłania (opcjonalna)

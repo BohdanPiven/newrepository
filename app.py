@@ -212,8 +212,11 @@ def upload_file_to_gcs(file, expiration=3600):
 
 @app.errorhandler(RequestEntityTooLarge)
 def handle_file_too_large(e):
-    flash('Przesłany plik jest za duży. Maksymalny rozmiar to 16 MB.', 'error')
-    return redirect(url_for('index'))
+    return jsonify({
+        'success': False,
+        'message': 'Przesłany plik przekracza limit 16 MB!'
+    }), 413
+
 
 
 # Szablon podpisu do e-maila

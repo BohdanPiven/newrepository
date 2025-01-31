@@ -2082,13 +2082,16 @@ def allowed_file(filename):
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
+    print("DEBUG: user_id in session?", 'user_id' in session)
     if 'user_id' not in session:
+        print("DEBUG: NIE ma user_id, redirect do login")
         flash('Nie jesteś zalogowany.', 'error')
         return redirect(url_for('login'))
 
-    user_id = session['user_id']
-    user = User.query.get(user_id)
+    user = User.query.get(session['user_id'])
+    print("DEBUG: user =", user)
     if not user:
+        print("DEBUG: user w DB = None, redirect do login")
         flash('Użytkownik nie istnieje.', 'error')
         return redirect(url_for('login'))
 

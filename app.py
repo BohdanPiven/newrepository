@@ -88,9 +88,11 @@ app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default_secret_key')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB
 
 # Bezpieczne ustawienia ciasteczek sesji
-app.config['SESSION_COOKIE_SECURE'] = False  # Ustaw True w produkcji (HTTPS)
+# W środowisku produkcyjnym (Heroku + HTTPS) warto:
+app.config['SESSION_COOKIE_SECURE'] = True      # wymuszaj HTTPS
 app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SAMESITE'] = 'None'  # pozwala na przesyłanie cookie w zapytaniach POST/AJAX
+
 
 # Inicjalizacja szyfrowania (Fernet)
 ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY')
@@ -743,17 +745,16 @@ def handle_request_entity_too_large(e):
 # Asynchroniczne API do wysyłania e-maili (przykład)
 @app.route('/send_message_ajax', methods=['POST'])
 def send_message_ajax():
-    """
-    Przyjmuje wiadomość i załączniki przez AJAX.
-    Zamiast zapisywać pliki na dysk, koduje je w base64 i przekazuje do Celery.
-    """
-    # 1. Sprawdzenie, czy użytkownik jest zalogowany
+    print("DEBUG: 'user_id' in session? =>", 'user_id' in session)
     if 'user_id' not in session:
+        print("DEBUG: Brak user_id, zwracam 401")
         return jsonify({'success': False, 'message': 'Nie jesteś zalogowany.'}), 401
 
     user_id = session['user_id']
     user = db.session.get(User, user_id)
+    print("DEBUG: user =", user)
     if not user:
+        print("DEBUG: user not found w DB => 404")
         return jsonify({'success': False, 'message': 'Użytkownik nie istnieje.'}), 404
 
     # 2. Pobranie danych z formularza
@@ -3253,7 +3254,7 @@ def index():
                             fetch('{{ url_for("send_message_ajax") }}', {
                                 method: 'POST',
                                 body: formData,
-                                credentials: 'same-origin'
+                                credentials: 'include'
                             })
                             .then(response => response.json())
                             .then(data => {

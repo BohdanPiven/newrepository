@@ -769,10 +769,15 @@ def send_message_ajax():
         return jsonify({'success': False, 'message': 'Użytkownik nie istnieje.'}), 404
 
     # 2. Pobranie danych z formularza
-    subject = request.form.get('subject')
-    message = request.form.get('message')
-    recipients = request.form.get('recipients', '')
-    language = request.form.get('language', '').strip()
+    try:
+        subject = request.form.get('subject')
+        message = request.form.get('message')
+        recipients = request.form.get('recipients', '')
+        language = request.form.get('language', '').strip()
+        print("DEBUG: Pobieram dane z formularza")
+    except Exception as e:
+        print(f"DEBUG: Wyjątek podczas pobierania danych z formularza: {repr(e)} => 500 JSON")
+        return jsonify({'success': False, 'message': 'Błąd podczas przetwarzania danych.'}), 500
 
     print("DEBUG: subject=", subject, " message=", (message[:50] + '...' if message else ""), 
           " recipients=", recipients, " language=", language)
@@ -793,55 +798,65 @@ def send_message_ajax():
         }), 400
 
     # 3. Rozbicie recipients na listę e-maili
-    valid_emails = []
-    raw_recipients = recipients.replace(';', ',')
-    for email in raw_recipients.split(','):
-        clean = email.strip()
-        if clean:
-            valid_emails.append(clean)
+    try:
+        print("DEBUG: Rozpoczynam rozbijanie recipients na listę e-maili")
+        valid_emails = []
+        raw_recipients = recipients.replace(';', ',')
+        for email in raw_recipients.split(','):
+            clean = email.strip()
+            if clean:
+                valid_emails.append(clean)
 
-    print(f"DEBUG: Valid emails count before filtering: {len(valid_emails)}")
-    for idx, em in enumerate(valid_emails, start=1):
-        print(f"DEBUG:  -> #{idx} = {repr(em)}")
+        print(f"DEBUG: Valid emails count before filtering: {len(valid_emails)}")
+        for idx, em in enumerate(valid_emails, start=1):
+            print(f"DEBUG:  -> #{idx} = {repr(em)}")
 
-    if not valid_emails:
-        print("DEBUG: Nie podano żadnych odbiorców => 400 JSON")
-        return jsonify({
-            'success': False,
-            'message': 'Proszę wybrać przynajmniej jeden adres e-mail.'
-        }), 400
-
-    # 4. Odczyt plików i konwersja w base64
-    attachments = request.files.getlist('attachments')
-    attachment_data = []
-    for file in attachments:
-        if file and is_allowed_file(file):
-            # Odczyt całego pliku do pamięci
-            file_bytes = file.read()
-            file.seek(0)  # przywracamy wskaźnik
-
-            # Ustalenie nazwy i MIME
-            filename = secure_filename(file.filename)
-            sample = file.read(1024)
-            file.seek(0)
-            mime_type = magic.from_buffer(sample, mime=True)
-
-            # Kodujemy zawartość w base64
-            encoded = base64.b64encode(file_bytes).decode('utf-8')
-
-            attachment_data.append({
-                'filename': filename,
-                'mime_type': mime_type,
-                'content_b64': encoded
-            })
-            print(f"DEBUG: Załącznik dodany: {filename} (MIME: {mime_type})")
-        elif file.filename != '':
-            # Plik o niedozwolonym typie
-            print(f"DEBUG: Niedozwolony typ pliku => {file.filename} => 400 JSON")
+        if not valid_emails:
+            print("DEBUG: Nie podano żadnych odbiorców => 400 JSON")
             return jsonify({
                 'success': False,
-                'message': f'Nieprawidłowy typ pliku: {file.filename}'
+                'message': 'Proszę wybrać przynajmniej jeden adres e-mail.'
             }), 400
+    except Exception as e:
+        print(f"DEBUG: Wyjątek podczas rozbijania recipients: {repr(e)} => 500 JSON")
+        return jsonify({'success': False, 'message': 'Błąd podczas przetwarzania odbiorców.'}), 500
+
+    # 4. Odczyt plików i konwersja w base64
+    try:
+        print("DEBUG: Rozpoczynam odczyt załączników")
+        attachments = request.files.getlist('attachments')
+        attachment_data = []
+        for file in attachments:
+            if file and is_allowed_file(file):
+                # Odczyt całego pliku do pamięci
+                file_bytes = file.read()
+                file.seek(0)  # przywracamy wskaźnik
+
+                # Ustalenie nazwy i MIME
+                filename = secure_filename(file.filename)
+                sample = file.read(1024)
+                file.seek(0)
+                mime_type = magic.from_buffer(sample, mime=True)
+
+                # Kodujemy zawartość w base64
+                encoded = base64.b64encode(file_bytes).decode('utf-8')
+
+                attachment_data.append({
+                    'filename': filename,
+                    'mime_type': mime_type,
+                    'content_b64': encoded
+                })
+                print(f"DEBUG: Załącznik dodany: {filename} (MIME: {mime_type})")
+            elif file.filename != '':
+                # Plik o niedozwolonym typie
+                print(f"DEBUG: Niedozwolony typ pliku => {file.filename} => 400 JSON")
+                return jsonify({
+                    'success': False,
+                    'message': f'Nieprawidłowy typ pliku: {file.filename}'
+                }), 400
+    except Exception as e:
+        print(f"DEBUG: Wyjątek podczas odczytu załączników: {repr(e)} => 500 JSON")
+        return jsonify({'success': False, 'message': 'Błąd podczas przetwarzania załączników.'}), 500
 
     # 5. Pobranie arkusza Google i sprawdzanie języka (przykład)
     try:
@@ -858,35 +873,46 @@ def send_message_ajax():
 
     email_language_map = {}
 
-    for row_index, row in enumerate(data):
-        # Segmenty / możliwości: row[17] = e-mail, row[23] = subsegment
-        if len(row) > 23 and row[17] and row[23]:
-            em = row[17].strip()
-            subseg = row[23].strip()
-            email_language_map[em] = subseg
+    try:
+        print("DEBUG: Rozpoczynam budowanie mapy email_language_map")
+        for row_index, row in enumerate(data):
+            # Segmenty / możliwości: row[17] = e-mail, row[23] = subsegment
+            if len(row) > 23 and row[17] and row[23]:
+                em = row[17].strip()
+                subseg = row[23].strip()
+                email_language_map[em] = subseg
 
-        # Potencjalni klienci: row[46] = e-mail, row[49] = język
-        if len(row) > 49 and row[46] and row[49]:
-            em = row[46].strip()
-            lng = row[49].strip()
-            email_language_map[em] = lng
+            # Potencjalni klienci: row[46] = e-mail, row[49] = język
+            if len(row) > 49 and row[46] and row[49]:
+                em = row[46].strip()
+                lng = row[49].strip()
+                email_language_map[em] = lng
+        print("DEBUG: Mapa email_language_map zbudowana poprawnie")
+    except Exception as e:
+        print(f"DEBUG: Wyjątek podczas budowania email_language_map: {repr(e)} => 500 JSON")
+        return jsonify({'success': False, 'message': 'Błąd podczas przetwarzania danych.'}), 500
 
     # 6. Filtrowanie e-maili pod kątem wybranego języka
-    filtered_emails = []
-    for e in valid_emails:
-        mail_lang = email_language_map.get(e, "")
-        print(f"DEBUG: sprawdzam {repr(e)} => mail_lang='{mail_lang}'")
-        if mail_lang == language:
-            filtered_emails.append(e)
+    try:
+        print("DEBUG: Rozpoczynam filtrowanie e-maili według języka")
+        filtered_emails = []
+        for e in valid_emails:
+            mail_lang = email_language_map.get(e, "")
+            print(f"DEBUG: sprawdzam {repr(e)} => mail_lang='{mail_lang}'")
+            if mail_lang == language:
+                filtered_emails.append(e)
 
-    print("DEBUG: po filtrze =>", len(filtered_emails), "adresów")
+        print("DEBUG: po filtrze =>", len(filtered_emails), "adresów")
 
-    if not filtered_emails:
-        print("DEBUG: Żaden adres nie pasuje do języka => 400 JSON")
-        return jsonify({
-            'success': False,
-            'message': f'Żaden z zaznaczonych adresów nie pasuje do języka: {language}.'
-        }), 400
+        if not filtered_emails:
+            print("DEBUG: Żaden adres nie pasuje do języka => 400 JSON")
+            return jsonify({
+                'success': False,
+                'message': f'Żaden z zaznaczonych adresów nie pasuje do języka: {language}.'
+            }), 400
+    except Exception as e:
+        print(f"DEBUG: Wyjątek podczas filtrowania e-maili: {repr(e)} => 500 JSON")
+        return jsonify({'success': False, 'message': 'Błąd podczas filtrowania adresów e-mail.'}), 500
 
     # 7. Wywołanie Celery (asynchronicznie), przekazujemy attachment_data w pamięci
     try:
@@ -919,13 +945,20 @@ def send_message_ajax():
             'message': 'Błąd podczas wysyłania.'
         }), 500
 
+
+
 @app.errorhandler(Exception)
 def handle_all_exceptions(e):
-    app.logger.error(f'Unhandled Exception: {e}')
-    return jsonify({
-        'success': False,
-        'message': 'Wewnętrzny błąd serwera.'
-    }), 500
+    # Sprawdź, czy żądanie jest AJAX
+    if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({
+            'success': False,
+            'message': 'Wewnętrzny błąd serwera.'
+        }), 500
+    else:
+        flash("Ups, coś poszło nie tak!")
+        return redirect(url_for('index'))
+
 
 
 # Funkcja zatrzymująca proces wysyłania (opcjonalna)
@@ -2132,24 +2165,34 @@ def allowed_file(filename):
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    print("DEBUG: user_id in session?", 'user_id' in session)
+    # Dodajemy kilka debugowych printów
+    print("DEBUG: (index) user_id in session?", 'user_id' in session)
     if 'user_id' not in session:
-        print("DEBUG: NIE ma user_id, redirect do login")
+        print("DEBUG: (index) NIE ma user_id, redirect do login")
         flash('Nie jesteś zalogowany.', 'error')
         return redirect(url_for('login'))
 
     user = User.query.get(session['user_id'])
-    print("DEBUG: user =", user)
+    print("DEBUG: (index) user =", user)
     if not user:
-        print("DEBUG: user w DB = None, redirect do login")
+        print("DEBUG: (index) user w DB = None, redirect do login")
         flash('Użytkownik nie istnieje.', 'error')
         return redirect(url_for('login'))
 
-    data = get_data_from_sheet()
+    # Próba pobrania danych z Google Sheets
+    try:
+        data = get_data_from_sheet()
+        print(f"DEBUG: (index) get_data_from_sheet() -> liczba rekordów = {len(data)}")
+    except Exception as e:
+        print(f"DEBUG: (index) Błąd get_data_from_sheet: {repr(e)}")
+        flash('Błąd podczas pobierania danych z arkusza.', 'error')
+        data = []
 
     # --- [1] Pobieramy oryginalne słowniki z licznikami segmentów i możliwości ---
     segments_dict = get_unique_segments_with_counts(data)
     possibilities_dict = get_unique_possibilities_with_counts(data)
+
+    print("DEBUG: (index) Liczba segmentów =", len(segments_dict), "Liczba możliwości =", len(possibilities_dict))
 
     # --- [2] Sortujemy je według sumy (Polski + Zagraniczny) w kolejności malejącej ---
     sorted_segments = sorted(
@@ -2165,9 +2208,11 @@ def index():
 
     # Notatki
     notes = Note.query.order_by(Note.id.desc()).all()
+    print("DEBUG: (index) Notatki pobrane, liczba notatek =", len(notes))
 
     # Potencjalni klienci
     potential_clients = get_potential_clients(data)
+    print("DEBUG: (index) get_potential_clients -> liczba grup =", len(potential_clients))
 
     # Poniżej znajduje się cały szablon index_template – bez zmian
     index_template = '''
@@ -4059,14 +4104,13 @@ def index():
     </html>
     '''
 
+    print("DEBUG: (index) Render template index_template")
     return render_template_string(
         index_template,
         user=user,
-        # zamiast segments=segments_dict.items(), przekazujemy posortowaną listę
-        segments=sorted_segments,
+        segments=sorted_segments,        # przesyłamy posortowane segmenty
+        possibilities=sorted_possibilities,  # przesyłamy posortowane możliwości
         notes=notes,
-        # zamiast possibilities=possibilities_dict.items(), przekazujemy posortowaną listę
-        possibilities=sorted_possibilities,
         potential_clients=potential_clients,
         get_email_company_pairs_for_segment=get_email_company_pairs_for_segment,
         data=data,

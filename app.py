@@ -85,7 +85,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Podstawowa konfiguracja
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default_secret_key')
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB
 
 # Bezpieczne ustawienia ciasteczek sesji
 # W środowisku produkcyjnym (Heroku + HTTPS) warto:
@@ -212,8 +212,11 @@ def upload_file_to_gcs(file, expiration=3600):
 
 @app.errorhandler(RequestEntityTooLarge)
 def handle_file_too_large(e):
-    flash('Przesłany plik jest za duży. Maksymalny rozmiar to 16 MB.', 'error')
-    return redirect(url_for('index'))
+    return jsonify({
+        'success': False,
+        'message': 'Przesłany plik lub dane w formularzu przekraczają limit!'
+    }), 413
+
 
 
 

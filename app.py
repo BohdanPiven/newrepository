@@ -775,14 +775,15 @@ def send_message_ajax():
             'message': 'Nie wybrano języka (Polski / Zagraniczny).'
         }), 400
 
-    # 3. Rozbicie recipients na listę e-maili
-    valid_emails = []
-    raw_recipients = recipients.replace(';', ',')
+    # 3. Rozbicie recipients na unikalny zestaw e-maili (set) -> unikamy duplikatów
+    valid_emails = set()
+    raw_recipients = recipients.replace(';', ',')  # Zamień średniki na przecinki, jeśli użytkownik je wprowadził
     for email in raw_recipients.split(','):
         clean = email.strip()
         if clean:
-            valid_emails.append(clean)
+            valid_emails.add(clean)
 
+    # Jeśli mimo wszystko nie mamy żadnych adresów
     if not valid_emails:
         return jsonify({
             'success': False,
@@ -796,7 +797,7 @@ def send_message_ajax():
         if file and is_allowed_file(file):
             # Odczyt całego pliku do pamięci
             file_bytes = file.read()
-            file.seek(0)  # Można przywrócić wskaźnik, ale nie jest to już krytyczne
+            file.seek(0)  # Nie jest to już krytyczne, ale zostawiamy dla bezpieczeństwa
 
             # Ustalenie nazwy i MIME
             filename = secure_filename(file.filename)
@@ -819,7 +820,7 @@ def send_message_ajax():
                 'message': f'Nieprawidłowy typ pliku: {file.filename}'
             }), 400
 
-    # 5. (Przykład) – pobranie arkusza Google i sprawdzanie, czy e-mail ma ten sam język, co user wybrał
+    # 5. (Przykład) – pobranie arkusza Google i mapowanie e-mail -> język
     data = get_data_from_sheet()
     email_language_map = {}
 
@@ -837,11 +838,11 @@ def send_message_ajax():
             email_language_map[em] = lng
 
     # 6. Filtrowanie e-maili pod kątem wybranego języka
-    filtered_emails = []
+    filtered_emails = set()
     for e in valid_emails:
         mail_lang = email_language_map.get(e, "")
         if mail_lang == language:
-            filtered_emails.append(e)
+            filtered_emails.add(e)
 
     if not filtered_emails:
         return jsonify({
@@ -856,12 +857,13 @@ def send_message_ajax():
         stop_event = threading.Event()
         email_sending_stop_events[task_id] = stop_event
 
+        # Konwertujemy zbiór na listę i wysyłamy do Celery
         task = send_bulk_emails.delay(
-            filtered_emails,
+            list(filtered_emails),
             subject,
             message,
             user_id,
-            attachment_data  # <-- tu kluczowa zmiana
+            attachment_data  # <-- tu kluczowa zmiana (listę załączników z base64)
         )
 
         return jsonify({
@@ -876,6 +878,7 @@ def send_message_ajax():
             'success': False,
             'message': 'Błąd podczas wysyłania.'
         }), 500
+
 
 
 # Funkcja zatrzymująca proces wysyłania (opcjonalna)

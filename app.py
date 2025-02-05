@@ -85,14 +85,12 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Podstawowa konfiguracja
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default_secret_key')
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB
 
 # Bezpieczne ustawienia ciasteczek sesji
-# W środowisku produkcyjnym (Heroku + HTTPS) warto:
-app.config['SESSION_COOKIE_SECURE'] = True      # wymuszaj HTTPS
+app.config['SESSION_COOKIE_SECURE'] = False  # Ustaw True w produkcji (HTTPS)
 app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SAMESITE'] = 'None'  # pozwala na przesyłanie cookie w zapytaniach POST/AJAX
-
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
 # Inicjalizacja szyfrowania (Fernet)
 ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY')
@@ -212,12 +210,8 @@ def upload_file_to_gcs(file, expiration=3600):
 
 @app.errorhandler(RequestEntityTooLarge)
 def handle_file_too_large(e):
-    return jsonify({
-        'success': False,
-        'message': 'Przesłany plik lub dane w formularzu przekraczają limit!'
-    }), 413
-
-
+    flash('Przesłany plik jest za duży. Maksymalny rozmiar to 16 MB.', 'error')
+    return redirect(url_for('index'))
 
 
 # Szablon podpisu do e-maila
@@ -753,169 +747,107 @@ def send_message_ajax():
     Przyjmuje wiadomość i załączniki przez AJAX.
     Zamiast zapisywać pliki na dysk, koduje je w base64 i przekazuje do Celery.
     """
-
-    # --- DEBUG 1: Start funkcji
-    print("DEBUG: Rozpoczynam send_message_ajax")
-
     # 1. Sprawdzenie, czy użytkownik jest zalogowany
-    print("DEBUG: 'user_id' in session? =>", 'user_id' in session)
     if 'user_id' not in session:
-        print("DEBUG: Brak user_id w sesji, zwracam 401 JSON")
         return jsonify({'success': False, 'message': 'Nie jesteś zalogowany.'}), 401
 
     user_id = session['user_id']
     user = db.session.get(User, user_id)
-    print("DEBUG: user =", user)
-
     if not user:
-        print("DEBUG: Użytkownik o podanym user_id nie istnieje w DB => 404 JSON")
         return jsonify({'success': False, 'message': 'Użytkownik nie istnieje.'}), 404
 
     # 2. Pobranie danych z formularza
-    try:
-        subject = request.form.get('subject')
-        message = request.form.get('message')
-        recipients = request.form.get('recipients', '')
-        language = request.form.get('language', '').strip()
-        print("DEBUG: Pobieram dane z formularza")
-    except Exception as e:
-        print(f"DEBUG: Wyjątek podczas pobierania danych z formularza: {repr(e)} => 500 JSON")
-        return jsonify({'success': False, 'message': 'Błąd podczas przetwarzania danych.'}), 500
-
-    print("DEBUG: subject=", subject, " message=", (message[:50] + '...' if message else ""), 
-          " recipients=", recipients, " language=", language)
+    subject = request.form.get('subject')
+    message = request.form.get('message')
+    recipients = request.form.get('recipients', '')
+    language = request.form.get('language', '').strip()
 
     # Walidacja
     if not subject or not message:
-        print("DEBUG: Brakuje subject lub message => 400 JSON")
         return jsonify({
             'success': False,
             'message': 'Wypełnij wszystkie wymagane pola (temat i treść).'
         }), 400
 
     if not language:
-        print("DEBUG: Brak parametru language => 400 JSON")
         return jsonify({
             'success': False,
             'message': 'Nie wybrano języka (Polski / Zagraniczny).'
         }), 400
 
     # 3. Rozbicie recipients na listę e-maili
-    try:
-        print("DEBUG: Rozpoczynam rozbijanie recipients na listę e-maili")
-        valid_emails = []
-        raw_recipients = recipients.replace(';', ',')
-        for email in raw_recipients.split(','):
-            clean = email.strip()
-            if clean:
-                valid_emails.append(clean)
+    valid_emails = []
+    raw_recipients = recipients.replace(';', ',')
+    for email in raw_recipients.split(','):
+        clean = email.strip()
+        if clean:
+            valid_emails.append(clean)
 
-        print(f"DEBUG: Valid emails count before filtering: {len(valid_emails)}")
-        for idx, em in enumerate(valid_emails, start=1):
-            print(f"DEBUG:  -> #{idx} = {repr(em)}")
-
-        if not valid_emails:
-            print("DEBUG: Nie podano żadnych odbiorców => 400 JSON")
-            return jsonify({
-                'success': False,
-                'message': 'Proszę wybrać przynajmniej jeden adres e-mail.'
-            }), 400
-    except Exception as e:
-        print(f"DEBUG: Wyjątek podczas rozbijania recipients: {repr(e)} => 500 JSON")
-        return jsonify({'success': False, 'message': 'Błąd podczas przetwarzania odbiorców.'}), 500
-
-    # 4. Odczyt plików i konwersja w base64
-    try:
-        print("DEBUG: Rozpoczynam odczyt załączników")
-        attachments = request.files.getlist('attachments')
-        attachment_data = []
-        for file in attachments:
-            if file and is_allowed_file(file):
-                # Odczyt całego pliku do pamięci
-                file_bytes = file.read()
-                file.seek(0)  # przywracamy wskaźnik
-
-                # Ustalenie nazwy i MIME
-                filename = secure_filename(file.filename)
-                sample = file.read(1024)
-                file.seek(0)
-                mime_type = magic.from_buffer(sample, mime=True)
-
-                # Kodujemy zawartość w base64
-                encoded = base64.b64encode(file_bytes).decode('utf-8')
-
-                attachment_data.append({
-                    'filename': filename,
-                    'mime_type': mime_type,
-                    'content_b64': encoded
-                })
-                print(f"DEBUG: Załącznik dodany: {filename} (MIME: {mime_type})")
-            elif file.filename != '':
-                # Plik o niedozwolonym typie
-                print(f"DEBUG: Niedozwolony typ pliku => {file.filename} => 400 JSON")
-                return jsonify({
-                    'success': False,
-                    'message': f'Nieprawidłowy typ pliku: {file.filename}'
-                }), 400
-    except Exception as e:
-        print(f"DEBUG: Wyjątek podczas odczytu załączników: {repr(e)} => 500 JSON")
-        return jsonify({'success': False, 'message': 'Błąd podczas przetwarzania załączników.'}), 500
-
-    # 5. Pobranie arkusza Google i sprawdzanie języka (przykład)
-    try:
-        print("DEBUG: Wywołuję get_data_from_sheet()...")
-        data = get_data_from_sheet()
-        print("DEBUG: get_data_from_sheet zakończone, len(data) =", len(data))
-    except Exception as e:
-        # Jeśli w tym miejscu wystąpi błąd, możesz wyświetlić go w logu:
-        print(f"DEBUG: Wyjątek w get_data_from_sheet: {repr(e)} => 500 JSON")
+    if not valid_emails:
         return jsonify({
             'success': False,
-            'message': f'Błąd podczas pobierania danych z arkusza: {str(e)}'
-        }), 500
+            'message': 'Proszę wybrać przynajmniej jeden adres e-mail.'
+        }), 400
 
-    email_language_map = {}
+    # 4. Odczyt plików i konwersja w base64
+    attachments = request.files.getlist('attachments')
+    attachment_data = []
+    for file in attachments:
+        if file and is_allowed_file(file):
+            # Odczyt całego pliku do pamięci
+            file_bytes = file.read()
+            file.seek(0)  # Można przywrócić wskaźnik, ale nie jest to już krytyczne
 
-    try:
-        print("DEBUG: Rozpoczynam budowanie mapy email_language_map")
-        for row_index, row in enumerate(data):
-            # Segmenty / możliwości: row[17] = e-mail, row[23] = subsegment
-            if len(row) > 23 and row[17] and row[23]:
-                em = row[17].strip()
-                subseg = row[23].strip()
-                email_language_map[em] = subseg
+            # Ustalenie nazwy i MIME
+            filename = secure_filename(file.filename)
+            sample = file.read(1024)
+            file.seek(0)
+            mime_type = magic.from_buffer(sample, mime=True)
 
-            # Potencjalni klienci: row[46] = e-mail, row[49] = język
-            if len(row) > 49 and row[46] and row[49]:
-                em = row[46].strip()
-                lng = row[49].strip()
-                email_language_map[em] = lng
-        print("DEBUG: Mapa email_language_map zbudowana poprawnie")
-    except Exception as e:
-        print(f"DEBUG: Wyjątek podczas budowania email_language_map: {repr(e)} => 500 JSON")
-        return jsonify({'success': False, 'message': 'Błąd podczas przetwarzania danych.'}), 500
+            # Kodujemy zawartość w base64
+            encoded = base64.b64encode(file_bytes).decode('utf-8')
 
-    # 6. Filtrowanie e-maili pod kątem wybranego języka
-    try:
-        print("DEBUG: Rozpoczynam filtrowanie e-maili według języka")
-        filtered_emails = []
-        for e in valid_emails:
-            mail_lang = email_language_map.get(e, "")
-            print(f"DEBUG: sprawdzam {repr(e)} => mail_lang='{mail_lang}'")
-            if mail_lang == language:
-                filtered_emails.append(e)
+            attachment_data.append({
+                'filename': filename,
+                'mime_type': mime_type,
+                'content_b64': encoded
+            })
 
-        print("DEBUG: po filtrze =>", len(filtered_emails), "adresów")
-
-        if not filtered_emails:
-            print("DEBUG: Żaden adres nie pasuje do języka => 400 JSON")
+        elif file.filename != '':
             return jsonify({
                 'success': False,
-                'message': f'Żaden z zaznaczonych adresów nie pasuje do języka: {language}.'
+                'message': f'Nieprawidłowy typ pliku: {file.filename}'
             }), 400
-    except Exception as e:
-        print(f"DEBUG: Wyjątek podczas filtrowania e-maili: {repr(e)} => 500 JSON")
-        return jsonify({'success': False, 'message': 'Błąd podczas filtrowania adresów e-mail.'}), 500
+
+    # 5. (Przykład) – pobranie arkusza Google i sprawdzanie, czy e-mail ma ten sam język, co user wybrał
+    data = get_data_from_sheet()
+    email_language_map = {}
+
+    for row_index, row in enumerate(data):
+        # Segmenty / możliwości: row[17] = e-mail, row[23] = subsegment
+        if len(row) > 23 and row[17] and row[23]:
+            em = row[17].strip()
+            subseg = row[23].strip()
+            email_language_map[em] = subseg
+
+        # Potencjalni klienci: row[46] = e-mail, row[49] = język
+        if len(row) > 49 and row[46] and row[49]:
+            em = row[46].strip()
+            lng = row[49].strip()
+            email_language_map[em] = lng
+
+    # 6. Filtrowanie e-maili pod kątem wybranego języka
+    filtered_emails = []
+    for e in valid_emails:
+        mail_lang = email_language_map.get(e, "")
+        if mail_lang == language:
+            filtered_emails.append(e)
+
+    if not filtered_emails:
+        return jsonify({
+            'success': False,
+            'message': f'Żaden z zaznaczonych adresów nie pasuje do języka: {language}.'
+        }), 400
 
     # 7. Wywołanie Celery (asynchronicznie), przekazujemy attachment_data w pamięci
     try:
@@ -924,16 +856,14 @@ def send_message_ajax():
         stop_event = threading.Event()
         email_sending_stop_events[task_id] = stop_event
 
-        print(f"DEBUG: Uruchamiam send_bulk_emails.delay(...) -> filtered_emails={len(filtered_emails)} szt.")
         task = send_bulk_emails.delay(
             filtered_emails,
             subject,
             message,
             user_id,
-            attachment_data
+            attachment_data  # <-- tu kluczowa zmiana
         )
 
-        print(f"DEBUG: Zadanie Celery utworzone, task_id={task.id}")
         return jsonify({
             'success': True,
             'message': f'Rozpoczęto wysyłanie wiadomości (język: {language}).',
@@ -941,27 +871,11 @@ def send_message_ajax():
         }), 200
 
     except Exception as e:
-        print(f"DEBUG: Wyjątek przy uruchamianiu Celery: {repr(e)} => 500 JSON")
         app.logger.error(f'Błąd: {e}')
         return jsonify({
             'success': False,
             'message': 'Błąd podczas wysyłania.'
         }), 500
-
-
-
-@app.errorhandler(Exception)
-def handle_all_exceptions(e):
-    # Sprawdź, czy żądanie jest AJAX
-    if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        return jsonify({
-            'success': False,
-            'message': 'Wewnętrzny błąd serwera.'
-        }), 500
-    else:
-        flash("Ups, coś poszło nie tak!")
-        return redirect(url_for('index'))
-
 
 
 # Funkcja zatrzymująca proces wysyłania (opcjonalna)
@@ -2168,34 +2082,21 @@ def allowed_file(filename):
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    # Dodajemy kilka debugowych printów
-    print("DEBUG: (index) user_id in session?", 'user_id' in session)
     if 'user_id' not in session:
-        print("DEBUG: (index) NIE ma user_id, redirect do login")
         flash('Nie jesteś zalogowany.', 'error')
         return redirect(url_for('login'))
 
-    user = User.query.get(session['user_id'])
-    print("DEBUG: (index) user =", user)
+    user_id = session['user_id']
+    user = User.query.get(user_id)
     if not user:
-        print("DEBUG: (index) user w DB = None, redirect do login")
         flash('Użytkownik nie istnieje.', 'error')
         return redirect(url_for('login'))
 
-    # Próba pobrania danych z Google Sheets
-    try:
-        data = get_data_from_sheet()
-        print(f"DEBUG: (index) get_data_from_sheet() -> liczba rekordów = {len(data)}")
-    except Exception as e:
-        print(f"DEBUG: (index) Błąd get_data_from_sheet: {repr(e)}")
-        flash('Błąd podczas pobierania danych z arkusza.', 'error')
-        data = []
+    data = get_data_from_sheet()
 
     # --- [1] Pobieramy oryginalne słowniki z licznikami segmentów i możliwości ---
     segments_dict = get_unique_segments_with_counts(data)
     possibilities_dict = get_unique_possibilities_with_counts(data)
-
-    print("DEBUG: (index) Liczba segmentów =", len(segments_dict), "Liczba możliwości =", len(possibilities_dict))
 
     # --- [2] Sortujemy je według sumy (Polski + Zagraniczny) w kolejności malejącej ---
     sorted_segments = sorted(
@@ -2211,11 +2112,9 @@ def index():
 
     # Notatki
     notes = Note.query.order_by(Note.id.desc()).all()
-    print("DEBUG: (index) Notatki pobrane, liczba notatek =", len(notes))
 
     # Potencjalni klienci
     potential_clients = get_potential_clients(data)
-    print("DEBUG: (index) get_potential_clients -> liczba grup =", len(potential_clients))
 
     # Poniżej znajduje się cały szablon index_template – bez zmian
     index_template = '''
@@ -3351,7 +3250,7 @@ def index():
                             fetch('{{ url_for("send_message_ajax") }}', {
                                 method: 'POST',
                                 body: formData,
-                                credentials: 'include'
+                                credentials: 'same-origin'
                             })
                             .then(response => response.json())
                             .then(data => {
@@ -4107,13 +4006,14 @@ def index():
     </html>
     '''
 
-    print("DEBUG: (index) Render template index_template")
     return render_template_string(
         index_template,
         user=user,
-        segments=sorted_segments,        # przesyłamy posortowane segmenty
-        possibilities=sorted_possibilities,  # przesyłamy posortowane możliwości
+        # zamiast segments=segments_dict.items(), przekazujemy posortowaną listę
+        segments=sorted_segments,
         notes=notes,
+        # zamiast possibilities=possibilities_dict.items(), przekazujemy posortowaną listę
+        possibilities=sorted_possibilities,
         potential_clients=potential_clients,
         get_email_company_pairs_for_segment=get_email_company_pairs_for_segment,
         data=data,

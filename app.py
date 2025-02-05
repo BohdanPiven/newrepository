@@ -157,6 +157,52 @@ app.config['MAX_ATTACHMENTS'] = 5
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
 SPREADSHEET_ID = os.getenv('SPREADSHEET_ID', '')
 
+def highlight_text_custom(text):
+    """
+    Zamienia sekwencje:
+      - [[[ ... ]]] => <span class="orange-brackets">[[[ ... ]]]</span>
+      - Polski / Zagraniczny => <span class="dark-green">...<span>
+      - liczby => <span class="light-grey-number">...</span>
+    """
+    if not text:
+        return ""
+
+    # [[[ ... ]]] => pomarańczowe
+    text = re.sub(
+        r'\[\[\[(.*?)\]\]\]', 
+        r'<span class="orange-brackets">[[[\1]]]</span>', 
+        text
+    )
+
+    # Polski / Zagraniczny => ciemnozielone
+    text = re.sub(
+        r'\bPolski\b', 
+        r'<span class="dark-green">Polski</span>', 
+        text
+    )
+    text = re.sub(
+        r'\bZagraniczny\b', 
+        r'<span class="dark-green">Zagraniczny</span>', 
+        text
+    )
+
+    # liczby => jasnoszare
+    text = re.sub(
+        r'(\d+)', 
+        r'<span class="light-grey-number">\1</span>', 
+        text
+    )
+
+    return text
+
+@app.template_filter('highlight')
+def highlight_filter(text):
+    """
+    Filtr Jinja używający highlight_text_custom.
+    """
+    return highlight_text_custom(text)
+
+
 def is_allowed_file(file):
     """
     Sprawdza, czy plik (FileStorage) ma dozwolone rozszerzenie i prawidłowy typ MIME.
@@ -2119,8 +2165,13 @@ def index():
     # Potencjalni klienci
     potential_clients = get_potential_clients(data)
 
-    # Poniżej znajduje się cały szablon index_template – bez zmian
+    # Poniżej znajduje się cały szablon index_template – bez zmian w strukturze,
+    # ale z dodaną obsługą kolorków i makrem do wyróżnienia [[[ ... ]]].
     index_template = '''
+    {% macro highlight_brackets(text) %}
+        {{ text|replace('[[[','<span style="color: orange;">')|replace(']]]','</span>')|safe }}
+    {% endmacro %}
+
     <!DOCTYPE html>
     <html lang="pl">
     <head>
@@ -2766,6 +2817,17 @@ def index():
                 font-size: 12px;
                 margin-top: auto;
             }
+
+            /* Dodatkowe style do kolorowania "Polski" i "Zagraniczny" oraz cyfr */
+            .lang-label {
+                color: #006400; /* lekko ciemno-zielony */
+                font-weight: bold;
+            }
+            .lang-number {
+                color: #a8a8a8; /* jasnoszary */
+                font-weight: normal;
+            }
+
             @media (max-width: 768px) {
                 .content-wrapper {
                     flex-direction: column;
@@ -2983,15 +3045,15 @@ def index():
                         const companyToRemove = this.getAttribute('data-company');
                         const checkbox = Array.from(document.querySelectorAll('.potential-clients-list .client-item input[type="checkbox"]'))
                             .find(cb => {
-                                const label = document.querySelector(`label[for="${cb.id}"]`);
+                                const label = document.querySelector(`label[for="\${cb.id}"]`);
                                 return label && label.textContent.split(' (')[0] === companyToRemove;
                             });
                         if (checkbox) {
                             checkbox.checked = false;
                             // Jeśli wszyscy klienci w grupie są odznaczeni, odznacz również checkbox grupy
                             const groupIndex = checkbox.id.split('-')[1];
-                            const groupCheckbox = document.getElementById(`potential-group-${groupIndex}`);
-                            const siblingCheckboxes = document.querySelectorAll(`#clients-${groupIndex} .client-item input[type="checkbox"]`);
+                            const groupCheckbox = document.getElementById(`potential-group-\${groupIndex}`);
+                            const siblingCheckboxes = document.querySelectorAll(\`#clients-\${groupIndex} .client-item input[type="checkbox"]\`);
                             const allUnchecked = Array.from(siblingCheckboxes).every(cb => !cb.checked);
                             if (allUnchecked && groupCheckbox) {
                                 groupCheckbox.checked = false;
@@ -3174,7 +3236,7 @@ def index():
 
             function toggleEmailsInSegment(segmentCheckbox) {
                 var segmentIndex = segmentCheckbox.id.split('-')[1];
-                var emailList = document.getElementById(`emails-${segmentIndex}`);
+                var emailList = document.getElementById(`emails-\${segmentIndex}`);
                 if (emailList) {
                     var emailCheckboxes = emailList.querySelectorAll('input[type="checkbox"]');
                     emailCheckboxes.forEach(function(emailCheckbox) {
@@ -3185,7 +3247,7 @@ def index():
 
             function toggleCompaniesInPossibility(possibilityCheckbox) {
                 var possibilityIndex = possibilityCheckbox.id.split('-')[1];
-                var companyList = document.getElementById(`companies-${possibilityIndex}`);
+                var companyList = document.getElementById(`companies-\${possibilityIndex}`);
                 if (companyList) {
                     var companyCheckboxes = companyList.querySelectorAll('input[type="checkbox"]');
                     companyCheckboxes.forEach(function(companyCheckbox) {
@@ -3196,7 +3258,7 @@ def index():
 
             function toggleClientsInGroup(groupCheckbox) {
                 var groupIndex = groupCheckbox.id.split('-')[2];
-                var clientsList = document.getElementById(`clients-${groupIndex}`);
+                var clientsList = document.getElementById(\`clients-\${groupIndex}\`);
                 if (clientsList) {
                     var clientCheckboxes = clientsList.querySelectorAll('input[type="checkbox"]');
                     clientCheckboxes.forEach(function(clientCheckbox) {
@@ -3469,7 +3531,7 @@ def index():
 
                         attachmentsPreview.appendChild(item);
                     });
-                    attachmentsCount.textContent = `Załączników: ${selectedFiles.length}/${maxAttachments}`;
+                    attachmentsCount.textContent = `Załączników: \${selectedFiles.length}/\${maxAttachments}`;
                 }
             });
 
@@ -3678,21 +3740,21 @@ def index():
             }
 
             function toggleEmailsList(segmentIndex) {
-                var emailList = document.getElementById(`emails-${segmentIndex}`);
+                var emailList = document.getElementById(\`emails-\${segmentIndex}\`);
                 if (emailList) {
                     emailList.classList.toggle('show');
                 }
             }
 
             function toggleCompanyList(possibilityIndex) {
-                var companyList = document.getElementById(`companies-${possibilityIndex}`);
+                var companyList = document.getElementById(\`companies-\${possibilityIndex}\`);
                 if (companyList) {
                     companyList.classList.toggle('show');
                 }
             }
 
             function toggleClientsList(groupIndex) {
-                var clientsList = document.getElementById(`clients-${groupIndex}`);
+                var clientsList = document.getElementById(\`clients-\${groupIndex}\`);
                 if (clientsList) {
                     clientsList.classList.toggle('show');
                 }
@@ -3702,7 +3764,7 @@ def index():
                 const segmentCheckboxes = document.querySelectorAll('.segment-item input[type="checkbox"]');
                 for (const segment of segmentCheckboxes) {
                     const segmentIndex = segment.id.split('-')[1];
-                    const emailList = document.getElementById(`emails-${segmentIndex}`);
+                    const emailList = document.getElementById(\`emails-\${segmentIndex}\`);
                     if (emailList) {
                         const childEmails = emailList.querySelectorAll('input[type="checkbox"]:checked');
                         if (childEmails.length > 0 && !segment.checked) {
@@ -3715,7 +3777,7 @@ def index():
                 const possibilityCheckboxes = document.querySelectorAll('.possibility-item input[type="checkbox"]');
                 for (const possibility of possibilityCheckboxes) {
                     const possibilityIndex = possibility.id.split('-')[1];
-                    const companyList = document.getElementById(`companies-${possibilityIndex}`);
+                    const companyList = document.getElementById(\`companies-\${possibilityIndex}\`);
                     if (companyList) {
                         const childCompanies = companyList.querySelectorAll('input[type="checkbox"]:checked');
                         if (childCompanies.length > 0 && !possibility.checked) {
@@ -3728,7 +3790,7 @@ def index():
                 const groupCheckboxes = document.querySelectorAll('.potential-client-group input[type="checkbox"]');
                 for (const group of groupCheckboxes) {
                     const groupIndex = group.id.split('-')[2];
-                    const clientsList = document.getElementById(`clients-${groupIndex}`);
+                    const clientsList = document.getElementById(\`clients-\${groupIndex}\`);
                     if (clientsList) {
                         const childClients = clientsList.querySelectorAll('input[type="checkbox"]:checked');
                         if (childClients.length > 0 && !group.checked) {
@@ -3822,10 +3884,22 @@ def index():
                         <ul class="segment-list">
                             {% for segment, counts in segments %}
                                 {% set segment_index = loop.index %}
+                                {# Najpierw podmieniamy ewentualne [[[ ... ]]] w nazwie segmentu na pomarańczowy #}
+                                {% set highlighted_segment = highlight_brackets(segment) %}
+                                
                                 <li class="segment-item">
                                     <input type="checkbox" name="segments" value="{{ segment }}" id="segment-{{ segment_index }}" onchange="handleSegmentChange(this)">
                                     <span class="segment-label" data-index="{{ segment_index }}">
-                                        {{ segment }} <span class="segment-count">(Polski: {{ counts['Polski'] }}, Zagraniczny: {{ counts['Zagraniczny'] }})</span>
+                                        <!-- Kolorujemy Polski, Zagraniczny i liczby w nawiasach -->
+                                        {{ highlighted_segment }} 
+                                        <span class="segment-count">
+                                            (
+                                            <span class="lang-label">Polski</span>:
+                                            <span class="lang-number">{{ counts['Polski'] }}</span>,
+                                            <span class="lang-label">Zagraniczny</span>:
+                                            <span class="lang-number">{{ counts['Zagraniczny'] }}</span>
+                                            )
+                                        </span>
                                     </span>
                                 </li>
                                 <ul class="email-list" id="emails-{{ segment_index }}">
@@ -3836,13 +3910,17 @@ def index():
                                     {% for pair in emails_companies_polski %}
                                         <li class="email-item">
                                             <input type="checkbox" name="include_emails" value="{{ pair.email }}" id="email-{{ segment_index }}-polski-{{ loop.index }}">
-                                            <label for="email-{{ segment_index }}-polski-{{ loop.index }}">{{ pair.company }} (Polski)</label>
+                                            <label for="email-{{ segment_index }}-polski-{{ loop.index }}">
+                                                {{ pair.company }} (<span class="lang-label">Polski</span>)
+                                            </label>
                                         </li>
                                     {% endfor %}
                                     {% for pair in emails_companies_zagraniczny %}
                                         <li class="email-item">
                                             <input type="checkbox" name="include_emails" value="{{ pair.email }}" id="email-{{ segment_index }}-zagraniczny-{{ loop.index }}">
-                                            <label for="email-{{ segment_index }}-zagraniczny-{{ loop.index }}">{{ pair.company }} (Zagraniczny)</label>
+                                            <label for="email-{{ segment_index }}-zagraniczny-{{ loop.index }}">
+                                                {{ pair.company }} (<span class="lang-label">Zagraniczny</span>)
+                                            </label>
                                         </li>
                                     {% endfor %}
                                 </ul>
@@ -3858,12 +3936,20 @@ def index():
                         <ul class="possibility-list">
                             {% for possibility, details in possibilities %}
                                 {% set possibility_index = loop.index %}
+                                {# Podmieniamy ewentualne [[[ ... ]]] w nazwie możliwości na pomarańczowy #}
+                                {% set highlighted_possibility = highlight_brackets(possibility) %}
+                                
                                 <li class="possibility-item">
                                     <input type="checkbox" name="possibilities" value="{{ possibility }}" id="possibility-{{ possibility_index }}" onchange="handlePossibilityChange(this)">
                                     <span class="possibility-label" data-index="{{ possibility_index }}">
-                                        {{ possibility }}
+                                        {{ highlighted_possibility }}
                                         <span class="company-count">
-                                            (Polski: {{ details['Polski'] }}, Zagraniczny: {{ details['Zagraniczny'] }})
+                                            (
+                                            <span class="lang-label">Polski</span>:
+                                            <span class="lang-number">{{ details['Polski'] }}</span>,
+                                            <span class="lang-label">Zagraniczny</span>:
+                                            <span class="lang-number">{{ details['Zagraniczny'] }}</span>
+                                            )
                                         </span>
                                     </span>
                                 </li>
@@ -3889,17 +3975,25 @@ def index():
                         <ul class="potential-clients-list">
                             {% for group, clients in potential_clients.items() %}
                                 {% set group_index = loop.index %}
+                                {# Podmieniamy ewentualne [[[ ... ]]] w nazwie grupy na pomarańczowy #}
+                                {% set highlighted_group = highlight_brackets(group) %}
+                                
                                 <li class="potential-client-group">
                                     <input type="checkbox" name="potential_clients" value="{{ group }}" id="potential-group-{{ group_index }}" onchange="handlePotentialClientGroupChange(this)">
                                     <span class="potential-client-group-label" data-index="{{ group_index }}">
-                                        {{ group }}
+                                        {{ highlighted_group }}
                                     </span>
                                 </li>
                                 <ul class="clients-list" id="clients-{{ group_index }}">
                                     {% for client in clients %}
                                         <li class="client-item">
                                             <input type="checkbox" name="include_potential_emails" value="{{ client.email }}" id="client-{{ group_index }}-{{ loop.index }}">
-                                            <label for="client-{{ group_index }}-{{ loop.index }}">{{ client.company }} ({{ client.language }})</label>
+                                            <label for="client-{{ group_index }}-{{ loop.index }}">
+                                                {{ client.company }} 
+                                                ( 
+                                                <span class="lang-label">{{ client.language }}</span>
+                                                )
+                                            </label>
                                         </li>
                                     {% endfor %}
                                 </ul>
@@ -4013,12 +4107,10 @@ def index():
     return render_template_string(
         index_template,
         user=user,
-        # zamiast segments=segments_dict.items(), przekazujemy posortowaną listę
-        segments=sorted_segments,
-        notes=notes,
-        # zamiast possibilities=possibilities_dict.items(), przekazujemy posortowaną listę
-        possibilities=sorted_possibilities,
+        segments=sorted_segments,          # posortowane segmenty
+        possibilities=sorted_possibilities,# posortowane możliwości
         potential_clients=potential_clients,
+        notes=notes,
         get_email_company_pairs_for_segment=get_email_company_pairs_for_segment,
         data=data,
         max_attachments=app.config['MAX_ATTACHMENTS']

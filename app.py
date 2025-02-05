@@ -3262,7 +3262,8 @@ def index():
                                     showFlashMessage('success', data.message);
                                     document.getElementById('attachments-preview').innerHTML = '';
                                     document.getElementById('attachments-count').textContent = "Załączników: 0/{{ max_attachments }}";
-                                    editor.setData('');
+                                    const langSelect = document.getElementById('language');
+                                    langSelect.selectedIndex = 0;
                                     updateSelectedItems();
                                     selectedFiles = [];
                                 } else {

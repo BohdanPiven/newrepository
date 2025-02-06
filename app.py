@@ -32,6 +32,8 @@ from email.message import EmailMessage
 import mimetypes
 import ssl
 from models import PASTEL_COLORS
+from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
+
 
 # ------------------------------
 # *** KONFIGURACJA CELERY W TYM SAMYM PLIKU ***

@@ -41,16 +41,27 @@ from celery import Celery
 # Wczytanie zmiennych środowiskowych (lokalnie z .env, na Heroku z Config Vars)
 load_dotenv()
 
-# REDIS_URL może być np. "redis://:p4ss@host:6379" albo "rediss://:p4ss@host:6379?ssl_cert_reqs=none"
+# Pobierz REDIS_URL z konfiguracji środowiskowej
 redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
 
+# Jeśli używamy protokołu rediss:// i parametr ssl_cert_reqs nie jest ustawiony, dopisujemy go automatycznie
+if redis_url.startswith("rediss://"):
+    parsed = urlparse(redis_url)
+    query = parse_qs(parsed.query)
+    if 'ssl_cert_reqs' not in query:
+        # Dodajemy parametr; wartość tutaj może być np. "none" (później w konfiguracji Celery używamy 'CERT_NONE')
+        query['ssl_cert_reqs'] = 'none'
+        new_query = urlencode(query, doseq=True)
+        redis_url = urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment))
+
+# Inicjalizacja aplikacji Celery z użyciem redis_url jako brokera i backendu
 celery_app = Celery(
     "app",
     broker=redis_url,
     backend=redis_url
 )
 
-# Jeżeli rediss:// jest używane i chcesz ominąć certyfikaty (np. "?ssl_cert_reqs=none"), to:
+# Jeśli używamy rediss://, ustawiamy dodatkowe opcje SSL dla Celery
 if redis_url.startswith("rediss://"):
     celery_app.conf.update(
         broker_transport_options={
@@ -58,6 +69,12 @@ if redis_url.startswith("rediss://"):
             'ssl_cert_reqs': 'CERT_NONE'
         },
         result_backend_transport_options={
+            'ssl_cert_reqs': 'CERT_NONE'
+        },
+        broker_use_ssl={
+            'ssl_cert_reqs': 'CERT_NONE'
+        },
+        redis_backend_use_ssl={
             'ssl_cert_reqs': 'CERT_NONE'
         }
     )

@@ -178,14 +178,15 @@ SPREADSHEET_ID = os.getenv('SPREADSHEET_ID', '')
 
 def highlight_triple_brackets(text):
     """
-    Zastępuje wszystkie wystąpienia [[[ ... ]]] w ciągu znaków `text` 
-    na <span style="color: orange; white-space: nowrap;">...</span>.
+    Zastępuje wystąpienia [[[ ... ]]] na <span style="color: orange; white-space: nowrap; margin: 0 3px;">...</span>.
 
-    Dzięki temu fragmenty zawarte w [[[ ... ]]] wyświetlają się 
-    w kolorze pomarańczowym i są chronione przed łamaniem wiersza.
+    Dzięki temu:
+      - fragmenty w [[[ ... ]]] będą w kolorze pomarańczowym,
+      - nie będą się łamać w środku (white-space: nowrap;),
+      - zachowają niewielki odstęp (margin: 0 3px) od sąsiadującego tekstu.
     """
     pattern = r"\[\[\[(.*?)\]\]\]"
-    replacement = r'<span style="color: orange; white-space: nowrap;">\1</span>'
+    replacement = r'<span style="color: orange; white-space: nowrap; margin: 0 3px;">\1</span>'
     return re.sub(pattern, replacement, text)
 
 def is_allowed_file(file):

@@ -2244,8 +2244,8 @@ def index():
                 position: fixed;
                 top: 60px;
                 bottom: 0;
-                left: -600px;
-                width: 600px;
+                left: -800px;
+                width: 800px;
                 background-color: rgba(44, 62, 80, 0.95);
                 box-shadow: 2px 0 5px rgba(0,0,0,0.1);
                 padding: 20px;
@@ -2274,7 +2274,7 @@ def index():
                 z-index: 1;
             }
             .main-content.sidebar-active {
-                margin-left: 600px;
+                margin-left: 800px;
             }
             .form-container {
                 display: flex;

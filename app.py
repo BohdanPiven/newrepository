@@ -176,7 +176,6 @@ app.config['MAX_ATTACHMENTS'] = 5
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
 SPREADSHEET_ID = os.getenv('SPREADSHEET_ID', '')
 
-
 def highlight_triple_brackets(text):
     """
     Zastępuje wystąpienia [[[ cokolwiek ]]] znacznikiem <span style="color: orange;">cokolwiek</span>.
@@ -184,7 +183,6 @@ def highlight_triple_brackets(text):
     pattern = r"\[\[\[(.*?)\]\]\]"
     replacement = r'<span style="color: orange;">\1</span>'
     return re.sub(pattern, replacement, text)
-
 
 def is_allowed_file(file):
     """
@@ -3855,7 +3853,7 @@ def index():
                                     <input type="checkbox" name="segments" value="{{ segment }}" id="segment-{{ segment_index }}" onchange="handleSegmentChange(this)">
                                     <span class="segment-label" data-index="{{ segment_index }}">
                                         {{ highlight_triple_brackets(segment)|safe }}
-    <span class="segment-count">(Polski: {{ counts['Polski'] }}, Zagraniczny: {{ counts['Zagraniczny'] }})</span>
+                                        <span class="segment-count">(Polski: {{ counts['Polski'] }}, Zagraniczny: {{ counts['Zagraniczny'] }})</span>
                                     </span>
                                 </li>
                                 <ul class="email-list" id="emails-{{ segment_index }}">
@@ -3892,7 +3890,7 @@ def index():
                                     <input type="checkbox" name="possibilities" value="{{ possibility }}" id="possibility-{{ possibility_index }}" onchange="handlePossibilityChange(this)">
                                     <span class="possibility-label" data-index="{{ possibility_index }}">
                                         {{ highlight_triple_brackets(possibility)|safe }}
-    <span class="company-count">(Polski: {{ details['Polski'] }}, Zagraniczny: {{ details['Zagraniczny'] }})</span>
+                                        <span class="company-count">(Polski: {{ details['Polski'] }}, Zagraniczny: {{ details['Zagraniczny'] }})</span>
                                         </span>
                                     </span>
                                 </li>

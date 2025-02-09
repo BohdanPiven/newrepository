@@ -178,10 +178,12 @@ SPREADSHEET_ID = os.getenv('SPREADSHEET_ID', '')
 
 def highlight_triple_brackets(text):
     """
-    Zastępuje wystąpienia [[[ cokolwiek ]]] znacznikiem <span style="color: orange;">cokolwiek</span>.
+    Zastępuje [[[ ... ]]] na <span style="color: orange; white-space: nowrap;">...</span>
+    aby był pomarańczowy i nie łamał się w połowie.
     """
+    import re
     pattern = r"\[\[\[(.*?)\]\]\]"
-    replacement = r'<span style="color: orange;">\1</span>'
+    replacement = r'<span style="color: orange; white-space: nowrap;">\1</span>'
     return re.sub(pattern, replacement, text)
 
 def is_allowed_file(file):

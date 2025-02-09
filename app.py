@@ -178,10 +178,12 @@ SPREADSHEET_ID = os.getenv('SPREADSHEET_ID', '')
 
 def highlight_triple_brackets(text):
     """
-    Zastępuje [[[ ... ]]] na <span style="color: orange; white-space: nowrap;">...</span>
-    aby był pomarańczowy i nie łamał się w połowie.
+    Zastępuje wszystkie wystąpienia [[[ ... ]]] w ciągu znaków `text` 
+    na <span style="color: orange; white-space: nowrap;">...</span>.
+
+    Dzięki temu fragmenty zawarte w [[[ ... ]]] wyświetlają się 
+    w kolorze pomarańczowym i są chronione przed łamaniem wiersza.
     """
-    import re
     pattern = r"\[\[\[(.*?)\]\]\]"
     replacement = r'<span style="color: orange; white-space: nowrap;">\1</span>'
     return re.sub(pattern, replacement, text)

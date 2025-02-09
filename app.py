@@ -176,6 +176,16 @@ app.config['MAX_ATTACHMENTS'] = 5
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
 SPREADSHEET_ID = os.getenv('SPREADSHEET_ID', '')
 
+
+def highlight_triple_brackets(text):
+    """
+    Zastępuje wystąpienia [[[ cokolwiek ]]] znacznikiem <span style="color: orange;">cokolwiek</span>.
+    """
+    pattern = r"\[\[\[(.*?)\]\]\]"
+    replacement = r'<span style="color: orange;">\1</span>'
+    return re.sub(pattern, replacement, text)
+
+
 def is_allowed_file(file):
     """
     Sprawdza, czy plik (FileStorage) ma dozwolone rozszerzenie i prawidłowy typ MIME.
@@ -3844,7 +3854,8 @@ def index():
                                 <li class="segment-item">
                                     <input type="checkbox" name="segments" value="{{ segment }}" id="segment-{{ segment_index }}" onchange="handleSegmentChange(this)">
                                     <span class="segment-label" data-index="{{ segment_index }}">
-                                        {{ segment }} <span class="segment-count">(Polski: {{ counts['Polski'] }}, Zagraniczny: {{ counts['Zagraniczny'] }})</span>
+                                        {{ highlight_triple_brackets(segment)|safe }}
+    <span class="segment-count">(Polski: {{ counts['Polski'] }}, Zagraniczny: {{ counts['Zagraniczny'] }})</span>
                                     </span>
                                 </li>
                                 <ul class="email-list" id="emails-{{ segment_index }}">
@@ -3880,9 +3891,8 @@ def index():
                                 <li class="possibility-item">
                                     <input type="checkbox" name="possibilities" value="{{ possibility }}" id="possibility-{{ possibility_index }}" onchange="handlePossibilityChange(this)">
                                     <span class="possibility-label" data-index="{{ possibility_index }}">
-                                        {{ possibility }}
-                                        <span class="company-count">
-                                            (Polski: {{ details['Polski'] }}, Zagraniczny: {{ details['Zagraniczny'] }})
+                                        {{ highlight_triple_brackets(possibility)|safe }}
+    <span class="company-count">(Polski: {{ details['Polski'] }}, Zagraniczny: {{ details['Zagraniczny'] }})</span>
                                         </span>
                                     </span>
                                 </li>
@@ -3911,7 +3921,7 @@ def index():
                                 <li class="potential-client-group">
                                     <input type="checkbox" name="potential_clients" value="{{ group }}" id="potential-group-{{ group_index }}" onchange="handlePotentialClientGroupChange(this)">
                                     <span class="potential-client-group-label" data-index="{{ group_index }}">
-                                        {{ group }}
+                                        {{ highlight_triple_brackets(group)|safe }}
                                     </span>
                                 </li>
                                 <ul class="clients-list" id="clients-{{ group_index }}">
@@ -4041,6 +4051,7 @@ def index():
         get_email_company_pairs_for_segment=get_email_company_pairs_for_segment,
         data=data,
         max_attachments=app.config['MAX_ATTACHMENTS']
+        highlight_triple_brackets=highlight_triple_brackets
     )
 
 

@@ -4048,7 +4048,7 @@ def index():
         potential_clients=potential_clients,
         get_email_company_pairs_for_segment=get_email_company_pairs_for_segment,
         data=data,
-        max_attachments=app.config['MAX_ATTACHMENTS']
+        max_attachments=app.config['MAX_ATTACHMENTS'],
         highlight_triple_brackets=highlight_triple_brackets
     )
 

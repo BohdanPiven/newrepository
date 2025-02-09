@@ -2590,6 +2590,24 @@ def index():
                 align-items: center;
                 justify-content: center;
                 transition: transform 0.3s;
+                background-color: #f2f2f2;
+                border: 1px solid #cccccc;
+                border-radius: 8px;
+                padding: 6px 10px;
+            }
+            .toggle-segments-btn:hover,
+            .toggle-possibilities-btn:hover,
+            .toggle-potential-clients-btn:hover {
+                background-color: #e8e8e8;
+                box-shadow: 0 0 4px rgba(0,0,0,0.2);
+                transform: scale(1.05);
+            }
+            .toggle-segments-btn:active,
+            .toggle-possibilities-btn:active,
+            .toggle-potential-clients-btn:active {
+                background-color: #dddddd;
+                box-shadow: none;
+                transform: scale(0.98);
             }
             .toggle-segments-btn img, .toggle-possibilities-btn img, .toggle-potential-clients-btn img {
                 width: 32px;

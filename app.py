@@ -3974,35 +3974,87 @@ def index():
                         </ul>
                     </div>
 
-                    <!-- Kontener możliwości -->
-                    <div id="possibilities-container" class="possibilities-container">
-                        <button type="button" id="select-all-possibilities-btn" class="yellow-btn" onclick="toggleSelectAllPossibilities(this)">Zaznacz wszystkie możliwości</button>
-                        <button type="button" class="yellow-btn" onclick="toggleAllPossibilitiesExpandCollapse(this)">Rozwiń wszystkie możliwości</button>
+                    possibilities_html = dedent('''\
+<!-- Kontener możliwości -->
+<div id="possibilities-container" class="possibilities-container">
+    <button type="button" id="select-all-possibilities-btn" class="yellow-btn" onclick="toggleSelectAllPossibilities(this)">
+        Zaznacz wszystkie możliwości
+    </button>
+    <button type="button" class="yellow-btn" onclick="toggleAllPossibilitiesExpandCollapse(this)">
+        Rozwiń wszystkie możliwości
+    </button>
 
-                        <ul class="possibility-list">
-                            {% for possibility, details in possibilities %}
-                                {% set possibility_index = loop.index %}
-                                <li class="possibility-item">
-                                    <input type="checkbox" name="possibilities" value="{{ possibility }}" id="possibility-{{ possibility_index }}" onchange="handlePossibilityChange(this)">
-                                    <span class="possibility-label" data-index="{{ possibility_index }}">
-                                        {{ highlight_triple_brackets(possibility)|safe }}
-                                        <span class="company-count">(Polski: {{ details['Polski'] }}, Zagraniczny: {{ details['Zagraniczny'] }})</span>
-                                        </span>
-                                    </span>
+    <ul class="possibility-list">
+        {% for possibility, details in possibilities %}
+            {% set possibility_index = loop.index %}
+            <!-- Pierwszy poziom = prefix (np. "FCL Road") -->
+            <li class="possibility-item">
+                <!-- Checkbox do "zaznacz/odznacz" ten prefix -->
+                <input type="checkbox" 
+                       name="possibilities" 
+                       value="{{ possibility }}"
+                       id="possibility-{{ possibility_index }}"
+                       onchange="handlePossibilityChange(this)">
+
+                <!-- Etykieta prefixu + licznik Polski/Zagraniczny -->
+                <span class="possibility-label" data-index="{{ possibility_index }}">
+                    {{ highlight_triple_brackets(possibility)|safe }}
+                    <span class="company-count">
+                        (Polski: {{ details['Polski'] }}, Zagraniczny: {{ details['Zagraniczny'] }})
+                    </span>
+                </span>
+            </li>
+
+            <!-- Drugi poziom (subitems) -->
+            <ul class="company-list" id="companies-{{ possibility_index }}">
+                <button type="button"
+                        class="yellow-btn select-deselect-companies-btn"
+                        onclick="toggleSelectAllCompaniesInPossibility('companies-{{ possibility_index }}')">
+                    Zaznacz Wszystkie
+                </button>
+
+                {# Iterujemy po subitems; 
+                   'full_str' to np. "FCL Road [[[ Gdańsk - all PL ]]]" 
+                   'sub_data' to obiekt z Pol/Zag i `entries` #}
+                {% for full_str, sub_data in details['subitems'].items() %}
+                    {% set sub_index = loop.index %}
+                    <li class="company-item" style="margin-left: 15px;">
+                        <!-- Checkbox do ewentualnego zaznaczania maili w tym subitem -->
+                        <input type="checkbox"
+                               name="include_emails"
+                               value="{{ full_str }}"
+                               id="subitem-{{ possibility_index }}-{{ sub_index }}">
+
+                        <!-- Nazwa subitemu (z [[[ ...]]] pomarańczowym) + licznik -->
+                        <label for="subitem-{{ possibility_index }}-{{ sub_index }}">
+                            {{ highlight_triple_brackets(full_str)|safe }}
+                            (Polski: {{ sub_data['Polski'] }}, Zagraniczny: {{ sub_data['Zagraniczny'] }})
+                        </label>
+
+                        <!-- Trzeci poziom = firmy / maile (sub_data['entries']) -->
+                        <ul class="company-list"
+                            id="subitem-companies-{{ possibility_index }}-{{ sub_index }}"
+                            style="display: none; margin-left: 20px;">
+
+                            <button type="button"
+                                    class="yellow-btn"
+                                    onclick="toggleSubitemCompanies('{{ possibility_index }}', '{{ sub_index }}')">
+                                Rozwiń firmy
+                            </button>
+
+                            {% for entry in sub_data['entries'] %}
+                                <li class="company-item" style="margin-left: 15px;">
+                                    {{ entry.company }} ({{ entry.email }}) -- {{ entry.subsegment }}
                                 </li>
-                                <ul class="company-list" id="companies-{{ possibility_index }}">
-                                    <button type="button" class="yellow-btn select-deselect-companies-btn" onclick="toggleSelectAllCompaniesInPossibility('companies-{{ possibility_index }}')">Zaznacz Wszystkie</button>
-                    
-                                    {% for entry in details['entries'] %}
-                                        <li class="company-item">
-                                            <input type="checkbox" name="include_emails" value="{{ entry.email }}" id="company-{{ possibility_index }}-{{ loop.index }}">
-                                            <label for="company-{{ possibility_index }}-{{ loop.index }}">{{ entry.company }}</label>
-                                        </li>
-                                    {% endfor %}
-                                </ul>
                             {% endfor %}
                         </ul>
-                    </div>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% endfor %}
+    </ul>
+</div>
+''')
                     
                     <!-- Kontener potencjalnych klientów -->
                     <div id="potential-clients-container" class="potential-clients-container">

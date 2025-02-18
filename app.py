@@ -406,69 +406,65 @@ def extract_prefix(possibility_str):
       - full_str: oryginalny ciąg possibility_str
 
     Jeśli possibility_str nie zawiera [[[ ... ]]], prefix = possibility_str (całość).
-    
-    UWAGA:
-    Nie doklejamy fragmentu po ]]] (group(3)), 
-    aby nawet drobna różnica typu "FTL / LTL Europe" vs. "FTL / LTL"
-    skutkowała różnymi prefixami (a tym samym brakiem grupowania).
     """
-    # Szukamy: początek (dowolne znaki) -> [[[ ... ]]] -> ewentualnie coś dalej
     brackets_regex = re.compile(r'^(.*?)\s*\[\[\[(.*)\]\]\](.*)$')
-
     match = brackets_regex.match(possibility_str)
     if match:
-        # (group(1)) = fragment przed [[[ 
-        # Pomijamy group(3) (to co po ]]]),
-        # żeby nawet minimalna różnica skutkowała innym prefixem.
         prefix = match.group(1).strip()
         return prefix, possibility_str
     else:
-        # Brak [[[...]]], więc całość to prefix
         return possibility_str.strip(), possibility_str
 
 
 def get_unique_possibilities_with_counts(data):
     """
-    Zwraca słownik, w którym kluczem jest 'prefix' 
-    (tekst przed [[[ ...]]], jeśli występuje, w przeciwnym wypadku całość).
-    
-    Pod tym kluczem przechowujemy:
-        {
-            'Polski': int,
-            'Zagraniczny': int,
-            'entries': [
-                {
-                    'full_string': oryginalna możliwość (z [[[...]]]),
-                    'email': ...,
-                    'company': ...,
-                    'subsegment': ...
+    Tworzy 2-poziomową strukturę słownika:
+
+      {
+        prefix: {
+            "Polski": liczba wystąpień,
+            "Zagraniczny": liczba wystąpień,
+            "subitems": {
+                full_string: {
+                    "Polski": liczba wystąpień,
+                    "Zagraniczny": liczba wystąpień,
+                    "entries": [
+                        {
+                            'email': ...,
+                            'company': ...,
+                            'subsegment': ...
+                        },
+                        ...
+                    ]
                 },
                 ...
-            ]
-        }
+            }
+        },
+        ...
+      }
 
-    Przykład struktury:
-    {
-      "FTL / LTL": {
-        "Polski": 3,
-        "Zagraniczny": 2,
-        "entries": [
-          { "full_string": "FTL / LTL [[[ EU ]]]", ... },
-          { "full_string": "FTL / LTL [[[ BE, NL, DE, PL ]]]", ... }
-        ]
-      },
-      "FTL / LTL Europe": {
-        ... (osobna grupa, jeśli występuje)
-      },
-      ...
-    }
-
-    Dzięki temu:
-    - Możliwości, które mają identyczny fragment przed [[[ ...]]] 
-      zostaną zgrupowane w jedną etykietę.
-    - Jeśli różnią się nawet jednym słowem (np. "Europe"), 
-      to wpadną do innej grupy.
+    Przykład:
+      {
+        "FCL Road": {
+          "Polski": 3,
+          "Zagraniczny": 5,
+          "subitems": {
+            "FCL Road [[[ West Europe Premium ]]]": {
+               "Polski": 2,
+               "Zagraniczny": 1,
+               "entries": [...],
+            },
+            "FCL Road [[[ Gdańsk - all PL ]]]": {
+               "Polski": 1,
+               "Zagraniczny": 3,
+               "entries": [...],
+            }
+          }
+        },
+        ...
+      }
     """
+
     possibilities = {}
 
     for row in data:
@@ -477,30 +473,47 @@ def get_unique_possibilities_with_counts(data):
         email = row[17].strip() if len(row) > 17 else ""
         company = row[20].strip() if len(row) > 20 else "Nieznana Firma"
 
-        # Iteracja przez kolumny 25..33
+        # Kolumny 25..33 = możliwości
         for i in range(25, 34):
             raw_possibility = row[i].strip() if len(row) > i and row[i] else ''
             if raw_possibility:
-                # 1. Wydzielamy prefix i pełną możliwość
+                # Wyodrębnij prefix + pełen napis
                 prefix, full_str = extract_prefix(raw_possibility)
 
-                # 2. Inicjalizacja klucza, jeśli go nie ma
+                # ---------------------------
+                # 1. Dodaj prefix do słownika
+                # ---------------------------
                 if prefix not in possibilities:
                     possibilities[prefix] = {
                         'Polski': 0,
                         'Zagraniczny': 0,
-                        'entries': []
+                        'subitems': {}
                     }
 
-                # 3. Zwiększamy licznik 
+                # Zwiększ globalny licznik (prefix)
                 if subsegment == "Polski":
                     possibilities[prefix]['Polski'] += 1
                 elif subsegment == "Zagraniczny":
                     possibilities[prefix]['Zagraniczny'] += 1
 
-                # 4. Dodajemy konkretne dane do 'entries'
-                possibilities[prefix]['entries'].append({
-                    'full_string': full_str,
+                # ---------------------------
+                # 2. Dodaj subitem (full_str) do prefixu
+                # ---------------------------
+                if full_str not in possibilities[prefix]['subitems']:
+                    possibilities[prefix]['subitems'][full_str] = {
+                        'Polski': 0,
+                        'Zagraniczny': 0,
+                        'entries': []
+                    }
+
+                # Zwiększ licznik dla subitemu
+                if subsegment == "Polski":
+                    possibilities[prefix]['subitems'][full_str]['Polski'] += 1
+                elif subsegment == "Zagraniczny":
+                    possibilities[prefix]['subitems'][full_str]['Zagraniczny'] += 1
+
+                # Dodaj do entries
+                possibilities[prefix]['subitems'][full_str]['entries'].append({
                     'email': email,
                     'company': company,
                     'subsegment': subsegment

@@ -2202,18 +2202,16 @@ def index():
 
     data = get_data_from_sheet()
 
-    # --- [1] Pobieramy oryginalne słowniki z licznikami segmentów i możliwości ---
+    # --- [1] Pobieramy słowniki z licznikami segmentów i możliwości (prefix->subitems) ---
     segments_dict = get_unique_segments_with_counts(data)
-    # Zwraca strukturę: { "prefix": { "Polski": x, "Zagraniczny": y, "subitems": {...} }, ... }
     possibilities_dict = get_unique_possibilities_with_counts(data)
 
-    # --- [2] Sortujemy je według sumy (Polski + Zagraniczny) w kolejności malejącej ---
+    # --- [2] Sortowanie ---
     sorted_segments = sorted(
         segments_dict.items(),
         key=lambda item: (item[1]['Polski'] + item[1]['Zagraniczny']),
         reverse=True
     )
-    # Tutaj klucz to prefix, a wartość to prefix_data (z subitems w środku)
     sorted_possibilities = sorted(
         possibilities_dict.items(),
         key=lambda item: (item[1]['Polski'] + item[1]['Zagraniczny']),
@@ -2226,7 +2224,7 @@ def index():
     # Potencjalni klienci
     potential_clients = get_potential_clients(data)
 
-    # Poniżej znajduje się cały szablon index_template z **dwupoziomową strukturą** dla możliwości
+    # Pełny szablon HTML
     index_template = '''
     <!DOCTYPE html>
     <html lang="pl">
@@ -2919,15 +2917,55 @@ def index():
         <!-- Dodaj CKEditor -->
         <script src="https://cdn.ckeditor.com/ckeditor5/39.0.1/classic/ckeditor.js"></script>
         <script>
-            // --------------------------------
-            //  Wspólne funkcje i wsparcie JS
-            // --------------------------------
+            // ================================================
+            //  Tutaj zaczynają się wszystkie funkcje JavaScript
+            // ================================================
+
+            //-----------------------
+            //  Funkcje do sidebaru
+            //-----------------------
+            function toggleSidebar(button) {
+                var sidebar = document.querySelector('.sidebar');
+                sidebar.classList.toggle('active');
+                var mainContent = document.querySelector('.main-content');
+                mainContent.classList.toggle('sidebar-active');
+            }
+
+            // Te trzy funkcje odpowiadają za rozwijanie / zwijanie
+            // sekcji: segmenty, możliwości, potencjalni klienci
+            function toggleSegmentsList(button) {
+                var segmentsContainer = document.getElementById('segments-container');
+                var img = button.querySelector('img');
+                segmentsContainer.classList.toggle('show');
+                if (img) {
+                    img.classList.toggle('rotate');
+                }
+            }
+            function togglePossibilitiesList(button) {
+                var possibilitiesContainer = document.getElementById('possibilities-container');
+                var img = button.querySelector('img');
+                possibilitiesContainer.classList.toggle('show');
+                if (img) {
+                    img.classList.toggle('rotate');
+                }
+            }
+            function togglePotentialClientsList(button) {
+                var potentialClientsContainer = document.getElementById('potential-clients-container');
+                var img = button.querySelector('img');
+                potentialClientsContainer.classList.toggle('show');
+                if (img) {
+                    img.classList.toggle('rotate');
+                }
+            }
+
+            // ------------------------------
+            //  Wspólne funkcje i wsparcie
+            // ------------------------------
             function showFlashMessage(category, message) {
                 const flashMessage = document.querySelector('.flash-message.' + category);
                 if (flashMessage) {
                     flashMessage.textContent = message;
                     flashMessage.classList.add('show');
-
                     setTimeout(() => {
                         flashMessage.classList.remove('show');
                     }, 5000);
@@ -2960,12 +2998,11 @@ def index():
             }
 
             // --------------------------------
-            //  Notes
+            //  Obsługa notatek (listowanie itp.)
             // --------------------------------
             function updateNotesList(notes) {
                 const notesList = document.querySelector('.note-section ul');
                 notesList.innerHTML = '';
-
                 notes.forEach(note => {
                     const li = document.createElement('li');
                     li.className = 'note';
@@ -2988,7 +3025,6 @@ def index():
                     `;
                     notesList.appendChild(li);
                 });
-
                 attachUserNameClickListeners();
             }
 
@@ -3001,13 +3037,12 @@ def index():
             }
 
             // --------------------------------
-            //  Checkbox – Segmenty
+            //  Segmenty
             // --------------------------------
             function handleSegmentChange(segmentCheckbox) {
                 toggleEmailsInSegment(segmentCheckbox);
                 updateSelectedItems();
             }
-
             function toggleEmailsInSegment(segmentCheckbox) {
                 var segmentIndex = segmentCheckbox.id.split('-')[1];
                 var emailList = document.getElementById(`emails-${segmentIndex}`);
@@ -3018,49 +3053,36 @@ def index():
                     });
                 }
             }
-
             function toggleSelectAllSegments(button) {
                 var segmentCheckboxes = document.querySelectorAll('.segment-item input[type="checkbox"]');
                 var allChecked = Array.from(segmentCheckboxes).every(cb => cb.checked);
-
                 segmentCheckboxes.forEach(function(checkbox) {
                     checkbox.checked = !allChecked;
                     handleSegmentChange(checkbox);
                 });
-
                 button.textContent = !allChecked ? 'Odznacz wszystkie segmenty' : 'Zaznacz wszystkie segmenty';
                 updateSelectedItems();
             }
-
             function toggleAllSegmentsExpandCollapse(button) {
                 var emailLists = document.querySelectorAll('.email-list');
                 var allExpanded = Array.from(emailLists).every(list => list.classList.contains('show'));
-
                 emailLists.forEach(list => {
-                    if (allExpanded) {
-                        list.classList.remove('show');
-                    } else {
-                        list.classList.add('show');
-                    }
+                    if (allExpanded) list.classList.remove('show');
+                    else list.classList.add('show');
                 });
-
                 button.textContent = allExpanded ? 'Rozwiń wszystkie segmenty' : 'Zwiń wszystkie segmenty';
             }
-
             function toggleSelectAllEmailsInSegment(emailListId) {
                 var emailList = document.getElementById(emailListId);
                 var emailCheckboxes = emailList.querySelectorAll('input[type="checkbox"]');
                 var toggleBtn = emailList.querySelector('.select-deselect-emails-btn');
-
                 var allChecked = Array.from(emailCheckboxes).every(cb => cb.checked);
                 emailCheckboxes.forEach(function(checkbox) {
                     checkbox.checked = !allChecked;
                 });
                 toggleBtn.textContent = !allChecked ? 'Odznacz Wszystkie' : 'Zaznacz Wszystkie';
-
                 updateSelectedItems();
             }
-
             function toggleEmailsList(segmentIndex) {
                 var emailList = document.getElementById(`emails-${segmentIndex}`);
                 if (emailList) {
@@ -3069,13 +3091,12 @@ def index():
             }
 
             // --------------------------------
-            //  Checkbox – Potencjalni klienci
+            //  Potencjalni klienci
             // --------------------------------
             function handlePotentialClientGroupChange(groupCheckbox) {
                 toggleClientsInGroup(groupCheckbox);
                 updateSelectedItems();
             }
-
             function toggleClientsInGroup(groupCheckbox) {
                 var groupIndex = groupCheckbox.id.split('-')[2];
                 var clientsList = document.getElementById(`clients-${groupIndex}`);
@@ -3086,38 +3107,28 @@ def index():
                     });
                 }
             }
-
             function toggleSelectAllPotentialClients(button) {
                 var groupCheckboxes = document.querySelectorAll('.potential-client-group input[type="checkbox"]');
                 var clientCheckboxes = document.querySelectorAll('.potential-clients-list .client-item input[type="checkbox"]');
                 var allChecked = Array.from(groupCheckboxes).every(cb => cb.checked) && Array.from(clientCheckboxes).every(cb => cb.checked);
-
                 groupCheckboxes.forEach(function(groupCheckbox) {
                     groupCheckbox.checked = !allChecked;
                 });
-
                 clientCheckboxes.forEach(function(clientCheckbox) {
                     clientCheckbox.checked = !allChecked;
                 });
-
                 button.textContent = !allChecked ? 'Odznacz wszystkich klientów' : 'Zaznacz wszystkich klientów';
                 updateSelectedItems();
             }
-
             function toggleAllPotentialClientsExpandCollapse(button) {
                 var clientLists = document.querySelectorAll('.clients-list');
                 var allExpanded = Array.from(clientLists).every(list => list.classList.contains('show'));
-
                 clientLists.forEach(list => {
-                    if (allExpanded) {
-                        list.classList.remove('show');
-                    } else {
-                        list.classList.add('show');
-                    }
+                    if (allExpanded) list.classList.remove('show');
+                    else list.classList.add('show');
                 });
                 button.textContent = allExpanded ? 'Rozwiń wszystkich potencjalnych klientów' : 'Zwiń wszystkich potencjalnych klientów';
             }
-
             function toggleClientsList(groupIndex) {
                 var clientsList = document.getElementById(`clients-${groupIndex}`);
                 if (clientsList) {
@@ -3126,98 +3137,75 @@ def index():
             }
 
             // --------------------------------
-            //  Checkbox – Możliwości (prefix → subitems)
+            //  Możliwości (prefix -> subitems)
             // --------------------------------
             function handlePrefixChange(prefixCheckbox) {
                 const prefixIndex = prefixCheckbox.id.split('-')[1];
                 const subitemsList = document.getElementById(`subitems-${prefixIndex}`);
                 if (!subitemsList) return;
-
-                // Zaznacz/odznacz wszystkie subitemy
                 const subitemCheckboxes = subitemsList.querySelectorAll('.subitem-item input[type="checkbox"]');
                 const allChecked = prefixCheckbox.checked;
-
                 subitemCheckboxes.forEach(subCb => {
                     subCb.checked = allChecked;
                     toggleCompaniesInSubitem(subCb);
                 });
-
                 updateSelectedItems();
             }
-
             function handleSubitemChange(subitemCheckbox) {
                 toggleCompaniesInSubitem(subitemCheckbox);
                 updateSelectedItems();
             }
-
             function toggleCompaniesInSubitem(subitemCheckbox) {
                 const ids = subitemCheckbox.id.split('-'); // ["subitem", prefixIndex, subitemIndex]
                 const prefixIndex = ids[1];
                 const subitemIndex = ids[2];
                 const companyList = document.getElementById(`companies-${prefixIndex}-${subitemIndex}`);
                 if (!companyList) return;
-
                 const companyCheckboxes = companyList.querySelectorAll('.company-item input[type="checkbox"]');
                 companyCheckboxes.forEach(companyCb => {
                     companyCb.checked = subitemCheckbox.checked;
                 });
             }
-
             function toggleSelectAllPossibilities(button) {
                 const prefixCheckboxes = document.querySelectorAll('.prefix-item input[type="checkbox"]');
                 const allChecked = Array.from(prefixCheckboxes).every(cb => cb.checked);
-
                 prefixCheckboxes.forEach(cb => {
                     cb.checked = !allChecked;
                     handlePrefixChange(cb);
                 });
-
                 button.textContent = !allChecked ? 'Odznacz wszystkie możliwości' : 'Zaznacz wszystkie możliwości';
                 updateSelectedItems();
             }
-
             function toggleAllPossibilitiesExpandCollapse(button) {
                 const subitemLists = document.querySelectorAll('.subitem-list');
                 const allExpanded = Array.from(subitemLists).every(list => list.classList.contains('show'));
-
                 subitemLists.forEach(list => {
-                    if (allExpanded) {
-                        list.classList.remove('show');
-                    } else {
-                        list.classList.add('show');
-                    }
+                    if (allExpanded) list.classList.remove('show');
+                    else list.classList.add('show');
                 });
-
                 button.textContent = allExpanded ? 'Rozwiń wszystkie możliwości' : 'Zwiń wszystkie możliwości';
             }
-
             function toggleSelectAllSubitemsInPrefix(subitemsListId) {
                 const subitemsList = document.getElementById(subitemsListId);
                 if (!subitemsList) return;
-
                 const subitemCheckboxes = subitemsList.querySelectorAll('.subitem-item input[type="checkbox"]');
                 const allChecked = Array.from(subitemCheckboxes).every(cb => cb.checked);
-
                 subitemCheckboxes.forEach(cb => {
                     cb.checked = !allChecked;
                     toggleCompaniesInSubitem(cb);
                 });
                 updateSelectedItems();
             }
-
             function toggleSelectAllCompaniesInSubitem(companyListId) {
                 const companyList = document.getElementById(companyListId);
                 if (!companyList) return;
-
                 const companyCheckboxes = companyList.querySelectorAll('.company-item input[type="checkbox"]');
                 const allChecked = Array.from(companyCheckboxes).every(cb => cb.checked);
-
                 companyCheckboxes.forEach(cb => {
                     cb.checked = !allChecked;
                 });
                 updateSelectedItems();
             }
-
             function toggleSubitemsList(prefixIndex) {
                 const subitemsList = document.getElementById(`subitems-${prefixIndex}`);
                 if (subitemsList) {
@@ -3226,7 +3214,7 @@ def index():
             }
 
             // --------------------------------
-            //  Ogólne: zbieranie zaznaczeń
+            //  Zbieranie zaznaczeń
             // --------------------------------
             function updateSelectedItems() {
                 // Segmenty
@@ -3234,12 +3222,10 @@ def index():
                     .map(cb => cb.value);
                 const selectedSegmentsDiv = document.getElementById('selected-segments');
                 selectedSegmentsDiv.innerHTML = '';
-
                 selectedSegments.forEach(segment => {
                     const segmentSpan = document.createElement('span');
                     segmentSpan.className = 'selected-item';
                     segmentSpan.textContent = segment;
-
                     const removeSpan = document.createElement('span');
                     removeSpan.className = 'remove-item';
                     removeSpan.textContent = '×';
@@ -3250,7 +3236,6 @@ def index():
                             .find(cb => cb.value === itemToRemove);
                         if (checkbox) {
                             checkbox.checked = false;
-                            // Odznacz maile w środku
                             toggleEmailsInSegment(checkbox);
                         }
                         this.parentElement.remove();
@@ -3261,18 +3246,14 @@ def index():
                     selectedSegmentsDiv.appendChild(segmentSpan);
                 });
 
-                // Możliwości (prefix → subitems)
-                //  a) prefix
+                // Możliwości (prefixy)
                 const selectedPrefixDiv = document.getElementById('selected-possibilities');
                 selectedPrefixDiv.innerHTML = '';
-                // Póki co nie robimy rozbicia na prefix/subitem w tym "tagu" – możesz to zmienić wedle uznania
-
                 const selectedPrefixCheckboxes = document.querySelectorAll('.prefix-item input[type="checkbox"]:checked');
                 selectedPrefixCheckboxes.forEach(cb => {
                     const prefixSpan = document.createElement('span');
                     prefixSpan.className = 'selected-item';
                     prefixSpan.textContent = cb.value;
-
                     const removeSpan = document.createElement('span');
                     removeSpan.className = 'remove-item';
                     removeSpan.textContent = '×';
@@ -3286,7 +3267,7 @@ def index():
                     selectedPrefixDiv.appendChild(prefixSpan);
                 });
 
-                // Potencjalni Klienci
+                // Potencjalni klienci
                 const selectedPotentialClients = Array.from(document.querySelectorAll('.potential-clients-list .client-item input[type="checkbox"]:checked'))
                     .map(cb => {
                         const label = document.querySelector(`label[for="${cb.id}"]`);
@@ -3297,15 +3278,12 @@ def index():
                         }
                         return { companyName: cb.value };
                     });
-
                 const selectedPotentialClientsDiv = document.getElementById('selected-potential-clients');
                 selectedPotentialClientsDiv.innerHTML = '';
-
                 selectedPotentialClients.forEach(client => {
                     const clientSpan = document.createElement('span');
                     clientSpan.className = 'selected-item';
                     clientSpan.textContent = client.companyName;
-
                     const removeSpan = document.createElement('span');
                     removeSpan.className = 'remove-item';
                     removeSpan.textContent = '×';
@@ -3314,14 +3292,14 @@ def index():
                         const companyToRemove = this.getAttribute('data-company');
                         const checkbox = Array.from(document.querySelectorAll('.potential-clients-list .client-item input[type="checkbox"]'))
                             .find(cb => {
-                                const label = document.querySelector(`label[for="${cb.id}"]`);
+                                const label = document.querySelector(`label[for="\${cb.id}"]`);
                                 return label && label.textContent.split(' (')[0] === companyToRemove;
                             });
                         if (checkbox) {
                             checkbox.checked = false;
                             const groupIndex = checkbox.id.split('-')[1];
-                            const groupCheckbox = document.getElementById(`potential-group-${groupIndex}`);
-                            const siblingCheckboxes = document.querySelectorAll(`#clients-${groupIndex} .client-item input[type="checkbox"]`);
+                            const groupCheckbox = document.getElementById(\`potential-group-\${groupIndex}\`);
+                            const siblingCheckboxes = document.querySelectorAll(\`#clients-\${groupIndex} .client-item input[type="checkbox"]\`);
                             const allUnchecked = Array.from(siblingCheckboxes).every(cb => !cb.checked);
                             if (allUnchecked && groupCheckbox) {
                                 groupCheckbox.checked = false;
@@ -3334,7 +3312,7 @@ def index():
                     selectedPotentialClientsDiv.appendChild(clientSpan);
                 });
 
-                // Wybrani użytkownicy (z notatek, .user-name)
+                // Użytkownicy z notatek
                 const selectedUsersDiv = document.getElementById('selected-users');
                 selectedUsersDiv.innerHTML = '';
 
@@ -3358,7 +3336,6 @@ def index():
                 var allPotentialClientsChecked = Array.from(groupCheckboxes).every(cb => cb.checked) && Array.from(clientCheckboxes).every(cb => cb.checked);
                 selectAllPotentialClientsBtn.textContent = allPotentialClientsChecked ? 'Odznacz wszystkich klientów' : 'Zaznacz wszystkich klientów';
 
-                // Zaktualizuj też dedykowane przyciski w email-list/company-list/subitem-list
                 updateEmailToggleButtons();
                 updateCompanyToggleButtons();
             }
@@ -3386,17 +3363,7 @@ def index():
             }
 
             // --------------------------------
-            //  Sidebar
-            // --------------------------------
-            function toggleSidebar(button) {
-                var sidebar = document.querySelector('.sidebar');
-                sidebar.classList.toggle('active');
-                var mainContent = document.querySelector('.main-content');
-                mainContent.classList.toggle('sidebar-active');
-            }
-
-            // --------------------------------
-            //  Notatki – obsługa
+            //  Użytkownicy z notatek
             // --------------------------------
             function attachUserNameClickListeners() {
                 document.querySelectorAll('.user-name').forEach(function(userNameSpan) {
@@ -3433,326 +3400,9 @@ def index():
                 });
             }
 
-            document.addEventListener('DOMContentLoaded', function() {
-                // Inicjalizacja CKEditor
-                ClassicEditor
-                    .create(document.querySelector('#message-editor'), {
-                        toolbar: ['bold', 'italic', 'underline', 'bulletedList', 'numberedList', 'link']
-                    })
-                    .then(editor => {
-                        window.editor = editor;
-                        const form = document.getElementById('main-form');
-                        form.addEventListener('submit', (event) => {
-                            event.preventDefault();
-                            const data = editor.getData();
-                            document.querySelector('#message').value = data;
-
-                            const tempElement = document.createElement('div');
-                            tempElement.innerHTML = data;
-                            const textContent = tempElement.textContent || tempElement.innerText || '';
-                            if (textContent.trim() === '') {
-                                showFlashMessage('error', 'Pole "Wiadomość" nie może być puste.');
-                                editor.editing.view.focus();
-                                return;
-                            }
-
-                            if (!validateParentChildSelection()) {
-                                return;
-                            }
-
-                            showSpinner('spinner');
-                            const formData = new FormData(form);
-
-                            const emailCheckboxes = document.querySelectorAll('input[name="include_emails"]:checked, input[name="include_potential_emails"]:checked');
-                            const emails = Array.from(emailCheckboxes).map(cb => cb.value);
-
-                            const selectedUserEmails = Array.from(document.querySelectorAll('input[name="selected_users"]'))
-                                .map(input => input.value);
-
-                            const allRecipients = emails.concat(selectedUserEmails);
-                            formData.set('recipients', allRecipients.join(','));
-
-                            selectedFiles.forEach((file) => {
-                                formData.append('attachments', file);
-                            });
-
-                            fetch('{{ url_for("send_message_ajax") }}', {
-                                method: 'POST',
-                                body: formData,
-                                credentials: 'same-origin'
-                            })
-                            .then(response => response.json())
-                            .then(data => {
-                                hideSpinner('spinner');
-                                if (data.success) {
-                                    showFlashMessage('success', data.message);
-                                    document.getElementById('attachments-preview').innerHTML = '';
-                                    document.getElementById('attachments-count').textContent = "Załączników: 0/{{ max_attachments }}";
-                                    const langSelect = document.getElementById('language');
-                                    langSelect.selectedIndex = 0;
-                                    updateSelectedItems();
-                                    selectedFiles = [];
-                                } else {
-                                    showFlashMessage('error', data.message);
-                                }
-                            })
-                            .catch(error => {
-                                console.error('Błąd:', error);
-                                hideSpinner('spinner');
-                                showFlashMessage('error', 'Wystąpił błąd podczas wysyłania wiadomości.');
-                            });
-                        });
-                    })
-                    .catch(error => {
-                        console.error('Błąd inicjalizacji CKEditor:', error);
-                    });
-
-                // Obsługa klikania w etykiety segmentów, prefixów, grup klientów (rozwiń/zwiń)
-                document.querySelectorAll('.segment-label').forEach(function(label) {
-                    label.addEventListener('click', function(event) {
-                        var index = this.getAttribute('data-index');
-                        toggleEmailsList(index);
-                        event.stopPropagation();
-                    });
-                });
-                document.querySelectorAll('.prefix-label').forEach(function(label) {
-                    label.addEventListener('click', function(event) {
-                        var prefixIndex = this.getAttribute('data-index');
-                        // prefixIndex to np. "1"
-                        toggleSubitemsList(prefixIndex);
-                        event.stopPropagation();
-                    });
-                });
-                document.querySelectorAll('.potential-client-group-label').forEach(function(label) {
-                    label.addEventListener('click', function(event) {
-                        var groupIndex = this.getAttribute('data-index');
-                        toggleClientsList(groupIndex);
-                        event.stopPropagation();
-                    });
-                });
-
-                // Obsługa notatek
-                document.addEventListener('click', function(event) {
-                    if (event.target && event.target.classList.contains('edit-btn')) {
-                        const noteId = event.target.getAttribute('data-note-id');
-                        const noteContent = event.target.getAttribute('data-note-content');
-                        openEditModal(noteId, noteContent);
-                    }
-                });
-                document.addEventListener('click', function(event) {
-                    if (event.target && event.target.classList.contains('transfer-note-btn')) {
-                        const noteContent = event.target.getAttribute('data-note-content');
-                        transferToMessageField(noteContent);
-                        showFlashMessage('success', 'Treść notatki została przeniesiona do pola "Wiadomość".');
-                    }
-                });
-
-                document.querySelector('.note-section').addEventListener('click', function(event) {
-                    if (event.target && event.target.classList.contains('user-name')) {
-                        // Już obsługiwane w attachUserNameClickListeners(), ale można tu też ogarnąć
-                    }
-                });
-
-                const addNoteForm = document.getElementById('add-note-form');
-                addNoteForm.addEventListener('submit', function(event) {
-                    event.preventDefault();
-                    const noteInput = this.querySelector('input[name="note"]');
-                    const noteContent = noteInput.value.trim();
-
-                    if (noteContent === '') {
-                        showFlashMessage('error', 'Nie można dodać pustej notatki.');
-                        return;
-                    }
-
-                    showSpinner('note-spinner');
-
-                    fetch('{{ url_for("add_note_ajax") }}', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ note: noteContent }),
-                        credentials: 'same-origin'
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        hideSpinner('note-spinner');
-                        if (data.success) {
-                            showFlashMessage('success', data.message);
-                            updateNotesList(data.notes);
-                            noteInput.value = '';
-                        } else {
-                            showFlashMessage('error', data.message);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Błąd:', error);
-                        hideSpinner('note-spinner');
-                        showFlashMessage('error', 'Wystąpił błąd podczas dodawania notatki.');
-                    });
-                });
-
-                const attachmentsInput = document.getElementById('attachments');
-                const dropzone = document.getElementById('dropzone');
-                const attachmentsPreview = document.getElementById('attachments-preview');
-                const attachmentsCount = document.getElementById('attachments-count');
-                const maxAttachments = {{ max_attachments }};
-                window.selectedFiles = [];
-
-                dropzone.addEventListener('click', () => {
-                    attachmentsInput.click();
-                });
-
-                attachmentsInput.addEventListener('change', (e) => {
-                    handleFiles(e.target.files);
-                    e.target.value = '';
-                });
-
-                function preventDefaults(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                }
-
-                ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-                    dropzone.addEventListener(eventName, preventDefaults, false);
-                    document.body.addEventListener(eventName, preventDefaults, false);
-                });
-
-                ['dragenter', 'dragover'].forEach(eventName => {
-                    dropzone.addEventListener(eventName, () => dropzone.classList.add('dragover'), false);
-                });
-                ['dragleave', 'drop'].forEach(eventName => {
-                    dropzone.addEventListener(eventName, () => dropzone.classList.remove('dragover'), false);
-                });
-
-                dropzone.addEventListener('drop', (e) => {
-                    handleFiles(e.dataTransfer.files);
-                });
-
-                function handleFiles(files) {
-                    for (let file of files) {
-                        if (selectedFiles.length >= maxAttachments) {
-                            alert("Możesz dodać maksymalnie " + maxAttachments + " załączników.");
-                            break;
-                        }
-                        const isDuplicate = selectedFiles.some(f =>
-                            f.name === file.name &&
-                            f.size === file.size &&
-                            f.lastModified === file.lastModified
-                        );
-                        if (!isDuplicate) {
-                            selectedFiles.push(file);
-                        }
-                    }
-                    updatePreview();
-                }
-
-                function updatePreview() {
-                    attachmentsPreview.innerHTML = '';
-                    selectedFiles.forEach((file, index) => {
-                        const item = document.createElement('div');
-                        item.classList.add('attachment-item');
-
-                        const span = document.createElement('span');
-                        span.textContent = file.name;
-                        item.appendChild(span);
-
-                        const removeButton = document.createElement('button');
-                        removeButton.innerHTML = '&times;';
-                        removeButton.addEventListener('click', () => {
-                            selectedFiles.splice(index, 1);
-                            updatePreview();
-                        });
-                        item.appendChild(removeButton);
-
-                        attachmentsPreview.appendChild(item);
-                    });
-                    attachmentsCount.textContent = `Załączników: ${selectedFiles.length}/${max_attachments}`;
-                }
-
-                document.addEventListener('submit', function(event) {
-                    // Usuwanie notatki
-                    if (event.target && event.target.classList.contains('delete-note-form')) {
-                        event.preventDefault();
-                        const noteId = event.target.getAttribute('data-note-id');
-                        const spinnerId = 'note-spinner-' + noteId;
-
-                        showSpinner(spinnerId);
-                        fetch('{{ url_for("delete_note_ajax") }}', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({ note_id: noteId }),
-                            credentials: 'same-origin'
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            hideSpinner(spinnerId);
-                            if (data.success) {
-                                showFlashMessage('success', data.message);
-                                updateNotesList(data.notes);
-                                updateSelectedItems();
-                            } else {
-                                showFlashMessage('error', data.message);
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Błąd podczas usuwania notatki:', error);
-                            hideSpinner(spinnerId);
-                            showFlashMessage('error', 'Wystąpił błąd podczas usuwania notatki.');
-                        });
-                    }
-                    // Usuwanie wszystkich notatek
-                    if (event.target && event.target.id === 'delete-all-notes-form') {
-                        event.preventDefault();
-                        const spinnerId = 'delete-all-spinner';
-
-                        showSpinner(spinnerId);
-
-                        fetch('{{ url_for("delete_all_notes_ajax") }}', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({}),
-                            credentials: 'same-origin'
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            hideSpinner(spinnerId);
-                            if (data.success) {
-                                showFlashMessage('success', data.message);
-                                updateNotesList(data.notes);
-                                updateSelectedItems();
-                            } else {
-                                showFlashMessage('error', data.message);
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Błąd podczas usuwania wszystkich notatek:', error);
-                            hideSpinner(spinnerId);
-                            showFlashMessage('error', 'Wystąpił błąd podczas usuwania notatek.');
-                        });
-                    }
-                    // Edycja notatki (modal)
-                    if (event.target && event.target.id === 'edit-note-form') {
-                        event.preventDefault();
-                        const form = event.target;
-                        const noteId = form.getAttribute('data-note-id');
-                        const newContent = document.getElementById('edit-note-input').value.trim();
-
-                        if (newContent === '') {
-                            showFlashMessage('error', 'Nowa treść notatki nie może być pusta.');
-                            return;
-                        }
-                        editNote(noteId, newContent);
-                    }
-                });
-
-                attachUserNameClickListeners();
-            });
-
+            // -------------------
+            //  Edycja notatki
+            // -------------------
             function openEditModal(noteId, currentContent) {
                 const modal = document.getElementById('editModal');
                 const editForm = document.getElementById('edit-note-form');
@@ -3817,12 +3467,17 @@ def index():
                     showFlashMessage('error', 'Wystąpił błąd podczas edytowania notatki.');
                 });
             }
+
+            // --------------------------------
+            //  Walidacja – sprawdzenie, czy
+            //  prefix zaznaczony, gdy firma jest zaznaczona itd.
+            // --------------------------------
             function validateParentChildSelection() {
                 // Segmenty
                 const segmentCheckboxes = document.querySelectorAll('.segment-item input[type="checkbox"]');
                 for (const segment of segmentCheckboxes) {
                     const segmentIndex = segment.id.split('-')[1];
-                    const emailList = document.getElementById(`emails-${segmentIndex}`);
+                    const emailList = document.getElementById(\`emails-\${segmentIndex}\`);
                     if (emailList) {
                         const childEmails = emailList.querySelectorAll('input[type="checkbox"]:checked');
                         if (childEmails.length > 0 && !segment.checked) {
@@ -3831,11 +3486,11 @@ def index():
                         }
                     }
                 }
-                // Możliwości (prefix → subitems)
+                // Możliwości (prefix -> subitems)
                 const prefixCheckboxes = document.querySelectorAll('.prefix-item input[type="checkbox"]');
                 for (const prefixCb of prefixCheckboxes) {
                     const prefixIndex = prefixCb.id.split('-')[1];
-                    const subitemsList = document.getElementById(`subitems-${prefixIndex}`);
+                    const subitemsList = document.getElementById(\`subitems-\${prefixIndex}\`);
                     if (subitemsList) {
                         const subitemCheckboxes = subitemsList.querySelectorAll('.subitem-item input[type="checkbox"]:checked');
                         if (subitemCheckboxes.length > 0 && !prefixCb.checked) {
@@ -3848,7 +3503,7 @@ def index():
                 const groupCheckboxes = document.querySelectorAll('.potential-client-group input[type="checkbox"]');
                 for (const group of groupCheckboxes) {
                     const groupIndex = group.id.split('-')[2];
-                    const clientsList = document.getElementById(`clients-${groupIndex}`);
+                    const clientsList = document.getElementById(\`clients-\${groupIndex}\`);
                     if (clientsList) {
                         const childClients = clientsList.querySelectorAll('input[type="checkbox"]:checked');
                         if (childClients.length > 0 && !group.checked) {
@@ -3859,6 +3514,309 @@ def index():
                 }
                 return true;
             }
+
+            // ---------------------------
+            //  Document: DOMContentLoaded
+            // ---------------------------
+            document.addEventListener('DOMContentLoaded', function() {
+                // Inicjalizacja CKEditor
+                ClassicEditor
+                    .create(document.querySelector('#message-editor'), {
+                        toolbar: ['bold', 'italic', 'underline', 'bulletedList', 'numberedList', 'link']
+                    })
+                    .then(editor => {
+                        window.editor = editor;
+                        const form = document.getElementById('main-form');
+                        form.addEventListener('submit', (event) => {
+                            event.preventDefault();
+                            const data = editor.getData();
+                            document.querySelector('#message').value = data;
+
+                            // Sprawdzamy, czy treść nie jest pusta
+                            const tempElement = document.createElement('div');
+                            tempElement.innerHTML = data;
+                            const textContent = tempElement.textContent || tempElement.innerText || '';
+                            if (textContent.trim() === '') {
+                                showFlashMessage('error', 'Pole "Wiadomość" nie może być puste.');
+                                editor.editing.view.focus();
+                                return;
+                            }
+                            if (!validateParentChildSelection()) {
+                                return;
+                            }
+                            showSpinner('spinner');
+                            const formData = new FormData(form);
+
+                            // Zbieramy e-maile
+                            const emailCheckboxes = document.querySelectorAll('input[name="include_emails"]:checked, input[name="include_potential_emails"]:checked');
+                            const emails = Array.from(emailCheckboxes).map(cb => cb.value);
+
+                            // Zbieramy userów
+                            const selectedUserEmails = Array.from(document.querySelectorAll('input[name="selected_users"]'))
+                                .map(input => input.value);
+
+                            const allRecipients = emails.concat(selectedUserEmails);
+                            formData.set('recipients', allRecipients.join(','));
+
+                            selectedFiles.forEach((file) => {
+                                formData.append('attachments', file);
+                            });
+
+                            fetch('{{ url_for("send_message_ajax") }}', {
+                                method: 'POST',
+                                body: formData,
+                                credentials: 'same-origin'
+                            })
+                            .then(response => response.json())
+                            .then(data => {
+                                hideSpinner('spinner');
+                                if (data.success) {
+                                    showFlashMessage('success', data.message);
+                                    document.getElementById('attachments-preview').innerHTML = '';
+                                    document.getElementById('attachments-count').textContent = "Załączników: 0/{{ max_attachments }}";
+                                    const langSelect = document.getElementById('language');
+                                    langSelect.selectedIndex = 0;
+                                    updateSelectedItems();
+                                    selectedFiles = [];
+                                } else {
+                                    showFlashMessage('error', data.message);
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Błąd:', error);
+                                hideSpinner('spinner');
+                                showFlashMessage('error', 'Wystąpił błąd podczas wysyłania wiadomości.');
+                            });
+                        });
+                    })
+                    .catch(error => {
+                        console.error('Błąd inicjalizacji CKEditor:', error);
+                    });
+
+                // Kliknięcia w etykiety segmentów, prefixów, grup klientów (rozwiń/zwiń)
+                document.querySelectorAll('.segment-label').forEach(function(label) {
+                    label.addEventListener('click', function(event) {
+                        var index = this.getAttribute('data-index');
+                        toggleEmailsList(index);
+                        event.stopPropagation();
+                    });
+                });
+                document.querySelectorAll('.prefix-label').forEach(function(label) {
+                    label.addEventListener('click', function(event) {
+                        var prefixIndex = this.getAttribute('data-index');
+                        toggleSubitemsList(prefixIndex);
+                        event.stopPropagation();
+                    });
+                });
+                document.querySelectorAll('.potential-client-group-label').forEach(function(label) {
+                    label.addEventListener('click', function(event) {
+                        var groupIndex = this.getAttribute('data-index');
+                        toggleClientsList(groupIndex);
+                        event.stopPropagation();
+                    });
+                });
+
+                // Obsługa notatek
+                document.addEventListener('click', function(event) {
+                    if (event.target && event.target.classList.contains('edit-btn')) {
+                        const noteId = event.target.getAttribute('data-note-id');
+                        const noteContent = event.target.getAttribute('data-note-content');
+                        openEditModal(noteId, noteContent);
+                    }
+                });
+                document.addEventListener('click', function(event) {
+                    if (event.target && event.target.classList.contains('transfer-note-btn')) {
+                        const noteContent = event.target.getAttribute('data-note-content');
+                        transferToMessageField(noteContent);
+                        showFlashMessage('success', 'Treść notatki została przeniesiona do pola "Wiadomość".');
+                    }
+                });
+
+                const addNoteForm = document.getElementById('add-note-form');
+                addNoteForm.addEventListener('submit', function(event) {
+                    event.preventDefault();
+                    const noteInput = this.querySelector('input[name="note"]');
+                    const noteContent = noteInput.value.trim();
+                    if (noteContent === '') {
+                        showFlashMessage('error', 'Nie można dodać pustej notatki.');
+                        return;
+                    }
+                    showSpinner('note-spinner');
+                    fetch('{{ url_for("add_note_ajax") }}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ note: noteContent }),
+                        credentials: 'same-origin'
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        hideSpinner('note-spinner');
+                        if (data.success) {
+                            showFlashMessage('success', data.message);
+                            updateNotesList(data.notes);
+                            noteInput.value = '';
+                        } else {
+                            showFlashMessage('error', data.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Błąd:', error);
+                        hideSpinner('note-spinner');
+                        showFlashMessage('error', 'Wystąpił błąd podczas dodawania notatki.');
+                    });
+                });
+
+                // Obsługa załączników
+                const attachmentsInput = document.getElementById('attachments');
+                const dropzone = document.getElementById('dropzone');
+                const attachmentsPreview = document.getElementById('attachments-preview');
+                const attachmentsCount = document.getElementById('attachments-count');
+                const maxAttachments = {{ max_attachments }};
+                window.selectedFiles = [];
+
+                dropzone.addEventListener('click', () => {
+                    attachmentsInput.click();
+                });
+                attachmentsInput.addEventListener('change', (e) => {
+                    handleFiles(e.target.files);
+                    e.target.value = '';
+                });
+
+                function preventDefaults(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+                ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                    dropzone.addEventListener(eventName, preventDefaults, false);
+                    document.body.addEventListener(eventName, preventDefaults, false);
+                });
+                ['dragenter', 'dragover'].forEach(eventName => {
+                    dropzone.addEventListener(eventName, () => dropzone.classList.add('dragover'), false);
+                });
+                ['dragleave', 'drop'].forEach(eventName => {
+                    dropzone.addEventListener(eventName, () => dropzone.classList.remove('dragover'), false);
+                });
+                dropzone.addEventListener('drop', (e) => {
+                    handleFiles(e.dataTransfer.files);
+                });
+
+                function handleFiles(files) {
+                    for (let file of files) {
+                        if (selectedFiles.length >= maxAttachments) {
+                            alert("Możesz dodać maksymalnie " + maxAttachments + " załączników.");
+                            break;
+                        }
+                        const isDuplicate = selectedFiles.some(f =>
+                            f.name === file.name &&
+                            f.size === file.size &&
+                            f.lastModified === file.lastModified
+                        );
+                        if (!isDuplicate) {
+                            selectedFiles.push(file);
+                        }
+                    }
+                    updatePreview();
+                }
+                function updatePreview() {
+                    attachmentsPreview.innerHTML = '';
+                    selectedFiles.forEach((file, index) => {
+                        const item = document.createElement('div');
+                        item.classList.add('attachment-item');
+                        const span = document.createElement('span');
+                        span.textContent = file.name;
+                        item.appendChild(span);
+                        const removeButton = document.createElement('button');
+                        removeButton.innerHTML = '&times;';
+                        removeButton.addEventListener('click', () => {
+                            selectedFiles.splice(index, 1);
+                            updatePreview();
+                        });
+                        item.appendChild(removeButton);
+                        attachmentsPreview.appendChild(item);
+                    });
+                    attachmentsCount.textContent = \`Załączników: \${selectedFiles.length}/\${maxAttachments}\`;
+                }
+
+                // Usuwanie notatki
+                document.addEventListener('submit', function(event) {
+                    if (event.target && event.target.classList.contains('delete-note-form')) {
+                        event.preventDefault();
+                        const noteId = event.target.getAttribute('data-note-id');
+                        const spinnerId = 'note-spinner-' + noteId;
+                        showSpinner(spinnerId);
+                        fetch('{{ url_for("delete_note_ajax") }}', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ note_id: noteId }),
+                            credentials: 'same-origin'
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            hideSpinner(spinnerId);
+                            if (data.success) {
+                                showFlashMessage('success', data.message);
+                                updateNotesList(data.notes);
+                                updateSelectedItems();
+                            } else {
+                                showFlashMessage('error', data.message);
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Błąd podczas usuwania notatki:', error);
+                            hideSpinner(spinnerId);
+                            showFlashMessage('error', 'Wystąpił błąd podczas usuwania notatki.');
+                        });
+                    }
+                    // Usuwanie wszystkich notatek
+                    if (event.target && event.target.id === 'delete-all-notes-form') {
+                        event.preventDefault();
+                        const spinnerId = 'delete-all-spinner';
+                        showSpinner(spinnerId);
+                        fetch('{{ url_for("delete_all_notes_ajax") }}', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({}),
+                            credentials: 'same-origin'
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            hideSpinner(spinnerId);
+                            if (data.success) {
+                                showFlashMessage('success', data.message);
+                                updateNotesList(data.notes);
+                                updateSelectedItems();
+                            } else {
+                                showFlashMessage('error', data.message);
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Błąd podczas usuwania wszystkich notatek:', error);
+                            hideSpinner(spinnerId);
+                            showFlashMessage('error', 'Wystąpił błąd podczas usuwania notatek.');
+                        });
+                    }
+                    // Edycja notatki (modal)
+                    if (event.target && event.target.id === 'edit-note-form') {
+                        event.preventDefault();
+                        const form = event.target;
+                        const noteId = form.getAttribute('data-note-id');
+                        const newContent = document.getElementById('edit-note-input').value.trim();
+                        if (newContent === '') {
+                            showFlashMessage('error', 'Nowa treść notatki nie może być pusta.');
+                            return;
+                        }
+                        editNote(noteId, newContent);
+                    }
+                });
+
+                attachUserNameClickListeners();
+            });
         </script>
     </head>
     <body>
@@ -3894,7 +3852,7 @@ def index():
                             <img src="{{ url_for('static', filename='money.png') }}" alt="Toggle Potential Clients">
                         </button>
                     </div>
-                    
+
                     <!-- Kontener segmentów -->
                     <div id="segments-container" class="segments-container">
                         <button type="button" id="select-all-segments-btn" class="yellow-btn" onclick="toggleSelectAllSegments(this)">
@@ -3903,7 +3861,6 @@ def index():
                         <button type="button" class="yellow-btn" onclick="toggleAllSegmentsExpandCollapse(this)">
                             Rozwiń wszystkie segmenty
                         </button>
-
                         <ul class="segment-list">
                             {% for segment, counts in segments %}
                                 {% set segment_index = loop.index %}
@@ -3915,7 +3872,9 @@ def index():
                                     </span>
                                 </li>
                                 <ul class="email-list" id="emails-{{ segment_index }}">
-                                    <button type="button" class="yellow-btn select-deselect-emails-btn" onclick="toggleSelectAllEmailsInSegment('emails-{{ segment_index }}')">Zaznacz Wszystkie</button>
+                                    <button type="button" class="yellow-btn select-deselect-emails-btn" onclick="toggleSelectAllEmailsInSegment('emails-{{ segment_index }}')">
+                                        Zaznacz Wszystkie
+                                    </button>
                                     {% set emails_companies_polski = get_email_company_pairs_for_segment(data, segment, "Polski") %}
                                     {% set emails_companies_zagraniczny = get_email_company_pairs_for_segment(data, segment, "Zagraniczny") %}
                                     {% for pair in emails_companies_polski %}
@@ -3935,7 +3894,7 @@ def index():
                         </ul>
                     </div>
 
-                    <!-- Kontener możliwości: dwupoziomowo (prefix -> subitems -> firmy) -->
+                    <!-- Kontener możliwości (prefix->subitems->firmy) -->
                     <div id="possibilities-container" class="possibilities-container">
                         <button type="button" id="select-all-possibilities-btn" class="yellow-btn" onclick="toggleSelectAllPossibilities(this)">
                             Zaznacz wszystkie możliwości
@@ -3943,12 +3902,10 @@ def index():
                         <button type="button" class="yellow-btn" onclick="toggleAllPossibilitiesExpandCollapse(this)">
                             Rozwiń wszystkie możliwości
                         </button>
-
                         <ul class="possibility-list">
                             {% for prefix, prefix_data in possibilities %}
                                 {% set prefix_index = loop.index %}
                                 <li class="prefix-item">
-                                    <!-- Checkbox główny (prefix) -->
                                     <input type="checkbox"
                                            name="prefixes"
                                            value="{{ prefix }}"
@@ -3960,7 +3917,6 @@ def index():
                                             (Polski: {{ prefix_data['Polski'] }}, Zagraniczny: {{ prefix_data['Zagraniczny'] }})
                                         </span>
                                     </span>
-                                    <!-- Lista subitemów -->
                                     <ul class="subitem-list" id="subitems-{{ prefix_index }}">
                                         <button type="button"
                                                 class="yellow-btn select-deselect-subitems-btn"
@@ -3981,7 +3937,6 @@ def index():
                                                         (Polski: {{ subitem_data['Polski'] }}, Zagraniczny: {{ subitem_data['Zagraniczny'] }})
                                                     </span>
                                                 </span>
-                                                <!-- Firmy (entries) -->
                                                 <ul class="company-list" id="companies-{{ prefix_index }}-{{ subitem_index }}">
                                                     <button type="button"
                                                             class="yellow-btn select-deselect-companies-btn"
@@ -4084,7 +4039,7 @@ def index():
             </div>
         </form>
 
-        <!-- Sekcja notatek i modale -->
+        <!-- Sekcja notatek + modale -->
         <div class="note-section">
             <h3>Notatki</h3>
             <form id="add-note-form">
@@ -4147,14 +4102,13 @@ def index():
         user=user,
         segments=sorted_segments,
         notes=notes,
-        possibilities=sorted_possibilities,     # już w formie (prefix, prefix_data)
+        possibilities=sorted_possibilities,
         potential_clients=potential_clients,
         get_email_company_pairs_for_segment=get_email_company_pairs_for_segment,
         data=data,
         max_attachments=app.config['MAX_ATTACHMENTS'],
         highlight_triple_brackets=highlight_triple_brackets
     )
-
 
 
 

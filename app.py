@@ -2224,7 +2224,7 @@ def index():
     # Potencjalni klienci
     potential_clients = get_potential_clients(data)
 
-    # Poniżej znajduje się cały szablon index_template – bez zmian
+    # Poniżej znajduje się cały szablon index_template – z podmienionym kontenerem możliwości
     index_template = '''
     <!DOCTYPE html>
     <html lang="pl">
@@ -3106,15 +3106,15 @@ def index():
                         const companyToRemove = this.getAttribute('data-company');
                         const checkbox = Array.from(document.querySelectorAll('.potential-clients-list .client-item input[type="checkbox"]'))
                             .find(cb => {
-                                const label = document.querySelector(`label[for="${cb.id}"]`);
+                                const label = document.querySelector(`label[for="\${cb.id}"]`);
                                 return label && label.textContent.split(' (')[0] === companyToRemove;
                             });
                         if (checkbox) {
                             checkbox.checked = false;
                             // Jeśli wszyscy klienci w grupie są odznaczeni, odznacz również checkbox grupy
                             const groupIndex = checkbox.id.split('-')[1];
-                            const groupCheckbox = document.getElementById(`potential-group-${groupIndex}`);
-                            const siblingCheckboxes = document.querySelectorAll(`#clients-${groupIndex} .client-item input[type="checkbox"]`);
+                            const groupCheckbox = document.getElementById(\`potential-group-\${groupIndex}\`);
+                            const siblingCheckboxes = document.querySelectorAll(\`#clients-\${groupIndex} .client-item input[type="checkbox"]\`);
                             const allUnchecked = Array.from(siblingCheckboxes).every(cb => !cb.checked);
                             if (allUnchecked && groupCheckbox) {
                                 groupCheckbox.checked = false;
@@ -3297,7 +3297,7 @@ def index():
 
             function toggleEmailsInSegment(segmentCheckbox) {
                 var segmentIndex = segmentCheckbox.id.split('-')[1];
-                var emailList = document.getElementById(`emails-${segmentIndex}`);
+                var emailList = document.getElementById(`emails-\${segmentIndex}`);
                 if (emailList) {
                     var emailCheckboxes = emailList.querySelectorAll('input[type="checkbox"]');
                     emailCheckboxes.forEach(function(emailCheckbox) {
@@ -3308,7 +3308,7 @@ def index():
 
             function toggleCompaniesInPossibility(possibilityCheckbox) {
                 var possibilityIndex = possibilityCheckbox.id.split('-')[1];
-                var companyList = document.getElementById(`companies-${possibilityIndex}`);
+                var companyList = document.getElementById(\`companies-\${possibilityIndex}\`);
                 if (companyList) {
                     var companyCheckboxes = companyList.querySelectorAll('input[type="checkbox"]');
                     companyCheckboxes.forEach(function(companyCheckbox) {
@@ -3319,7 +3319,7 @@ def index():
 
             function toggleClientsInGroup(groupCheckbox) {
                 var groupIndex = groupCheckbox.id.split('-')[2];
-                var clientsList = document.getElementById(`clients-${groupIndex}`);
+                var clientsList = document.getElementById(\`clients-\${groupIndex}\`);
                 if (clientsList) {
                     var clientCheckboxes = clientsList.querySelectorAll('input[type="checkbox"]');
                     clientCheckboxes.forEach(function(clientCheckbox) {
@@ -3592,7 +3592,7 @@ def index():
 
                         attachmentsPreview.appendChild(item);
                     });
-                    attachmentsCount.textContent = `Załączników: ${selectedFiles.length}/${maxAttachments}`;
+                    attachmentsCount.textContent = \`Załączników: \${selectedFiles.length}/\${maxAttachments}\`;
                 }
             });
 
@@ -3801,21 +3801,21 @@ def index():
             }
 
             function toggleEmailsList(segmentIndex) {
-                var emailList = document.getElementById(`emails-${segmentIndex}`);
+                var emailList = document.getElementById(\`emails-\${segmentIndex}\`);
                 if (emailList) {
                     emailList.classList.toggle('show');
                 }
             }
 
             function toggleCompanyList(possibilityIndex) {
-                var companyList = document.getElementById(`companies-${possibilityIndex}`);
+                var companyList = document.getElementById(\`companies-\${possibilityIndex}\`);
                 if (companyList) {
                     companyList.classList.toggle('show');
                 }
             }
 
             function toggleClientsList(groupIndex) {
-                var clientsList = document.getElementById(`clients-${groupIndex}`);
+                var clientsList = document.getElementById(\`clients-\${groupIndex}\`);
                 if (clientsList) {
                     clientsList.classList.toggle('show');
                 }
@@ -3825,7 +3825,7 @@ def index():
                 const segmentCheckboxes = document.querySelectorAll('.segment-item input[type="checkbox"]');
                 for (const segment of segmentCheckboxes) {
                     const segmentIndex = segment.id.split('-')[1];
-                    const emailList = document.getElementById(`emails-${segmentIndex}`);
+                    const emailList = document.getElementById(\`emails-\${segmentIndex}\`);
                     if (emailList) {
                         const childEmails = emailList.querySelectorAll('input[type="checkbox"]:checked');
                         if (childEmails.length > 0 && !segment.checked) {
@@ -3838,7 +3838,7 @@ def index():
                 const possibilityCheckboxes = document.querySelectorAll('.possibility-item input[type="checkbox"]');
                 for (const possibility of possibilityCheckboxes) {
                     const possibilityIndex = possibility.id.split('-')[1];
-                    const companyList = document.getElementById(`companies-${possibilityIndex}`);
+                    const companyList = document.getElementById(\`companies-\${possibilityIndex}\`);
                     if (companyList) {
                         const childCompanies = companyList.querySelectorAll('input[type="checkbox"]:checked');
                         if (childCompanies.length > 0 && !possibility.checked) {
@@ -3851,7 +3851,7 @@ def index():
                 const groupCheckboxes = document.querySelectorAll('.potential-client-group input[type="checkbox"]');
                 for (const group of groupCheckboxes) {
                     const groupIndex = group.id.split('-')[2];
-                    const clientsList = document.getElementById(`clients-${groupIndex}`);
+                    const clientsList = document.getElementById(\`clients-\${groupIndex}\`);
                     if (clientsList) {
                         const childClients = clientsList.querySelectorAll('input[type="checkbox"]:checked');
                         if (childClients.length > 0 && !group.checked) {
@@ -3909,13 +3909,13 @@ def index():
             </div>
             <div class="header-right">
                 <div class="user-info">
-                    <span>Witaj, {{ user.username }}!</span> 
-                    <a href="{{ url_for('logout') }}">Wyloguj się</a> | 
+                    <span>Witaj, {{ user.username }}!</span>
+                    <a href="{{ url_for('logout') }}">Wyloguj się</a> |
                     <a href="{{ url_for('settings') }}">Ustawienia konta</a>
                 </div>
             </div>
         </header>
-        
+
         <!-- Formularz główny -->
         <form id="main-form" class="main-form" enctype="multipart/form-data">
             <div class="content-wrapper">
@@ -3930,7 +3930,7 @@ def index():
                         <button type="button" class="toggle-possibilities-btn" onclick="togglePossibilitiesList(this)">
                             <img src="{{ url_for('static', filename='greek_key.png') }}" alt="Toggle Possibilities">
                         </button>
-                        
+
                         <button type="button" class="toggle-potential-clients-btn" onclick="togglePotentialClientsList(this)">
                             <img src="{{ url_for('static', filename='money.png') }}" alt="Toggle Potential Clients">
                         </button>
@@ -3954,7 +3954,7 @@ def index():
                                 </li>
                                 <ul class="email-list" id="emails-{{ segment_index }}">
                                     <button type="button" class="yellow-btn select-deselect-emails-btn" onclick="toggleSelectAllEmailsInSegment('emails-{{ segment_index }}')">Zaznacz Wszystkie</button>
-                                    
+
                                     {% set emails_companies_polski = get_email_company_pairs_for_segment(data, segment, "Polski") %}
                                     {% set emails_companies_zagraniczny = get_email_company_pairs_for_segment(data, segment, "Zagraniczny") %}
                                     {% for pair in emails_companies_polski %}
@@ -3974,29 +3974,79 @@ def index():
                         </ul>
                     </div>
 
-                    <!-- Kontener możliwości -->
+                    <!-- NOWY KONTENER MOŻLIWOŚCI -->
                     <div id="possibilities-container" class="possibilities-container">
-                        <button type="button" id="select-all-possibilities-btn" class="yellow-btn" onclick="toggleSelectAllPossibilities(this)">Zaznacz wszystkie możliwości</button>
-                        <button type="button" class="yellow-btn" onclick="toggleAllPossibilitiesExpandCollapse(this)">Rozwiń wszystkie możliwości</button>
+                        <button type="button" id="select-all-possibilities-btn" class="yellow-btn" onclick="toggleSelectAllPossibilities(this)">
+                            Zaznacz wszystkie możliwości
+                        </button>
+                        <button type="button" class="yellow-btn" onclick="toggleAllPossibilitiesExpandCollapse(this)">
+                            Rozwiń wszystkie możliwości
+                        </button>
 
                         <ul class="possibility-list">
                             {% for possibility, details in possibilities %}
                                 {% set possibility_index = loop.index %}
+                                <!-- Pierwszy poziom = prefix (np. "FCL Road") -->
                                 <li class="possibility-item">
-                                    <input type="checkbox" name="possibilities" value="{{ possibility }}" id="possibility-{{ possibility_index }}" onchange="handlePossibilityChange(this)">
+                                    <!-- Checkbox do "zaznacz/odznacz" ten prefix -->
+                                    <input type="checkbox" 
+                                           name="possibilities" 
+                                           value="{{ possibility }}"
+                                           id="possibility-{{ possibility_index }}"
+                                           onchange="handlePossibilityChange(this)">
+
+                                    <!-- Etykieta prefixu + licznik Polski/Zagraniczny -->
                                     <span class="possibility-label" data-index="{{ possibility_index }}">
                                         {{ highlight_triple_brackets(possibility)|safe }}
-                                        <span class="company-count">(Polski: {{ details['Polski'] }}, Zagraniczny: {{ details['Zagraniczny'] }})</span>
+                                        <span class="company-count">
+                                            (Polski: {{ details['Polski'] }}, Zagraniczny: {{ details['Zagraniczny'] }})
                                         </span>
                                     </span>
                                 </li>
+
+                                <!-- Drugi poziom (subitems) -->
                                 <ul class="company-list" id="companies-{{ possibility_index }}">
-                                    <button type="button" class="yellow-btn select-deselect-companies-btn" onclick="toggleSelectAllCompaniesInPossibility('companies-{{ possibility_index }}')">Zaznacz Wszystkie</button>
-                    
-                                    {% for entry in details['entries'] %}
-                                        <li class="company-item">
-                                            <input type="checkbox" name="include_emails" value="{{ entry.email }}" id="company-{{ possibility_index }}-{{ loop.index }}">
-                                            <label for="company-{{ possibility_index }}-{{ loop.index }}">{{ entry.company }}</label>
+                                    <button type="button"
+                                            class="yellow-btn select-deselect-companies-btn"
+                                            onclick="toggleSelectAllCompaniesInPossibility('companies-{{ possibility_index }}')">
+                                        Zaznacz Wszystkie
+                                    </button>
+
+                                    {# Iterujemy po subitems; 
+                                       'full_str' to np. "FCL Road [[[ Gdańsk - all PL ]]]" 
+                                       'sub_data' to obiekt z Pol/Zag i `entries` #}
+                                    {% for full_str, sub_data in details['subitems'].items() %}
+                                        {% set sub_index = loop.index %}
+                                        <li class="company-item" style="margin-left: 15px;">
+                                            <!-- Checkbox do ewentualnego zaznaczania maili w tym subitem -->
+                                            <input type="checkbox"
+                                                   name="include_emails"
+                                                   value="{{ full_str }}"
+                                                   id="subitem-{{ possibility_index }}-{{ sub_index }}">
+
+                                            <!-- Nazwa subitemu (z [[[ ...]]] pomarańczowym) + licznik -->
+                                            <label for="subitem-{{ possibility_index }}-{{ sub_index }}">
+                                                {{ highlight_triple_brackets(full_str)|safe }}
+                                                (Polski: {{ sub_data['Polski'] }}, Zagraniczny: {{ sub_data['Zagraniczny'] }})
+                                            </label>
+
+                                            <!-- Trzeci poziom = firmy / maile (sub_data['entries']) -->
+                                            <ul class="company-list"
+                                                id="subitem-companies-{{ possibility_index }}-{{ sub_index }}"
+                                                style="display: none; margin-left: 20px;">
+
+                                                <button type="button"
+                                                        class="yellow-btn"
+                                                        onclick="toggleSubitemCompanies('{{ possibility_index }}', '{{ sub_index }}')">
+                                                    Rozwiń firmy
+                                                </button>
+
+                                                {% for entry in sub_data['entries'] %}
+                                                    <li class="company-item" style="margin-left: 15px;">
+                                                        {{ entry.company }} ({{ entry.email }}) -- {{ entry.subsegment }}
+                                                    </li>
+                                                {% endfor %}
+                                            </ul>
                                         </li>
                                     {% endfor %}
                                 </ul>
@@ -4136,17 +4186,16 @@ def index():
     return render_template_string(
         index_template,
         user=user,
-        # zamiast segments=segments_dict.items(), przekazujemy posortowaną listę
-        segments=sorted_segments,
+        segments=sorted_segments,   # posortowane segmenty
         notes=notes,
-        # zamiast possibilities=possibilities_dict.items(), przekazujemy posortowaną listę
-        possibilities=sorted_possibilities,
+        possibilities=sorted_possibilities,  # posortowane możliwości
         potential_clients=potential_clients,
         get_email_company_pairs_for_segment=get_email_company_pairs_for_segment,
         data=data,
         max_attachments=app.config['MAX_ATTACHMENTS'],
         highlight_triple_brackets=highlight_triple_brackets
     )
+
 
 
 

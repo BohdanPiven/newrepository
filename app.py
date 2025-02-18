@@ -2188,6 +2188,7 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if 'user_id' not in session:
@@ -2202,11 +2203,11 @@ def index():
 
     data = get_data_from_sheet()
 
-    # --- [1] Pobieramy słowniki z licznikami segmentów i możliwości (prefix->subitems) ---
+    # Pobranie struktur segmentów i możliwości (prefix->subitems)
     segments_dict = get_unique_segments_with_counts(data)
     possibilities_dict = get_unique_possibilities_with_counts(data)
 
-    # --- [2] Sortowanie ---
+    # Sortowanie (malejąco według sumy Polski+Zagraniczny)
     sorted_segments = sorted(
         segments_dict.items(),
         key=lambda item: (item[1]['Polski'] + item[1]['Zagraniczny']),
@@ -2218,14 +2219,14 @@ def index():
         reverse=True
     )
 
-    # Notatki
+    # Notatki (ostatnie najpierw)
     notes = Note.query.order_by(Note.id.desc()).all()
 
-    # Potencjalni klienci
+    # Potencjalni klienci z Google Sheets
     potential_clients = get_potential_clients(data)
 
-    # Pełny szablon HTML
-    index_template = '''
+    # Pełny szablon HTML z wprowadzeniem filtra |escapejs przy data-note-content
+    index_template = r'''
     <!DOCTYPE html>
     <html lang="pl">
     <head>
@@ -2234,7 +2235,9 @@ def index():
         <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
         <link href="https://fonts.googleapis.com/css2?family=Quantico&display=swap" rel="stylesheet">
         <style>
-            /* Resetowanie stylów domyślnych */
+            /* ------------------------------------------
+               CSS i stylizacja panelu, sidebaru, notatek
+               ------------------------------------------ */
             * {
                 margin: 0;
                 padding: 0;
@@ -2252,7 +2255,6 @@ def index():
                 color: #333333;
                 overflow-x: hidden;
             }
-            /* Header */
             .top-header {
                 position: fixed;
                 top: 0;
@@ -2307,7 +2309,7 @@ def index():
             .top-header .user-info a:hover {
                 color: #FFC107;
             }
-            /* Wrapper na zawartość */
+
             .content-wrapper {
                 display: flex;
                 flex: 1;
@@ -2317,7 +2319,6 @@ def index():
                 position: relative;
                 z-index: 1;
             }
-            /* Sidebar */
             .sidebar {
                 position: fixed;
                 top: 60px;
@@ -2337,7 +2338,6 @@ def index():
             .sidebar.active {
                 left: 0;
             }
-            /* Main Content */
             .main-content {
                 flex: 1;
                 padding: 20px;
@@ -2354,18 +2354,13 @@ def index():
             .main-content.sidebar-active {
                 margin-left: 700px;
             }
-            .form-container {
-                display: flex;
-                flex-direction: column;
-                flex: 1;
-            }
+
             h1 {
                 color: #333333;
                 text-align: center;
                 margin-bottom: 20px;
                 font-size: 36px;
             }
-            /* Flash Messages */
             .flash-message {
                 background-color: #e9ecef;
                 color: #495057;
@@ -2391,14 +2386,16 @@ def index():
                 background-color: #fff3cd;
                 color: #856404;
             }
-            /* Formularze i elementy */
             label {
                 display: block;
                 margin-top: 10px;
                 font-weight: bold;
                 color: #333333;
             }
-            input[type="text"], textarea, select, input[type="file"] {
+            input[type="text"],
+            textarea,
+            select,
+            input[type="file"] {
                 width: 100%;
                 padding: 10px;
                 margin-top: 5px;
@@ -2410,7 +2407,10 @@ def index():
                 color: #333333;
                 transition: border-color 0.3s;
             }
-            input[type="text"]:focus, textarea:focus, select:focus, input[type="file"]:focus {
+            input[type="text"]:focus,
+            textarea:focus,
+            select:focus,
+            input[type="file"]:focus {
                 outline: none;
                 border-color: #007BFF;
                 box-shadow: 0 0 5px rgba(0,123,255,0.5);
@@ -2455,203 +2455,19 @@ def index():
             .yellow-btn:active {
                 transform: scale(0.95);
             }
-            .delete-btn {
-                background-color: #6c757d;
-                color: #ffffff;
-                padding: 5px 10px;
-                border: none;
-                border-radius: 5px;
-                cursor: pointer;
-                transition: background-color 0.3s, transform 0.2s;
-                font-size: 14px;
-            }
-            .delete-btn:hover {
-                background-color: #5a6268;
-                transform: scale(1.05);
-            }
-            .delete-btn:active {
-                transform: scale(0.95);
-            }
-            .edit-btn {
-                background-color: #17a2b8;
-                color: #ffffff;
-                padding: 5px 10px;
-                border: none;
-                border-radius: 5px;
-                cursor: pointer;
-                transition: background-color 0.3s, transform 0.2s;
-                font-size: 14px;
-            }
-            .edit-btn:hover {
-                background-color: #138496;
-                transform: scale(1.05);
-            }
-            .edit-btn:active {
-                transform: scale(0.95);
-            }
-            .note-section {
-                background-color: #ffffff;
-                padding: 20px;
-                border-radius: 10px;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                margin-top: 30px;
-                flex: 0 0 auto;
-                max-height: calc(100vh - 160px);
-                overflow-y: auto;
-                position: relative;
-                padding-bottom: 80px;
-            }
-            .note {
-                background-color: #f8f9fa;
-                margin: 10px 0;
-                padding: 15px;
-                border-radius: 5px;
+            .form-container {
                 display: flex;
                 flex-direction: column;
-                justify-content: space-between;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-                position: relative;
-            }
-            .note-content {
-                margin-bottom: 10px;
-                white-space: pre-wrap;
                 flex: 1;
-            }
-            .note-footer {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-top: 10px;
-            }
-            .user-name {
-                padding: 5px 10px;
-                border-radius: 5px;
-                color: #333333;
-                font-weight: bold;
-                background-color: #e2e6ea;
-                display: inline-block;
-                cursor: pointer;
-                transition: background-color 0.3s;
-            }
-            .user-name:hover {
-                background-color: #c8d6e5;
-            }
-            .note-actions {
-                display: flex;
-                align-items: center;
-                gap: 10px;
-            }
-            .transfer-note-btn {
-                background-color: #000000;
-                color: #ffffff;
-                padding: 5px 10px;
-                border: none;
-                border-radius: 5px;
-                cursor: pointer;
-                transition: background-color 0.3s, transform 0.2s;
-            }
-            .transfer-note-btn:hover {
-                background-color: #333333;
-                transform: scale(1.05);
-            }
-            .transfer-note-btn:active {
-                transform: scale(0.95);
-            }
-            .delete-all-notes-form button {
-                background-color: #6c757d;
-                color: #ffffff;
-                padding: 5px 10px;
-                border: none;
-                border-radius: 5px;
-                cursor: pointer;
-                transition: background-color 0.3s, transform 0.2s;
-            }
-            .delete-all-notes-form button:hover {
-                background-color: #5a6268;
-                transform: scale(1.05);
-            }
-            .delete-all-notes-form button:active {
-                transform: scale(0.95);
-            }
-            .segment-list, .possibility-list, .potential-clients-list {
-                list-style: none;
-                padding-left: 0;
-                margin: 0;
-            }
-            .segment-item, .prefix-item, .potential-client-group {
-                display: flex;
-                align-items: center;
-                margin-bottom: 8px;
-            }
-            .segment-item input[type="checkbox"],
-            .prefix-item input[type="checkbox"],
-            .potential-client-group input[type="checkbox"] {
-                margin-right: 10px;
-                transform: scale(1.2);
-                cursor: pointer;
-            }
-            .segment-label, .prefix-label, .potential-client-group-label {
-                font-size: 13px;
-                border-bottom: 1px solid rgba(255,255,255,0.2);
-                padding-bottom: 5px;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                cursor: pointer;
-                flex: 1;
-                user-select: none;
-                color: #ffffff;
-            }
-            .segment-label:hover,
-            .prefix-label:hover,
-            .potential-client-group-label:hover {
-                text-decoration: underline;
-            }
-            .email-item, .company-item, .client-item, .subitem-item {
-                display: flex;
-                align-items: center;
-                margin-bottom: 5px;
-            }
-            .email-item input[type="checkbox"],
-            .company-item input[type="checkbox"],
-            .client-item input[type="checkbox"],
-            .subitem-item input[type="checkbox"] {
-                margin-right: 10px;
-                transform: scale(1.1);
-                cursor: pointer;
-            }
-            .email-item label,
-            .company-item label,
-            .client-item label,
-            .subitem-label {
-                cursor: pointer;
-                color: #ffffff;
-                font-size: 14px;
-                user-select: none;
-            }
-            .clients-list,
-            .email-list,
-            .company-list,
-            .subitem-list {
-                display: none;
-                list-style: none;
-                padding-left: 20px;
-                margin-top: 5px;
-                max-height: 300px;
-                overflow-y: auto;
-            }
-            .clients-list.show,
-            .email-list.show,
-            .company-list.show,
-            .subitem-list.show {
-                display: block;
             }
             .toggle-buttons-container {
                 display: flex;
                 gap: 10px;
                 margin-bottom: 20px;
             }
-            .toggle-segments-btn, .toggle-possibilities-btn, .toggle-potential-clients-btn {
+            .toggle-segments-btn,
+            .toggle-possibilities-btn,
+            .toggle-potential-clients-btn {
                 background: none;
                 border: none;
                 cursor: pointer;
@@ -2679,12 +2495,16 @@ def index():
                 box-shadow: none;
                 transform: scale(0.98);
             }
-            .toggle-segments-btn img, .toggle-possibilities-btn img, .toggle-potential-clients-btn img {
+            .toggle-segments-btn img,
+            .toggle-possibilities-btn img,
+            .toggle-potential-clients-btn img {
                 width: 32px;
                 height: 32px;
                 transition: transform 0.3s;
             }
-            .toggle-segments-btn img.rotate, .toggle-possibilities-btn img.rotate, .toggle-potential-clients-btn img.rotate {
+            .toggle-segments-btn img.rotate,
+            .toggle-possibilities-btn img.rotate,
+            .toggle-potential-clients-btn img.rotate {
                 transform: rotate(180deg);
             }
             .segments-container,
@@ -2698,7 +2518,98 @@ def index():
             .potential-clients-container.show {
                 display: block;
             }
-            #selected-segments, #selected-possibilities, #selected-potential-clients, #selected-users {
+            .segment-list,
+            .possibility-list,
+            .potential-clients-list {
+                list-style: none;
+                padding-left: 0;
+                margin: 0;
+            }
+            .segment-item,
+            .prefix-item,
+            .potential-client-group {
+                display: flex;
+                align-items: center;
+                margin-bottom: 8px;
+            }
+            .segment-item input[type="checkbox"],
+            .prefix-item input[type="checkbox"],
+            .potential-client-group input[type="checkbox"] {
+                margin-right: 10px;
+                transform: scale(1.2);
+                cursor: pointer;
+            }
+            .segment-label,
+            .prefix-label,
+            .potential-client-group-label {
+                font-size: 13px;
+                border-bottom: 1px solid rgba(255,255,255,0.2);
+                padding-bottom: 5px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                cursor: pointer;
+                flex: 1;
+                user-select: none;
+                color: #ffffff;
+            }
+            .segment-label:hover,
+            .prefix-label:hover,
+            .potential-client-group-label:hover {
+                text-decoration: underline;
+            }
+            .email-item,
+            .company-item,
+            .client-item,
+            .subitem-item {
+                display: flex;
+                align-items: center;
+                margin-bottom: 5px;
+            }
+            .email-item input[type="checkbox"],
+            .company-item input[type="checkbox"],
+            .client-item input[type="checkbox"],
+            .subitem-item input[type="checkbox"] {
+                margin-right: 10px;
+                transform: scale(1.1);
+                cursor: pointer;
+            }
+            .email-item label,
+            .company-item label,
+            .client-item label,
+            .subitem-label {
+                cursor: pointer;
+                color: #ffffff;
+                font-size: 14px;
+                user-select: none;
+            }
+            .email-list,
+            .company-list,
+            .clients-list,
+            .subitem-list {
+                display: none;
+                list-style: none;
+                padding-left: 20px;
+                margin-top: 5px;
+                max-height: 300px;
+                overflow-y: auto;
+            }
+            .email-list.show,
+            .company-list.show,
+            .clients-list.show,
+            .subitem-list.show {
+                display: block;
+            }
+            .button-container {
+                display: flex;
+                align-items: flex-start;
+                flex-wrap: wrap;
+                margin-top: 20px;
+            }
+            #selected-segments,
+            #selected-possibilities,
+            #selected-potential-clients,
+            #selected-users {
                 margin-left: 10px;
                 font-size: 12px;
                 color: #333333;
@@ -2729,94 +2640,6 @@ def index():
             .selected-item:hover {
                 background-color: #34495e;
             }
-            .modal {
-                display: none;
-                position: fixed;
-                z-index: 1002;
-                left: 0;
-                top: 0;
-                width: 100%;
-                height: 100%;
-                overflow: auto;
-                background-color: rgba(0,0,0,0.5);
-            }
-            .modal-content {
-                background-color: #fefefe;
-                margin: 10% auto;
-                padding: 20px;
-                border: 1px solid #888;
-                width: 80%;
-                max-width: 500px;
-                border-radius: 10px;
-                box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-                position: relative;
-            }
-            .close-modal {
-                color: #aaa;
-                float: right;
-                font-size: 28px;
-                font-weight: bold;
-                position: absolute;
-                top: 10px;
-                right: 20px;
-                cursor: pointer;
-            }
-            .close-modal:hover,
-            .close-modal:focus {
-                color: black;
-                text-decoration: none;
-                cursor: pointer;
-            }
-            .modal-form input[type="text"] {
-                width: 100%;
-                padding: 10px;
-                margin-top: 10px;
-                border: 1px solid #cccccc;
-                border-radius: 5px;
-                box-sizing: border-box;
-                font-size: 16px;
-                background-color: #fafafa;
-                color: #333333;
-                transition: border-color 0.3s;
-            }
-            .modal-form input[type="text"]:focus {
-                outline: none;
-                border-color: #007BFF;
-                box-shadow: 0 0 5px rgba(0,123,255,0.5);
-            }
-            .modal-form button {
-                background-color: #28a745;
-                color: #ffffff;
-                padding: 10px 20px;
-                border: none;
-                border-radius: 5px;
-                cursor: pointer;
-                font-size: 16px;
-                margin-top: 20px;
-                transition: background-color 0.3s, transform 0.2s;
-                width: 100%;
-            }
-            .modal-form button:hover {
-                background-color: #218838;
-                transform: scale(1.05);
-            }
-            .modal-form button:active {
-                transform: scale(0.95);
-            }
-            .dropzone {
-                border: 2px dashed #cccccc;
-                border-radius: 5px;
-                padding: 20px;
-                text-align: center;
-                color: #999999;
-                cursor: pointer;
-                transition: background-color 0.3s, border-color 0.3s;
-            }
-            .dropzone.dragover {
-                background-color: #e9ecef;
-                border-color: #007BFF;
-                color: #333333;
-            }
             .attachments-preview {
                 display: flex;
                 flex-wrap: wrap;
@@ -2846,6 +2669,20 @@ def index():
                 margin-top: 5px;
                 font-size: 14px;
                 color: #555555;
+            }
+            .dropzone {
+                border: 2px dashed #cccccc;
+                border-radius: 5px;
+                padding: 20px;
+                text-align: center;
+                color: #999999;
+                cursor: pointer;
+                transition: background-color 0.3s, border-color 0.3s;
+            }
+            .dropzone.dragover {
+                background-color: #e9ecef;
+                border-color: #007BFF;
+                color: #333333;
             }
             .progress-container {
                 width: 100%;
@@ -2908,22 +2745,33 @@ def index():
                 .top-header {
                     justify-content: space-between;
                 }
-                #selected-segments, #selected-possibilities, #selected-potential-clients, #selected-users {
+                #selected-segments,
+                #selected-possibilities,
+                #selected-potential-clients,
+                #selected-users {
                     position: static;
                     margin-top: 10px;
                 }
             }
         </style>
-        <!-- Dodaj CKEditor -->
-        <script src="https://cdn.ckeditor.com/ckeditor5/39.0.1/classic/ckeditor.js"></script>
-        <script>
-            // ================================================
-            //  Tutaj zaczynają się wszystkie funkcje JavaScript
-            // ================================================
 
-            //-----------------------
-            //  Funkcje do sidebaru
-            //-----------------------
+        <!-- CKEditor -->
+        <script src="https://cdn.ckeditor.com/ckeditor5/39.0.1/classic/ckeditor.js"></script>
+
+        <!-- Główne skrypty (JS) -->
+        <script>
+            /* 
+               ==========================================
+               1. Funkcje do sidebaru i toggle sekcji
+               2. Wspólne showFlashMessage, escapowanie
+               3. Obsługa notatek (AJAX, edycja, usuwanie)
+               4. Segmenty, Możliwości (prefix->subitems),
+                  Potencjalni Klienci - checkboxy
+               5. CKEditor + Załączniki
+               ==========================================
+            */
+
+            // --- Sidebar toggle ---
             function toggleSidebar(button) {
                 var sidebar = document.querySelector('.sidebar');
                 sidebar.classList.toggle('active');
@@ -2931,8 +2779,6 @@ def index():
                 mainContent.classList.toggle('sidebar-active');
             }
 
-            // Te trzy funkcje odpowiadają za rozwijanie / zwijanie
-            // sekcji: segmenty, możliwości, potencjalni klienci
             function toggleSegmentsList(button) {
                 var segmentsContainer = document.getElementById('segments-container');
                 var img = button.querySelector('img');
@@ -2958,9 +2804,7 @@ def index():
                 }
             }
 
-            // ------------------------------
-            //  Wspólne funkcje i wsparcie
-            // ------------------------------
+            // --- Komunikaty, spinner, escape ---
             function showFlashMessage(category, message) {
                 const flashMessage = document.querySelector('.flash-message.' + category);
                 if (flashMessage) {
@@ -2971,21 +2815,18 @@ def index():
                     }, 5000);
                 }
             }
-
             function showSpinner(spinnerId) {
                 const spinner = document.getElementById(spinnerId);
                 if (spinner) {
                     spinner.style.display = 'inline-block';
                 }
             }
-
             function hideSpinner(spinnerId) {
                 const spinner = document.getElementById(spinnerId);
                 if (spinner) {
                     spinner.style.display = 'none';
                 }
             }
-
             function escapeHtml(text) {
                 var map = {
                     '&': '&amp;',
@@ -2997,9 +2838,7 @@ def index():
                 return text.replace(/[&<>"']/g, function(m) { return map[m]; });
             }
 
-            // --------------------------------
-            //  Obsługa notatek (listowanie itp.)
-            // --------------------------------
+            // --- Notatki: AJAX, edycja, transfer ---
             function updateNotesList(notes) {
                 const notesList = document.querySelector('.note-section ul');
                 notesList.innerHTML = '';
@@ -3007,18 +2846,28 @@ def index():
                     const li = document.createElement('li');
                     li.className = 'note';
                     li.setAttribute('data-note-id', note.id);
+
+                    // note.content w <div> -> HTML-escape (chroni przed wstrzyknięciem)
+                    // butony -> data-note-content, tam mamy plain js-escape w Jinja
                     li.innerHTML = `
                         <div class="note-content">${escapeHtml(note.content)}</div>
                         <div class="note-footer">
                             <div class="note-actions">
-                                <button type="button" class="transfer-note-btn" data-note-content="${escapeHtml(note.content)}">Transfer</button>
-                                <button type="button" class="edit-btn" data-note-id="${note.id}" data-note-content="${escapeHtml(note.content)}">Edytuj</button>
+                                <button type="button" class="transfer-note-btn" data-note-content="${escapeHtml(note.content)}">
+                                    Transfer
+                                </button>
+                                <button type="button" class="edit-btn"
+                                        data-note-id="${note.id}"
+                                        data-note-content="${escapeHtml(note.content)}">
+                                    Edytuj
+                                </button>
                                 <form class="delete-note-form" data-note-id="${note.id}">
                                     <button type="submit" class="delete-btn">Usuń</button>
                                     <div class="spinner" id="note-spinner-${note.id}" style="display: none;"></div>
                                 </form>
                             </div>
-                            <span class="user-name" style="background-color: ${note.user.color};" data-email="${escapeHtml(note.user.email)}">
+                            <span class="user-name" style="background-color: ${note.user.color};"
+                                  data-email="${escapeHtml(note.user.email)}">
                                 ${escapeHtml(note.user.first_name)} ${escapeHtml(note.user.last_name)}
                             </span>
                         </div>
@@ -3027,7 +2876,6 @@ def index():
                 });
                 attachUserNameClickListeners();
             }
-
             function transferToMessageField(content) {
                 if (window.editor) {
                     window.editor.setData(content);
@@ -3035,17 +2883,81 @@ def index():
                     document.getElementById('message').value = content;
                 }
             }
+            function openEditModal(noteId, currentContent) {
+                const modal = document.getElementById('editModal');
+                const editForm = document.getElementById('edit-note-form');
+                const editInput = document.getElementById('edit-note-input');
+                const closeModalBtn = document.getElementById('closeEditModal');
 
-            // --------------------------------
-            //  Segmenty
-            // --------------------------------
+                editInput.value = currentContent;
+                editForm.setAttribute('data-note-id', noteId);
+                modal.style.display = 'block';
+
+                closeModalBtn.onclick = function() {
+                    closeEditModal();
+                };
+                window.onclick = function(event) {
+                    if (event.target == modal) {
+                        closeEditModal();
+                    }
+                };
+            }
+            function closeEditModal() {
+                const modal = document.getElementById('editModal');
+                modal.style.display = 'none';
+            }
+            function editNote(noteId, newContent) {
+                showSpinner('edit-spinner');
+                fetch('{{ url_for("edit_note_ajax") }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        note_id: noteId,
+                        new_content: newContent
+                    }),
+                    credentials: 'same-origin'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    hideSpinner('edit-spinner');
+                    if (data.success) {
+                        showFlashMessage('success', data.message);
+                        // Podmiana treści w li
+                        const noteSpan = document.querySelector('.note[data-note-id="'+ noteId +'"] .note-content');
+                        if (noteSpan) {
+                            noteSpan.textContent = data.note.content;
+                        }
+                        // Zaktualizuj atrybut data-note-content w buttonach
+                        const editBtn = document.querySelector('.note[data-note-id="'+ noteId +'"] .edit-btn');
+                        if (editBtn) {
+                            editBtn.setAttribute('data-note-content', data.note.content);
+                        }
+                        const transferBtn = document.querySelector('.note[data-note-id="'+ noteId +'"] .transfer-note-btn');
+                        if (transferBtn) {
+                            transferBtn.setAttribute('data-note-content', data.note.content);
+                        }
+                    } else {
+                        showFlashMessage('error', data.message);
+                    }
+                    closeEditModal();
+                })
+                .catch(error => {
+                    console.error('Błąd podczas edytowania notatki:', error);
+                    hideSpinner('edit-spinner');
+                    showFlashMessage('error', 'Wystąpił błąd podczas edytowania notatki.');
+                });
+            }
+
+            // --- Segmenty ---
             function handleSegmentChange(segmentCheckbox) {
                 toggleEmailsInSegment(segmentCheckbox);
                 updateSelectedItems();
             }
             function toggleEmailsInSegment(segmentCheckbox) {
                 var segmentIndex = segmentCheckbox.id.split('-')[1];
-                var emailList = document.getElementById(`emails-${segmentIndex}`);
+                var emailList = document.getElementById('emails-' + segmentIndex);
                 if (emailList) {
                     var emailCheckboxes = emailList.querySelectorAll('input[type="checkbox"]');
                     emailCheckboxes.forEach(function(emailCheckbox) {
@@ -3084,22 +2996,20 @@ def index():
                 updateSelectedItems();
             }
             function toggleEmailsList(segmentIndex) {
-                var emailList = document.getElementById(`emails-${segmentIndex}`);
+                var emailList = document.getElementById('emails-' + segmentIndex);
                 if (emailList) {
                     emailList.classList.toggle('show');
                 }
             }
 
-            // --------------------------------
-            //  Potencjalni klienci
-            // --------------------------------
+            // --- Potencjalni klienci ---
             function handlePotentialClientGroupChange(groupCheckbox) {
                 toggleClientsInGroup(groupCheckbox);
                 updateSelectedItems();
             }
             function toggleClientsInGroup(groupCheckbox) {
                 var groupIndex = groupCheckbox.id.split('-')[2];
-                var clientsList = document.getElementById(`clients-${groupIndex}`);
+                var clientsList = document.getElementById('clients-' + groupIndex);
                 if (clientsList) {
                     var clientCheckboxes = clientsList.querySelectorAll('input[type="checkbox"]');
                     clientCheckboxes.forEach(function(clientCheckbox) {
@@ -3130,18 +3040,16 @@ def index():
                 button.textContent = allExpanded ? 'Rozwiń wszystkich potencjalnych klientów' : 'Zwiń wszystkich potencjalnych klientów';
             }
             function toggleClientsList(groupIndex) {
-                var clientsList = document.getElementById(`clients-${groupIndex}`);
+                var clientsList = document.getElementById('clients-' + groupIndex);
                 if (clientsList) {
                     clientsList.classList.toggle('show');
                 }
             }
 
-            // --------------------------------
-            //  Możliwości (prefix -> subitems)
-            // --------------------------------
+            // --- Możliwości (prefix->subitems) ---
             function handlePrefixChange(prefixCheckbox) {
                 const prefixIndex = prefixCheckbox.id.split('-')[1];
-                const subitemsList = document.getElementById(`subitems-${prefixIndex}`);
+                const subitemsList = document.getElementById('subitems-' + prefixIndex);
                 if (!subitemsList) return;
                 const subitemCheckboxes = subitemsList.querySelectorAll('.subitem-item input[type="checkbox"]');
                 const allChecked = prefixCheckbox.checked;
@@ -3159,7 +3067,7 @@ def index():
                 const ids = subitemCheckbox.id.split('-'); // ["subitem", prefixIndex, subitemIndex]
                 const prefixIndex = ids[1];
                 const subitemIndex = ids[2];
-                const companyList = document.getElementById(`companies-${prefixIndex}-${subitemIndex}`);
+                const companyList = document.getElementById('companies-' + prefixIndex + '-' + subitemIndex);
                 if (!companyList) return;
                 const companyCheckboxes = companyList.querySelectorAll('.company-item input[type="checkbox"]');
                 companyCheckboxes.forEach(companyCb => {
@@ -3207,17 +3115,15 @@ def index():
                 updateSelectedItems();
             }
             function toggleSubitemsList(prefixIndex) {
-                const subitemsList = document.getElementById(`subitems-${prefixIndex}`);
+                const subitemsList = document.getElementById('subitems-' + prefixIndex);
                 if (subitemsList) {
                     subitemsList.classList.toggle('show');
                 }
             }
 
-            // --------------------------------
-            //  Zbieranie zaznaczeń
-            // --------------------------------
+            // --- Zbieranie zaznaczeń do "wybranych" tagów ---
             function updateSelectedItems() {
-                // Segmenty
+                // 1) Segmenty
                 const selectedSegments = Array.from(document.querySelectorAll('.segment-item input[type="checkbox"]:checked'))
                     .map(cb => cb.value);
                 const selectedSegmentsDiv = document.getElementById('selected-segments');
@@ -3246,7 +3152,7 @@ def index():
                     selectedSegmentsDiv.appendChild(segmentSpan);
                 });
 
-                // Możliwości (prefixy)
+                // 2) Możliwości (prefix)
                 const selectedPrefixDiv = document.getElementById('selected-possibilities');
                 selectedPrefixDiv.innerHTML = '';
                 const selectedPrefixCheckboxes = document.querySelectorAll('.prefix-item input[type="checkbox"]:checked');
@@ -3267,10 +3173,10 @@ def index():
                     selectedPrefixDiv.appendChild(prefixSpan);
                 });
 
-                // Potencjalni klienci
+                // 3) Potencjalni klienci
                 const selectedPotentialClients = Array.from(document.querySelectorAll('.potential-clients-list .client-item input[type="checkbox"]:checked'))
                     .map(cb => {
-                        const label = document.querySelector(`label[for="${cb.id}"]`);
+                        const label = document.querySelector('label[for="' + cb.id + '"]');
                         if (label) {
                             const text = label.textContent;
                             const companyName = text.split(' (')[0];
@@ -3292,15 +3198,15 @@ def index():
                         const companyToRemove = this.getAttribute('data-company');
                         const checkbox = Array.from(document.querySelectorAll('.potential-clients-list .client-item input[type="checkbox"]'))
                             .find(cb => {
-                                const label = document.querySelector(`label[for="\${cb.id}"]`);
-                                return label && label.textContent.split(' (')[0] === companyToRemove;
+                                const lbl = document.querySelector('label[for="' + cb.id + '"]');
+                                return lbl && lbl.textContent.split(' (')[0] === companyToRemove;
                             });
                         if (checkbox) {
                             checkbox.checked = false;
                             const groupIndex = checkbox.id.split('-')[1];
-                            const groupCheckbox = document.getElementById(\`potential-group-\${groupIndex}\`);
-                            const siblingCheckboxes = document.querySelectorAll(\`#clients-\${groupIndex} .client-item input[type="checkbox"]\`);
-                            const allUnchecked = Array.from(siblingCheckboxes).every(cb => !cb.checked);
+                            const groupCheckbox = document.getElementById('potential-group-' + groupIndex);
+                            const siblingCheckboxes = document.querySelectorAll('#clients-' + groupIndex + ' .client-item input[type="checkbox"]');
+                            const allUnchecked = Array.from(siblingCheckboxes).every(cb2 => !cb2.checked);
                             if (allUnchecked && groupCheckbox) {
                                 groupCheckbox.checked = false;
                             }
@@ -3312,59 +3218,14 @@ def index():
                     selectedPotentialClientsDiv.appendChild(clientSpan);
                 });
 
-                // Użytkownicy z notatek
+                // 4) Użytkownicy z notatek (user-name)
                 const selectedUsersDiv = document.getElementById('selected-users');
                 selectedUsersDiv.innerHTML = '';
 
+                // I na końcu: odśwież przyciski "Zaznacz/Odznacz"
                 updateSelectAllButtons();
             }
 
-            function updateSelectAllButtons() {
-                var selectAllSegmentsBtn = document.getElementById('select-all-segments-btn');
-                var segmentCheckboxes = document.querySelectorAll('.segment-item input[type="checkbox"]');
-                var allSegmentsChecked = Array.from(segmentCheckboxes).every(cb => cb.checked);
-                selectAllSegmentsBtn.textContent = allSegmentsChecked ? 'Odznacz wszystkie segmenty' : 'Zaznacz wszystkie segmenty';
-
-                var selectAllPossibilitiesBtn = document.getElementById('select-all-possibilities-btn');
-                var prefixCheckboxes = document.querySelectorAll('.prefix-item input[type="checkbox"]');
-                var allPrefixesChecked = Array.from(prefixCheckboxes).every(cb => cb.checked);
-                selectAllPossibilitiesBtn.textContent = allPrefixesChecked ? 'Odznacz wszystkie możliwości' : 'Zaznacz wszystkie możliwości';
-
-                var selectAllPotentialClientsBtn = document.querySelector('.select-deselect-potential-clients-btn');
-                var groupCheckboxes = document.querySelectorAll('.potential-client-group input[type="checkbox"]');
-                var clientCheckboxes = document.querySelectorAll('.potential-clients-list .client-item input[type="checkbox"]');
-                var allPotentialClientsChecked = Array.from(groupCheckboxes).every(cb => cb.checked) && Array.from(clientCheckboxes).every(cb => cb.checked);
-                selectAllPotentialClientsBtn.textContent = allPotentialClientsChecked ? 'Odznacz wszystkich klientów' : 'Zaznacz wszystkich klientów';
-
-                updateEmailToggleButtons();
-                updateCompanyToggleButtons();
-            }
-
-            function updateEmailToggleButtons() {
-                var emailLists = document.querySelectorAll('.email-list');
-                emailLists.forEach(function(emailList) {
-                    var toggleBtn = emailList.querySelector('.select-deselect-emails-btn');
-                    if (!toggleBtn) return;
-                    var emailCheckboxes = emailList.querySelectorAll('input[type="checkbox"]');
-                    var allChecked = Array.from(emailCheckboxes).every(cb => cb.checked);
-                    toggleBtn.textContent = allChecked ? 'Odznacz Wszystkie' : 'Zaznacz Wszystkie';
-                });
-            }
-
-            function updateCompanyToggleButtons() {
-                var companyLists = document.querySelectorAll('.company-list');
-                companyLists.forEach(function(companyList) {
-                    var toggleBtn = companyList.querySelector('.select-deselect-companies-btn');
-                    if (!toggleBtn) return;
-                    var companyCheckboxes = companyList.querySelectorAll('input[type="checkbox"]');
-                    var allChecked = Array.from(companyCheckboxes).every(cb => cb.checked);
-                    toggleBtn.textContent = allChecked ? 'Odznacz Wszystkie' : 'Zaznacz Wszystkie';
-                });
-            }
-
-            // --------------------------------
-            //  Użytkownicy z notatek
-            // --------------------------------
             function attachUserNameClickListeners() {
                 document.querySelectorAll('.user-name').forEach(function(userNameSpan) {
                     userNameSpan.style.cursor = 'pointer';
@@ -3373,7 +3234,6 @@ def index():
                         const userEmail = this.getAttribute('data-email');
                         const alreadySelected = Array.from(document.querySelectorAll('#selected-users .selected-item'))
                             .some(item => item.getAttribute('data-email') === userEmail);
-
                         if (!alreadySelected) {
                             const userSpan = document.createElement('span');
                             userSpan.className = 'selected-item';
@@ -3400,124 +3260,48 @@ def index():
                 });
             }
 
-            // -------------------
-            //  Edycja notatki
-            // -------------------
-            function openEditModal(noteId, currentContent) {
-                const modal = document.getElementById('editModal');
-                const editForm = document.getElementById('edit-note-form');
-                const editInput = document.getElementById('edit-note-input');
-                const closeModalBtn = document.getElementById('closeEditModal');
+            function updateSelectAllButtons() {
+                var selectAllSegmentsBtn = document.getElementById('select-all-segments-btn');
+                var segmentCheckboxes = document.querySelectorAll('.segment-item input[type="checkbox"]');
+                var allSegmentsChecked = Array.from(segmentCheckboxes).every(cb => cb.checked);
+                selectAllSegmentsBtn.textContent = allSegmentsChecked ? 'Odznacz wszystkie segmenty' : 'Zaznacz wszystkie segmenty';
 
-                editInput.value = currentContent;
-                editForm.setAttribute('data-note-id', noteId);
-                modal.style.display = 'block';
+                var selectAllPossibilitiesBtn = document.getElementById('select-all-possibilities-btn');
+                var prefixCheckboxes = document.querySelectorAll('.prefix-item input[type="checkbox"]');
+                var allPrefixesChecked = Array.from(prefixCheckboxes).every(cb => cb.checked);
+                selectAllPossibilitiesBtn.textContent = allPrefixesChecked ? 'Odznacz wszystkie możliwości' : 'Zaznacz wszystkie możliwości';
 
-                closeModalBtn.onclick = function() {
-                    closeEditModal();
-                };
-                window.onclick = function(event) {
-                    if (event.target == modal) {
-                        closeEditModal();
-                    }
-                };
+                var selectAllPotentialClientsBtn = document.querySelector('.select-deselect-potential-clients-btn');
+                var groupCheckboxes = document.querySelectorAll('.potential-client-group input[type="checkbox"]');
+                var clientCheckboxes = document.querySelectorAll('.potential-clients-list .client-item input[type="checkbox"]');
+                var allPotentialClientsChecked = Array.from(groupCheckboxes).every(cb => cb.checked) && Array.from(clientCheckboxes).every(cb => cb.checked);
+                selectAllPotentialClientsBtn.textContent = allPotentialClientsChecked ? 'Odznacz wszystkich klientów' : 'Zaznacz wszystkich klientów';
+
+                updateEmailToggleButtons();
+                updateCompanyToggleButtons();
             }
-            function closeEditModal() {
-                const modal = document.getElementById('editModal');
-                modal.style.display = 'none';
+            function updateEmailToggleButtons() {
+                var emailLists = document.querySelectorAll('.email-list');
+                emailLists.forEach(function(emailList) {
+                    var toggleBtn = emailList.querySelector('.select-deselect-emails-btn');
+                    if (!toggleBtn) return;
+                    var emailCheckboxes = emailList.querySelectorAll('input[type="checkbox"]');
+                    var allChecked = Array.from(emailCheckboxes).every(cb => cb.checked);
+                    toggleBtn.textContent = allChecked ? 'Odznacz Wszystkie' : 'Zaznacz Wszystkie';
+                });
             }
-            function editNote(noteId, newContent) {
-                showSpinner('edit-spinner');
-                fetch('{{ url_for("edit_note_ajax") }}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        note_id: noteId,
-                        new_content: newContent
-                    }),
-                    credentials: 'same-origin'
-                })
-                .then(response => response.json())
-                .then(data => {
-                    hideSpinner('edit-spinner');
-                    if (data.success) {
-                        showFlashMessage('success', data.message);
-                        const noteSpan = document.querySelector('.note[data-note-id="'+ noteId +'"] .note-content');
-                        if (noteSpan) {
-                            noteSpan.textContent = data.note.content;
-                        }
-                        const editBtn = document.querySelector('.note[data-note-id="'+ noteId +'"] .edit-btn');
-                        if (editBtn) {
-                            editBtn.setAttribute('data-note-content', data.note.content);
-                        }
-                        const transferBtn = document.querySelector('.note[data-note-id="'+ noteId +'"] .transfer-note-btn');
-                        if (transferBtn) {
-                            transferBtn.setAttribute('data-note-content', data.note.content);
-                        }
-                    } else {
-                        showFlashMessage('error', data.message);
-                    }
-                    closeEditModal();
-                })
-                .catch(error => {
-                    console.error('Błąd podczas edytowania notatki:', error);
-                    hideSpinner('edit-spinner');
-                    showFlashMessage('error', 'Wystąpił błąd podczas edytowania notatki.');
+            function updateCompanyToggleButtons() {
+                var companyLists = document.querySelectorAll('.company-list');
+                companyLists.forEach(function(companyList) {
+                    var toggleBtn = companyList.querySelector('.select-deselect-companies-btn');
+                    if (!toggleBtn) return;
+                    var companyCheckboxes = companyList.querySelectorAll('input[type="checkbox"]');
+                    var allChecked = Array.from(companyCheckboxes).every(cb => cb.checked);
+                    toggleBtn.textContent = allChecked ? 'Odznacz Wszystkie' : 'Zaznacz Wszystkie';
                 });
             }
 
-            // --------------------------------
-            //  Walidacja – sprawdzenie, czy
-            //  prefix zaznaczony, gdy firma jest zaznaczona itd.
-            // --------------------------------
-            function validateParentChildSelection() {
-                // Segmenty
-                const segmentCheckboxes = document.querySelectorAll('.segment-item input[type="checkbox"]');
-                for (const segment of segmentCheckboxes) {
-                    const segmentIndex = segment.id.split('-')[1];
-                    const emailList = document.getElementById(\`emails-\${segmentIndex}\`);
-                    if (emailList) {
-                        const childEmails = emailList.querySelectorAll('input[type="checkbox"]:checked');
-                        if (childEmails.length > 0 && !segment.checked) {
-                            showFlashMessage('error', 'Zaznacz etykiety (segmenty)!');
-                            return false;
-                        }
-                    }
-                }
-                // Możliwości (prefix -> subitems)
-                const prefixCheckboxes = document.querySelectorAll('.prefix-item input[type="checkbox"]');
-                for (const prefixCb of prefixCheckboxes) {
-                    const prefixIndex = prefixCb.id.split('-')[1];
-                    const subitemsList = document.getElementById(\`subitems-\${prefixIndex}\`);
-                    if (subitemsList) {
-                        const subitemCheckboxes = subitemsList.querySelectorAll('.subitem-item input[type="checkbox"]:checked');
-                        if (subitemCheckboxes.length > 0 && !prefixCb.checked) {
-                            showFlashMessage('error', 'Zaznacz etykiety (prefixy możliwości)!');
-                            return false;
-                        }
-                    }
-                }
-                // Potencjalni klienci
-                const groupCheckboxes = document.querySelectorAll('.potential-client-group input[type="checkbox"]');
-                for (const group of groupCheckboxes) {
-                    const groupIndex = group.id.split('-')[2];
-                    const clientsList = document.getElementById(\`clients-\${groupIndex}\`);
-                    if (clientsList) {
-                        const childClients = clientsList.querySelectorAll('input[type="checkbox"]:checked');
-                        if (childClients.length > 0 && !group.checked) {
-                            showFlashMessage('error', 'Zaznacz etykiety (potencjalni klienci)!');
-                            return false;
-                        }
-                    }
-                }
-                return true;
-            }
-
-            // ---------------------------
-            //  Document: DOMContentLoaded
-            // ---------------------------
+            // --- CKEditor + Załączniki ---
             document.addEventListener('DOMContentLoaded', function() {
                 // Inicjalizacja CKEditor
                 ClassicEditor
@@ -3532,7 +3316,7 @@ def index():
                             const data = editor.getData();
                             document.querySelector('#message').value = data;
 
-                            // Sprawdzamy, czy treść nie jest pusta
+                            // Walidacja pustej treści
                             const tempElement = document.createElement('div');
                             tempElement.innerHTML = data;
                             const textContent = tempElement.textContent || tempElement.innerText || '';
@@ -3541,23 +3325,27 @@ def index():
                                 editor.editing.view.focus();
                                 return;
                             }
+
+                            // Walidacja parent-child checkbox (czy prefixy zaznaczone)
                             if (!validateParentChildSelection()) {
                                 return;
                             }
+
                             showSpinner('spinner');
                             const formData = new FormData(form);
 
-                            // Zbieramy e-maile
+                            // Zbieranie emaili
                             const emailCheckboxes = document.querySelectorAll('input[name="include_emails"]:checked, input[name="include_potential_emails"]:checked');
                             const emails = Array.from(emailCheckboxes).map(cb => cb.value);
 
-                            // Zbieramy userów
+                            // Zbieranie userów (z notatek)
                             const selectedUserEmails = Array.from(document.querySelectorAll('input[name="selected_users"]'))
                                 .map(input => input.value);
 
                             const allRecipients = emails.concat(selectedUserEmails);
                             formData.set('recipients', allRecipients.join(','));
 
+                            // Dodanie plików (Dropzone)
                             selectedFiles.forEach((file) => {
                                 formData.append('attachments', file);
                             });
@@ -3593,7 +3381,7 @@ def index():
                         console.error('Błąd inicjalizacji CKEditor:', error);
                     });
 
-                // Kliknięcia w etykiety segmentów, prefixów, grup klientów (rozwiń/zwiń)
+                // Rozwijanie sub-list: segmenty, prefixy, klienci
                 document.querySelectorAll('.segment-label').forEach(function(label) {
                     label.addEventListener('click', function(event) {
                         var index = this.getAttribute('data-index');
@@ -3623,8 +3411,6 @@ def index():
                         const noteContent = event.target.getAttribute('data-note-content');
                         openEditModal(noteId, noteContent);
                     }
-                });
-                document.addEventListener('click', function(event) {
                     if (event.target && event.target.classList.contains('transfer-note-btn')) {
                         const noteContent = event.target.getAttribute('data-note-content');
                         transferToMessageField(noteContent);
@@ -3668,7 +3454,7 @@ def index():
                     });
                 });
 
-                // Obsługa załączników
+                // Drag&Drop Załączniki
                 const attachmentsInput = document.getElementById('attachments');
                 const dropzone = document.getElementById('dropzone');
                 const attachmentsPreview = document.getElementById('attachments-preview');
@@ -3688,14 +3474,14 @@ def index():
                     e.preventDefault();
                     e.stopPropagation();
                 }
-                ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                ['dragenter','dragover','dragleave','drop'].forEach(eventName => {
                     dropzone.addEventListener(eventName, preventDefaults, false);
                     document.body.addEventListener(eventName, preventDefaults, false);
                 });
-                ['dragenter', 'dragover'].forEach(eventName => {
+                ['dragenter','dragover'].forEach(eventName => {
                     dropzone.addEventListener(eventName, () => dropzone.classList.add('dragover'), false);
                 });
-                ['dragleave', 'drop'].forEach(eventName => {
+                ['dragleave','drop'].forEach(eventName => {
                     dropzone.addEventListener(eventName, () => dropzone.classList.remove('dragover'), false);
                 });
                 dropzone.addEventListener('drop', (e) => {
@@ -3724,9 +3510,11 @@ def index():
                     selectedFiles.forEach((file, index) => {
                         const item = document.createElement('div');
                         item.classList.add('attachment-item');
+
                         const span = document.createElement('span');
                         span.textContent = file.name;
                         item.appendChild(span);
+
                         const removeButton = document.createElement('button');
                         removeButton.innerHTML = '&times;';
                         removeButton.addEventListener('click', () => {
@@ -3734,12 +3522,13 @@ def index():
                             updatePreview();
                         });
                         item.appendChild(removeButton);
+
                         attachmentsPreview.appendChild(item);
                     });
-                    attachmentsCount.textContent = \`Załączników: \${selectedFiles.length}/\${maxAttachments}\`;
+                    attachmentsCount.textContent = "Załączników: " + selectedFiles.length + "/" + maxAttachments;
                 }
 
-                // Usuwanie notatki
+                // Usuwanie notatek
                 document.addEventListener('submit', function(event) {
                     if (event.target && event.target.classList.contains('delete-note-form')) {
                         event.preventDefault();
@@ -3771,7 +3560,6 @@ def index():
                             showFlashMessage('error', 'Wystąpił błąd podczas usuwania notatki.');
                         });
                     }
-                    // Usuwanie wszystkich notatek
                     if (event.target && event.target.id === 'delete-all-notes-form') {
                         event.preventDefault();
                         const spinnerId = 'delete-all-spinner';
@@ -3801,7 +3589,6 @@ def index():
                             showFlashMessage('error', 'Wystąpił błąd podczas usuwania notatek.');
                         });
                     }
-                    // Edycja notatki (modal)
                     if (event.target && event.target.id === 'edit-note-form') {
                         event.preventDefault();
                         const form = event.target;
@@ -3817,6 +3604,47 @@ def index():
 
                 attachUserNameClickListeners();
             });
+
+            function validateParentChildSelection() {
+                // Sprawdzenie, czy prefixy zaznaczone, gdy firma jest zaznaczona
+                const segmentCheckboxes = document.querySelectorAll('.segment-item input[type="checkbox"]');
+                for (const segment of segmentCheckboxes) {
+                    const segmentIndex = segment.id.split('-')[1];
+                    const emailList = document.getElementById('emails-' + segmentIndex);
+                    if (emailList) {
+                        const childEmails = emailList.querySelectorAll('input[type="checkbox"]:checked');
+                        if (childEmails.length > 0 && !segment.checked) {
+                            showFlashMessage('error', 'Zaznacz etykiety (segmenty)!');
+                            return false;
+                        }
+                    }
+                }
+                const prefixCheckboxes = document.querySelectorAll('.prefix-item input[type="checkbox"]');
+                for (const prefixCb of prefixCheckboxes) {
+                    const prefixIndex = prefixCb.id.split('-')[1];
+                    const subitemsList = document.getElementById('subitems-' + prefixIndex);
+                    if (subitemsList) {
+                        const subitemCheckboxes = subitemsList.querySelectorAll('.subitem-item input[type="checkbox"]:checked');
+                        if (subitemCheckboxes.length > 0 && !prefixCb.checked) {
+                            showFlashMessage('error', 'Zaznacz etykiety (prefixy możliwości)!');
+                            return false;
+                        }
+                    }
+                }
+                const groupCheckboxes = document.querySelectorAll('.potential-client-group input[type="checkbox"]');
+                for (const group of groupCheckboxes) {
+                    const groupIndex = group.id.split('-')[2];
+                    const clientsList = document.getElementById('clients-' + groupIndex);
+                    if (clientsList) {
+                        const childClients = clientsList.querySelectorAll('input[type="checkbox"]:checked');
+                        if (childClients.length > 0 && !group.checked) {
+                            showFlashMessage('error', 'Zaznacz etykiety (potencjalni klienci)!');
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            }
         </script>
     </head>
     <body>
@@ -3835,13 +3663,12 @@ def index():
             </div>
         </header>
 
-        <!-- Formularz główny -->
+        <!-- Formularz główny (wysyłanie wiadomości) -->
         <form id="main-form" class="main-form" enctype="multipart/form-data">
             <div class="content-wrapper">
                 <!-- Panel boczny -->
                 <div class="sidebar">
                     <div class="toggle-buttons-container">
-                        <!-- Przyciski toggle -->
                         <button type="button" class="toggle-segments-btn" onclick="toggleSegmentsList(this)">
                             <img src="{{ url_for('static', filename='hammer.png') }}" alt="Toggle Segments">
                         </button>
@@ -3853,7 +3680,7 @@ def index():
                         </button>
                     </div>
 
-                    <!-- Kontener segmentów -->
+                    <!-- Segmenty -->
                     <div id="segments-container" class="segments-container">
                         <button type="button" id="select-all-segments-btn" class="yellow-btn" onclick="toggleSelectAllSegments(this)">
                             Zaznacz wszystkie segmenty
@@ -3868,11 +3695,14 @@ def index():
                                     <input type="checkbox" name="segments" value="{{ segment }}" id="segment-{{ segment_index }}" onchange="handleSegmentChange(this)">
                                     <span class="segment-label" data-index="{{ segment_index }}">
                                         {{ highlight_triple_brackets(segment)|safe }}
-                                        <span class="segment-count">(Polski: {{ counts['Polski'] }}, Zagraniczny: {{ counts['Zagraniczny'] }})</span>
+                                        <span class="segment-count">
+                                            (Polski: {{ counts['Polski'] }}, Zagraniczny: {{ counts['Zagraniczny'] }})
+                                        </span>
                                     </span>
                                 </li>
                                 <ul class="email-list" id="emails-{{ segment_index }}">
-                                    <button type="button" class="yellow-btn select-deselect-emails-btn" onclick="toggleSelectAllEmailsInSegment('emails-{{ segment_index }}')">
+                                    <button type="button" class="yellow-btn select-deselect-emails-btn"
+                                            onclick="toggleSelectAllEmailsInSegment('emails-{{ segment_index }}')">
                                         Zaznacz Wszystkie
                                     </button>
                                     {% set emails_companies_polski = get_email_company_pairs_for_segment(data, segment, "Polski") %}
@@ -3880,13 +3710,17 @@ def index():
                                     {% for pair in emails_companies_polski %}
                                         <li class="email-item">
                                             <input type="checkbox" name="include_emails" value="{{ pair.email }}" id="email-{{ segment_index }}-polski-{{ loop.index }}">
-                                            <label for="email-{{ segment_index }}-polski-{{ loop.index }}">{{ pair.company }} (Polski)</label>
+                                            <label for="email-{{ segment_index }}-polski-{{ loop.index }}">
+                                                {{ pair.company }} (Polski)
+                                            </label>
                                         </li>
                                     {% endfor %}
                                     {% for pair in emails_companies_zagraniczny %}
                                         <li class="email-item">
                                             <input type="checkbox" name="include_emails" value="{{ pair.email }}" id="email-{{ segment_index }}-zagraniczny-{{ loop.index }}">
-                                            <label for="email-{{ segment_index }}-zagraniczny-{{ loop.index }}">{{ pair.company }} (Zagraniczny)</label>
+                                            <label for="email-{{ segment_index }}-zagraniczny-{{ loop.index }}">
+                                                {{ pair.company }} (Zagraniczny)
+                                            </label>
                                         </li>
                                     {% endfor %}
                                 </ul>
@@ -3894,7 +3728,7 @@ def index():
                         </ul>
                     </div>
 
-                    <!-- Kontener możliwości (prefix->subitems->firmy) -->
+                    <!-- Możliwości (prefix->subitems->firmy) -->
                     <div id="possibilities-container" class="possibilities-container">
                         <button type="button" id="select-all-possibilities-btn" class="yellow-btn" onclick="toggleSelectAllPossibilities(this)">
                             Zaznacz wszystkie możliwości
@@ -3918,8 +3752,7 @@ def index():
                                         </span>
                                     </span>
                                     <ul class="subitem-list" id="subitems-{{ prefix_index }}">
-                                        <button type="button"
-                                                class="yellow-btn select-deselect-subitems-btn"
+                                        <button type="button" class="yellow-btn select-deselect-subitems-btn"
                                                 onclick="toggleSelectAllSubitemsInPrefix('subitems-{{ prefix_index }}')">
                                             Zaznacz Wszystkie
                                         </button>
@@ -3938,8 +3771,7 @@ def index():
                                                     </span>
                                                 </span>
                                                 <ul class="company-list" id="companies-{{ prefix_index }}-{{ subitem_index }}">
-                                                    <button type="button"
-                                                            class="yellow-btn select-deselect-companies-btn"
+                                                    <button type="button" class="yellow-btn select-deselect-companies-btn"
                                                             onclick="toggleSelectAllCompaniesInSubitem('companies-{{ prefix_index }}-{{ subitem_index }}')">
                                                         Zaznacz Wszystkie
                                                     </button>
@@ -3963,9 +3795,10 @@ def index():
                         </ul>
                     </div>
 
-                    <!-- Kontener potencjalnych klientów -->
+                    <!-- Potencjalni klienci -->
                     <div id="potential-clients-container" class="potential-clients-container">
-                        <button type="button" class="yellow-btn select-deselect-potential-clients-btn" onclick="toggleSelectAllPotentialClients(this)">
+                        <button type="button" class="yellow-btn select-deselect-potential-clients-btn"
+                                onclick="toggleSelectAllPotentialClients(this)">
                             Zaznacz wszystkich klientów
                         </button>
                         <button type="button" class="yellow-btn" onclick="toggleAllPotentialClientsExpandCollapse(this)">
@@ -3975,7 +3808,9 @@ def index():
                             {% for group, clients in potential_clients.items() %}
                                 {% set group_index = loop.index %}
                                 <li class="potential-client-group">
-                                    <input type="checkbox" name="potential_clients" value="{{ group }}" id="potential-group-{{ group_index }}" onchange="handlePotentialClientGroupChange(this)">
+                                    <input type="checkbox" name="potential_clients" value="{{ group }}"
+                                           id="potential-group-{{ group_index }}"
+                                           onchange="handlePotentialClientGroupChange(this)">
                                     <span class="potential-client-group-label" data-index="{{ group_index }}">
                                         {{ highlight_triple_brackets(group)|safe }}
                                     </span>
@@ -3983,7 +3818,9 @@ def index():
                                 <ul class="clients-list" id="clients-{{ group_index }}">
                                     {% for client in clients %}
                                         <li class="client-item">
-                                            <input type="checkbox" name="include_potential_emails" value="{{ client.email }}" id="client-{{ group_index }}-{{ loop.index }}">
+                                            <input type="checkbox" name="include_potential_emails"
+                                                   value="{{ client.email }}"
+                                                   id="client-{{ group_index }}-{{ loop.index }}">
                                             <label for="client-{{ group_index }}-{{ loop.index }}">
                                                 {{ client.company }} ({{ client.language }})
                                             </label>
@@ -3995,7 +3832,7 @@ def index():
                     </div>
                 </div>
 
-                <!-- Główna treść strony -->
+                <!-- Główna treść (CKEditor, załączniki, wysyłka) -->
                 <div class="main-content">
                     <div class="form-container">
                         <h1>e-Communicator</h1>
@@ -4017,7 +3854,9 @@ def index():
                             Przeciągnij i upuść pliki tutaj lub kliknij, aby wybrać.
                         </div>
                         <div id="attachments-preview" class="attachments-preview"></div>
-                        <div id="attachments-count" class="attachments-count">Załączników: 0/{{ max_attachments }}</div>
+                        <div id="attachments-count" class="attachments-count">
+                            Załączników: 0/{{ max_attachments }}
+                        </div>
 
                         <label for="language">Wybierz język:</label>
                         <select id="language" name="language" required>
@@ -4026,12 +3865,12 @@ def index():
                             <option value="Zagraniczny">Zagraniczny</option>
                         </select>
 
-                        <div class="button-container" style="display: flex; align-items: flex-start; flex-wrap: wrap; margin-top: 20px;">
+                        <div class="button-container">
                             <button type="submit" id="send-button">Wyślij</button>
-                            <div id="selected-segments" style="display: flex; gap: 5px; flex-wrap: wrap;"></div>
-                            <div id="selected-possibilities" style="display: flex; gap: 5px; flex-wrap: wrap;"></div>
-                            <div id="selected-potential-clients" style="display: flex; gap: 5px; flex-wrap: wrap; margin-left: 10px;"></div>
-                            <div id="selected-users" style="display: flex; gap: 5px; flex-wrap: wrap;"></div>
+                            <div id="selected-segments"></div>
+                            <div id="selected-possibilities"></div>
+                            <div id="selected-potential-clients" style="margin-left: 10px;"></div>
+                            <div id="selected-users"></div>
                             <div class="spinner" id="spinner" style="display: none;"></div>
                         </div>
                     </div>
@@ -4039,7 +3878,7 @@ def index():
             </div>
         </form>
 
-        <!-- Sekcja notatek + modale -->
+        <!-- Sekcja notatek (+ modale) -->
         <div class="note-section">
             <h3>Notatki</h3>
             <form id="add-note-form">
@@ -4050,23 +3889,38 @@ def index():
             <ul>
                 {% for note in notes %}
                     <li class="note" data-note-id="{{ note.id }}">
-                        <div class="note-content">{{ note.content }}</div>
+                        <!-- Div z escapowanym HTML -->
+                        <div class="note-content">{{ note.content|e }}</div>
+
                         <div class="note-footer">
                             <div class="note-actions">
-                                <button type="button" class="transfer-note-btn" data-note-content="{{ note.content|e }}">Transfer</button>
-                                <button type="button" class="edit-btn" data-note-id="{{ note.id }}" data-note-content="{{ note.content|e }}">Edytuj</button>
+                                <!-- data-note-content z escapejs -->
+                                <button type="button"
+                                        class="transfer-note-btn"
+                                        data-note-content="{{ note.content|escapejs }}">
+                                    Transfer
+                                </button>
+                                <button type="button"
+                                        class="edit-btn"
+                                        data-note-id="{{ note.id }}"
+                                        data-note-content="{{ note.content|escapejs }}">
+                                    Edytuj
+                                </button>
                                 <form class="delete-note-form" data-note-id="{{ note.id }}">
                                     <button type="submit" class="delete-btn">Usuń</button>
                                     <div class="spinner" id="note-spinner-{{ note.id }}" style="display: none;"></div>
                                 </form>
                             </div>
-                            <span class="user-name" style="background-color: {{ note.user.color }};" data-email="{{ note.user.email }}">
+                            <span class="user-name"
+                                  style="background-color: {{ note.user.color }};"
+                                  data-email="{{ note.user.email }}">
                                 {{ note.user.first_name }} {{ note.user.last_name }}
                             </span>
                         </div>
                     </li>
                 {% endfor %}
             </ul>
+
             {% if notes %}
                 <form class="delete-all-notes-form" id="delete-all-notes-form">
                     <button type="submit">Usuń wszystkie notatki</button>
@@ -4109,7 +3963,6 @@ def index():
         max_attachments=app.config['MAX_ATTACHMENTS'],
         highlight_triple_brackets=highlight_triple_brackets
     )
-
 
 
 

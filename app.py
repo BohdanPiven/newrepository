@@ -2271,13 +2271,13 @@ def index():
             .segment-count,
             .subitem-count,
             .company-count {
-                color: #ffffff; /* złoty */
+                color: #ffffff; /* biały dla całego bloku */
                 margin-left: 5px;
             }
             .segment-count .group-label,
             .subitem-count .group-label,
             .company-count .group-label {
-                color: #ffffff;
+                color: #FFD700 !important;
             }
             .count-number {
                 color: #FFD700;  /* złote liczby */
@@ -3915,8 +3915,12 @@ def index():
                                     <span class="segment-label" data-index="{{ segment_index }}">
                                         {{ highlight_triple_brackets(segment)|safe }}
                                         <span class="segment-count">
-                                          (<span class="group-label">Polski: </span><span class="count-number">{{ counts['Polski'] }}</span>,
-                                          <span class="group-label">Zagraniczny: </span><span class="count-number">{{ counts['Zagraniczny'] }}</span>)
+                                          (
+                                            <span class="group-label">Polski:</span>
+                                            <span class="count-number">{{ counts['Polski'] }}</span>,
+                                            <span class="group-label">Zagraniczny:</span>
+                                            <span class="count-number">{{ counts['Zagraniczny'] }}</span>
+                                          )
                                         </span>
                                 </li>
                                 <ul class="email-list" id="emails-{{ segment_index }}">

@@ -2268,7 +2268,15 @@ def index():
                 align-items: center;
                 padding: 0 20px;
             }
-            .group-label {
+            .segment-count,
+            .subitem-count,
+            .company-count {
+                color: #FFD700; /* złoty */
+                margin-left: 5px;
+            }
+            .segment-count .group-label,
+            .subitem-count .group-label,
+            .company-count .group-label {
                 color: #ffffff;
             }
             .count-number {

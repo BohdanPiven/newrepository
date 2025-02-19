@@ -2268,6 +2268,12 @@ def index():
                 align-items: center;
                 padding: 0 20px;
             }
+            .segment-count,
+            .subitem-count,
+            .company-count {
+                color: #FFD700; /* złoty */
+                margin-left: 5px;
+            }
             .header-left {
                 display: flex;
                 align-items: center;

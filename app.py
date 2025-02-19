@@ -2642,6 +2642,12 @@ def index():
             .company-list.show {
                 display: block;
             }
+            .subitem-list {
+                display: none;
+            }
+            .subitem-list.show {
+                display: block;
+            }
             .toggle-buttons-container {
                 display: flex;
                 gap: 10px;

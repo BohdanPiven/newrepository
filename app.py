@@ -399,48 +399,121 @@ def get_email_company_pairs_for_segment(data, segment, subsegment):
                 pairs.append({'email': email, 'company': company})
     return pairs
 
+def extract_prefix(possibility_str):
+    """
+    Rozdziela przekazany ciąg possibility_str na:
+      - prefix: tekst przed pierwszym [[[ ... ]]] (bez zbędnych spacji)
+      - full_str: oryginalny ciąg possibility_str
+
+    Jeśli possibility_str nie zawiera [[[ ... ]]], prefix = possibility_str (całość).
+    """
+    brackets_regex = re.compile(r'^(.*?)\s*\[\[\[(.*)\]\]\](.*)$')
+    match = brackets_regex.match(possibility_str)
+    if match:
+        prefix = match.group(1).strip()
+        return prefix, possibility_str
+    else:
+        return possibility_str.strip(), possibility_str
+
+
 def get_unique_possibilities_with_counts(data):
     """
-    Zwraca słownik możliwości z podziałem na 'Polski' i 'Zagraniczny' oraz listą firm.
-    {
-        "Możliwość": {
-            "Polski": 0,
-            "Zagraniczny": 0,
-            "entries": [
-                {"email": ..., "company": ..., "subsegment": ...},
+    Tworzy 2-poziomową strukturę słownika:
+
+      {
+        prefix: {
+            "Polski": liczba wystąpień,
+            "Zagraniczny": liczba wystąpień,
+            "subitems": {
+                full_string: {
+                    "Polski": liczba wystąpień,
+                    "Zagraniczny": liczba wystąpień,
+                    "entries": [
+                        {
+                            'email': ...,
+                            'company': ...,
+                            'subsegment': ...
+                        },
+                        ...
+                    ]
+                },
                 ...
-            ]
+            }
         },
         ...
-    }
+      }
+
+    Przykład:
+      {
+        "FCL Road": {
+          "Polski": 3,
+          "Zagraniczny": 5,
+          "subitems": {
+            "FCL Road [[[ West Europe Premium ]]]": {
+               "Polski": 2,
+               "Zagraniczny": 1,
+               "entries": [...],
+            },
+            "FCL Road [[[ Gdańsk - all PL ]]]": {
+               "Polski": 1,
+               "Zagraniczny": 3,
+               "entries": [...],
+            }
+          }
+        },
+        ...
+      }
     """
+
     possibilities = {}
 
     for row in data:
-        # Przykładowo subsegment (Polski/Zagraniczny) może być w kolumnie 23:
+        # subsegment -> "Polski" / "Zagraniczny"
         subsegment = row[23].strip() if len(row) > 23 and row[23] else ""
         email = row[17].strip() if len(row) > 17 else ""
         company = row[20].strip() if len(row) > 20 else "Nieznana Firma"
 
-        # Iteracja przez kolumny 25..33 (Z..AH)
+        # Kolumny 25..33 = możliwości
         for i in range(25, 34):
-            possibility = row[i].strip() if len(row) > i and row[i] else ''
-            if possibility:
-                if possibility not in possibilities:
-                    possibilities[possibility] = {
+            raw_possibility = row[i].strip() if len(row) > i and row[i] else ''
+            if raw_possibility:
+                # Wyodrębnij prefix + pełen napis
+                prefix, full_str = extract_prefix(raw_possibility)
+
+                # ---------------------------
+                # 1. Dodaj prefix do słownika
+                # ---------------------------
+                if prefix not in possibilities:
+                    possibilities[prefix] = {
+                        'Polski': 0,
+                        'Zagraniczny': 0,
+                        'subitems': {}
+                    }
+
+                # Zwiększ globalny licznik (prefix)
+                if subsegment == "Polski":
+                    possibilities[prefix]['Polski'] += 1
+                elif subsegment == "Zagraniczny":
+                    possibilities[prefix]['Zagraniczny'] += 1
+
+                # ---------------------------
+                # 2. Dodaj subitem (full_str) do prefixu
+                # ---------------------------
+                if full_str not in possibilities[prefix]['subitems']:
+                    possibilities[prefix]['subitems'][full_str] = {
                         'Polski': 0,
                         'Zagraniczny': 0,
                         'entries': []
                     }
 
-                # Zwiększenie licznika
+                # Zwiększ licznik dla subitemu
                 if subsegment == "Polski":
-                    possibilities[possibility]['Polski'] += 1
+                    possibilities[prefix]['subitems'][full_str]['Polski'] += 1
                 elif subsegment == "Zagraniczny":
-                    possibilities[possibility]['Zagraniczny'] += 1
+                    possibilities[prefix]['subitems'][full_str]['Zagraniczny'] += 1
 
-                # Dodanie do entries
-                possibilities[possibility]['entries'].append({
+                # Dodaj do entries
+                possibilities[prefix]['subitems'][full_str]['entries'].append({
                     'email': email,
                     'company': company,
                     'subsegment': subsegment
@@ -2249,8 +2322,8 @@ def index():
                 position: fixed;
                 top: 60px;
                 bottom: 0;
-                left: -800px;
-                width: 800px;
+                left: -700px;
+                width: 700px;
                 background-color: rgba(44, 62, 80, 0.95);
                 box-shadow: 2px 0 5px rgba(0,0,0,0.1);
                 padding: 20px;
@@ -2279,7 +2352,7 @@ def index():
                 z-index: 1;
             }
             .main-content.sidebar-active {
-                margin-left: 800px;
+                margin-left: 700px;
             }
             .form-container {
                 display: flex;

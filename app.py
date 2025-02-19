@@ -2271,7 +2271,7 @@ def index():
             .segment-count,
             .subitem-count,
             .company-count {
-                color: #FFD700; /* złoty */
+                color: #ffffff; /* złoty */
                 margin-left: 5px;
             }
             .segment-count .group-label,

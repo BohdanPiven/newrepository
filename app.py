@@ -3822,6 +3822,30 @@ def index():
                     showFlashMessage('error', 'Wystąpił błąd podczas edytowania notatki.');
                 });
             }
+            function toggleSegmentsList(button) {
+                const segmentsContainer = document.getElementById('segments-container');
+                segmentsContainer.classList.toggle('show');
+                const img = button.querySelector('img');
+                if (img) {
+                    img.classList.toggle('rotate');
+                }
+            }
+            function togglePossibilitiesList(button) {
+                const possibilitiesContainer = document.getElementById('possibilities-container');
+                possibilitiesContainer.classList.toggle('show');
+                const img = button.querySelector('img');
+                if (img) {
+                    img.classList.toggle('rotate');
+                }
+            }
+            function togglePotentialClientsList(button) {
+                const potentialClientsContainer = document.getElementById('potential-clients-container');
+                potentialClientsContainer.classList.toggle('show');
+                const img = button.querySelector('img');
+                if (img) {
+                    img.classList.toggle('rotate');
+                }
+            }    
         </script>
     </head>
     <body>

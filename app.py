@@ -2268,10 +2268,11 @@ def index():
                 align-items: center;
                 padding: 0 20px;
             }
-            .segment-count,
-            .subitem-count,
-            .company-count {
-                color: #FFD700; /* złoty */
+            .group-label {
+                color: #ffffff;
+            }
+            .count-number {
+                color: #FFD700;  /* złote liczby */
                 margin-left: 5px;
             }
             .header-left {
@@ -3905,8 +3906,10 @@ def index():
                                     <input type="checkbox" name="segments" value="{{ segment }}" id="segment-{{ segment_index }}" onchange="handleSegmentChange(this)">
                                     <span class="segment-label" data-index="{{ segment_index }}">
                                         {{ highlight_triple_brackets(segment)|safe }}
-                                        <span class="segment-count">(Polski: {{ counts['Polski'] }}, Zagraniczny: {{ counts['Zagraniczny'] }})</span>
-                                    </span>
+                                        <span class="segment-count">
+                                          (<span class="group-label">Polski: </span><span class="count-number">{{ counts['Polski'] }}</span>,
+                                          <span class="group-label">Zagraniczny: </span><span class="count-number">{{ counts['Zagraniczny'] }}</span>)
+                                        </span>
                                 </li>
                                 <ul class="email-list" id="emails-{{ segment_index }}">
                                     <button type="button" class="yellow-btn select-deselect-emails-btn" onclick="toggleSelectAllEmailsInSegment('emails-{{ segment_index }}')">Zaznacz Wszystkie</button>

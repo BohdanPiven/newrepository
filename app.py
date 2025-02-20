@@ -2623,6 +2623,28 @@ def index():
                 user-select: none;
                 color: #ffffff;
             }
+            .prefix-label,
+            .subitem-label {
+                font-size: 13px; /* identyczny rozmiar co w segmentach */
+                border-bottom: 1px solid rgba(255,255,255,0.2);
+                padding-bottom: 5px;
+                display: flex;
+                justify-content: space-between;   /* “rozsunięcie” nazwy i liczb */
+                align-items: center;
+                cursor: pointer;
+                flex: 1;              /* tak by cały wiersz się rozkładał */
+                user-select: none;
+                color: #ffffff;       /* biały napis */
+            }
+            .prefix-label:hover,
+            .subitem-label:hover {
+                text-decoration: underline;
+            }
+            .company-count,
+            .subitem-count {
+                margin-left: auto;    /* “odsuń” je maksymalnie od nazwy */
+                text-align: right;    /* wyrównaj tekst do prawej */
+            }
             .segment-label:hover,
             .potential-client-group-label:hover {
                 text-decoration: underline;

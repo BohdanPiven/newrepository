@@ -2190,7 +2190,6 @@ def allowed_file(filename):
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    # Przykładowa weryfikacja zalogowania
     if 'user_id' not in session:
         flash('Nie jesteś zalogowany.', 'error')
         return redirect(url_for('login'))
@@ -2226,8 +2225,8 @@ def index():
     # 5. Potencjalni klienci
     potential_clients = get_potential_clients(data)
 
-    # Poniżej pełen szablon HTML
-    index_template = """
+    # Poniżej pełny szablon z poprawkami w sekcji "Możliwości"
+    index_template = '''
     <!DOCTYPE html>
     <html lang="pl">
     <head>
@@ -2269,16 +2268,26 @@ def index():
                 align-items: center;
                 padding: 0 20px;
             }
-
-            /* --------------- Główne zmiany kolorów i layoutu --------------- */
-
-            /* GŁÓWNE ETYKIETY – ciemnoniebieski, lekko neonowy */
-            .segment-label,
-            .prefix-label,
-            .potential-client-group-label {
-                font-size: 15px;
+            .segment-label {
+                font-size: 15px;          /* jeśli chcesz większą czcionkę */
+                font-weight: bold;        /* pogrubienie */
+                color: #FFC107;           /* jaśniejszy kolor (np. Amber) */
+                border-bottom: 1px solid rgba(255,255,255,0.2);
+                padding-bottom: 5px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                cursor: pointer;
+                flex: 1;
+                user-select: none;
+            }
+            .segment-label:hover {
+                text-decoration: underline;
+            }
+            .prefix-label {
+                font-size: 15px;          
                 font-weight: bold;
-                color: #001fff; /* ciemno-niebieski, lekko “jaskrawy” */
+                color: #FFC107;           /* ten sam jasny kolor co segment, żeby było spójnie */
                 border-bottom: 1px solid rgba(255,255,255,0.2);
                 padding-bottom: 5px;
                 display: flex;
@@ -2288,17 +2297,25 @@ def index():
                 flex: 1;
                 user-select: none;
             }
-            .segment-label:hover,
-            .prefix-label:hover,
-            .potential-client-group-label:hover {
-                text-decoration: underline;
             }
-
-            /* Etykiety wewnętrzne – białe */
-            .subitem-label {
-                font-size: 13px;
-                font-weight: normal;
-                color: #ffffff;  
+            .prefix-item,
+            .subitem-item {
+                display: flex;           /* kluczowe! */
+                align-items: center;     /* wyśrodkuj pionowo */
+                margin-bottom: 8px;      /* odstęp między wierszami */
+            }
+            .prefix-item input[type="checkbox"],
+            .subitem-item input[type="checkbox"] {
+                margin-right: 10px;      /* odstęp od etykiety */
+                transform: scale(1.2);   /* powiększenie checkboxa, jak w segmentach */
+                cursor: pointer;
+            }
+            .prefix-label {
+                font-size: 15px;         /* większa czcionka niż standardowe 13px */
+                font-weight: bold;       /* pogrubienie */
+                color: #B8860B;          /* ciemnożółto-brązowy (DarkGoldenRod) */
+    
+                /* możesz zachować styl „flex”, żeby licznik był wyrzucony w prawo */
                 border-bottom: 1px solid rgba(255,255,255,0.2);
                 padding-bottom: 5px;
                 display: flex;
@@ -2308,11 +2325,12 @@ def index():
                 flex: 1;
                 user-select: none;
             }
-            .subitem-label:hover {
-                text-decoration: underline;
+            .segment-count,
+            .subitem-count,
+            .company-count {
+                margin-left: auto;
+                text-align: right;
             }
-
-            /* Polski, Zagraniczny i LICZBY – złote */
             .segment-count .group-label,
             .segment-count .count-number,
             .subitem-count .group-label,
@@ -2321,41 +2339,10 @@ def index():
             .company-count .count-number {
                 color: #FFD700 !important; /* złoty */
             }
-
-            /* Labelki w mailach/firmach – białe, natomiast słowa (Polski)/(Zagraniczny) barwimy w JS */
-            .email-item label,
-            .company-item label,
-            .client-item label {
-                color: #ffffff;
-                cursor: pointer;
+            .count-number {
+                color: #FFD700;  /* złote liczby */
+                margin-left: 5px;
             }
-
-            /* Kontener: checkbox + label obok siebie (flex) */
-            .segment-item,
-            .prefix-item,
-            .subitem-item,
-            .potential-client-group,
-            .email-item,
-            .company-item,
-            .client-item {
-                display: flex;
-                align-items: center;
-                margin-bottom: 8px;
-            }
-            .segment-item input[type="checkbox"],
-            .prefix-item input[type="checkbox"],
-            .subitem-item input[type="checkbox"],
-            .potential-client-group input[type="checkbox"],
-            .email-item input[type="checkbox"],
-            .company-item input[type="checkbox"],
-            .client-item input[type="checkbox"] {
-                margin-right: 10px;
-                transform: scale(1.2);
-                cursor: pointer;
-            }
-
-            /* --------------- Koniec głównych zmian --------------- */
-
             .header-left {
                 display: flex;
                 align-items: center;
@@ -2396,7 +2383,7 @@ def index():
             .top-header .user-info a:hover {
                 color: #FFC107;
             }
-
+            /* Wrapper na zawartość */
             .content-wrapper {
                 display: flex;
                 flex: 1;
@@ -2406,6 +2393,7 @@ def index():
                 position: relative;
                 z-index: 1;
             }
+            /* Sidebar */
             .sidebar {
                 position: fixed;
                 top: 60px;
@@ -2425,6 +2413,7 @@ def index():
             .sidebar.active {
                 left: 0;
             }
+            /* Main Content */
             .main-content {
                 flex: 1;
                 padding: 20px;
@@ -2452,6 +2441,7 @@ def index():
                 margin-bottom: 20px;
                 font-size: 36px;
             }
+            /* Flash Messages */
             .flash-message {
                 background-color: #e9ecef;
                 color: #495057;
@@ -2477,6 +2467,7 @@ def index():
                 background-color: #fff3cd;
                 color: #856404;
             }
+            /* Formularze i elementy */
             label {
                 display: block;
                 margin-top: 10px;
@@ -2658,17 +2649,93 @@ def index():
             .delete-all-notes-form button:active {
                 transform: scale(0.95);
             }
-
-            .segment-list,
-            .possibility-list,
-            .potential-clients-list {
+            .segment-list, .possibility-list, .potential-clients-list {
                 list-style: none;
                 padding-left: 0;
                 margin: 0;
             }
-
-            .email-list,
+            .segment-item, .potential-client-group {
+                display: flex;
+                align-items: center;
+                margin-bottom: 8px;
+            }
+            .segment-item input[type="checkbox"],
+            .potential-client-group input[type="checkbox"] {
+                margin-right: 10px;
+                transform: scale(1.2);
+                cursor: pointer;
+            }
+            .segment-label,
+            .potential-client-group-label {
+                font-size: 13px;
+                border-bottom: 1px solid rgba(255,255,255,0.2);
+                padding-bottom: 5px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                cursor: pointer;
+                flex: 1;
+                user-select: none;
+                color: #ffffff;
+            }
+            .prefix-label:hover {
+                text-decoration: underline;
+            }
+            .subitem-label {
+                font-size: 13px;          
+                font-weight: normal;
+                color: #999999;           /* jasnoszary */
+                border-bottom: 1px solid rgba(255,255,255,0.2);
+                padding-bottom: 5px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                cursor: pointer;
+                flex: 1;
+                user-select: none;
+            }
+            .subitem-label:hover {
+                text-decoration: underline;
+            }
+            .segment-count .group-label,
+            .segment-count .count-number,
+            .subitem-count .group-label,
+            .subitem-count .count-number,
+            .company-count .group-label,
+            .company-count .count-number {
+                color: #FFD700 !important; /* wymuś złoty */
+            }
+            .company-count,
+            .subitem-count {
+                margin-left: auto;    /* “odsuń” je maksymalnie od nazwy */
+                text-align: right;    /* wyrównaj tekst do prawej */
+            }
+            .segment-label:hover,
+            .potential-client-group-label:hover {
+                text-decoration: underline;
+            }
+            .email-item, .company-item, .client-item {
+                display: flex;
+                align-items: center;
+                margin-bottom: 5px;
+            }
+            .email-item input[type="checkbox"],
+            .company-item input[type="checkbox"],
+            .client-item input[type="checkbox"] {
+                margin-right: 10px;
+                transform: scale(1.1);
+                cursor: pointer;
+            }
+            .email-item label,
+            .company-item label,
+            .client-item label {
+                cursor: pointer;
+                color: #ffffff;
+                font-size: 14px;
+                user-select: none;
+            }
             .clients-list,
+            .email-list,
             .company-list {
                 display: none;
                 list-style: none;
@@ -2677,8 +2744,8 @@ def index():
                 max-height: 300px;
                 overflow-y: auto;
             }
-            .email-list.show,
             .clients-list.show,
+            .email-list.show,
             .company-list.show {
                 display: block;
             }
@@ -2968,29 +3035,7 @@ def index():
         </style>
         <!-- CKEditor -->
         <script src="https://cdn.ckeditor.com/ckeditor5/39.0.1/classic/ckeditor.js"></script>
-
-        <!-- Mały trik w JS, by (Polski)/(Zagraniczny) w labelach zyskało złoty kolor -->
         <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const allLabels = document.querySelectorAll('label, .segment-label, .prefix-label, .subitem-label');
-            allLabels.forEach(lb => {
-                const txt = lb.textContent;
-                if (txt.includes('(Polski)')) {
-                    lb.innerHTML = txt.replace('(Polski)', '<span style="color:#FFD700">(Polski)</span>');
-                }
-                if (txt.includes('(Zagraniczny)')) {
-                    lb.innerHTML = lb.innerHTML.replace('(Zagraniczny)', '<span style="color:#FFD700">(Zagraniczny)</span>');
-                }
-            });
-        });
-        </script>
-
-        <script>
-            /* -----------------------------------------
-               Wklej tutaj cały oryginalny kod JS,
-               obsługujący segmenty, możliwości, notatki itp.
-               ------------------------------------------ */
-
             // ------------------
             // WSPÓLNE FUNKCJE JS
             // ------------------
@@ -3110,7 +3155,7 @@ def index():
                     selectedSegmentsDiv.appendChild(segmentSpan);
                 });
 
-                // Potencjalni klienci
+                // Potencjalni Klienci
                 const selectedPotentialClients = Array.from(document.querySelectorAll('.potential-clients-list .client-item input[type="checkbox"]:checked'))
                     .map(cb => {
                         const label = document.querySelector(`label[for="${cb.id}"]`);
@@ -3155,7 +3200,10 @@ def index():
                     selectedPotentialClientsDiv.appendChild(clientSpan);
                 });
 
-                // Możliwości (prefixy)
+                // ---------------------------
+                //  NOWA OBSŁUGA Możliwości
+                // ---------------------------
+                // 1) Zaznaczone prefixy
                 const selectedPossibilityPrefixes = Array.from(document.querySelectorAll('.prefix-item input[type="checkbox"]:checked'))
                     .map(cb => cb.value);
                 const selectedPossibilitiesDiv = document.getElementById('selected-possibilities');
@@ -3176,6 +3224,7 @@ def index():
                             .find(cb => cb.value === toRemove);
                         if (checkbox) {
                             checkbox.checked = false;
+                            // Odznacz subitems + firmy
                             const prefixIndex = checkbox.id.split('-')[1];
                             const subitemList = document.getElementById(`subitems-${prefixIndex}`);
                             if (subitemList) {
@@ -3199,18 +3248,20 @@ def index():
                     selectedPossibilitiesDiv.appendChild(prefixSpan);
                 });
 
-                // Wybrani użytkownicy - jeśli istnieją
+                // 2) Zaznaczone subitems (np. "FCL Road [[[ West Europe Premium ]]]")
+                // Zależnie od potrzeb, możesz też je osobno wizualizować – tutaj uproszczone
+                // (jeśli chcesz, możesz dodać kolejny #selected-subitems i tam wyświetlać).
+
+                // Wybrani użytkownicy
                 const selectedUsersDiv = document.getElementById('selected-users');
-                if (selectedUsersDiv) {
-                    selectedUsersDiv.innerHTML = '';
-                }
+                selectedUsersDiv.innerHTML = '';
 
                 updateSelectAllButtons();
             }
 
-            // ----------------------
-            // SEKCJA SEGMENTÓW
-            // ----------------------
+            // ---------------------
+            // SEKCJA SEGMENTÓW - stare
+            // ---------------------
             function handleSegmentChange(segmentCheckbox) {
                 const segmentIndex = segmentCheckbox.id.split('-')[1];
                 const emailList = document.getElementById(`emails-${segmentIndex}`);
@@ -3309,7 +3360,7 @@ def index():
             }
 
             // --------------------------
-            // SEKCJA MOŻLIWOŚCI (prefix->subitem->firmy)
+            //  NOWA SEKCJA MOŻLIWOŚCI (3 poziomy)
             // --------------------------
             function handlePrefixChange(prefixCheckbox) {
                 const prefixIndex = prefixCheckbox.id.split('-')[1];
@@ -3318,6 +3369,7 @@ def index():
                 const subitemCheckboxes = subitemList.querySelectorAll('.subitem-item input[type="checkbox"]');
                 subitemCheckboxes.forEach((cb) => {
                     cb.checked = prefixCheckbox.checked;
+                    // Zaznaczamy firmy
                     const subParts = cb.id.split('-');
                     const subIndex = subParts[2];
                     const companyList = document.getElementById(`companies-${prefixIndex}-${subIndex}`);
@@ -3334,6 +3386,7 @@ def index():
                 const parts = subitemCheckbox.id.split('-');
                 const prefixIndex = parts[1];
                 const subIndex = parts[2];
+                // Zaznaczanie firm
                 const companyList = document.getElementById(`companies-${prefixIndex}-${subIndex}`);
                 if (companyList) {
                     const companyCheckboxes = companyList.querySelectorAll('.company-item input[type="checkbox"]');
@@ -3341,6 +3394,7 @@ def index():
                         cc.checked = subitemCheckbox.checked;
                     });
                 }
+                // Ewentualnie aktualizujemy prefix, jeśli wszystkie subitemy są zaznaczone
                 const prefixCheckbox = document.getElementById(`prefix-${prefixIndex}`);
                 if (prefixCheckbox && subitemCheckbox.checked) {
                     const subitemList = document.getElementById(`subitems-${prefixIndex}`);
@@ -3354,6 +3408,7 @@ def index():
                 updateSelectedItems();
             }
             function toggleAllPossibilitiesExpandCollapse(button) {
+                // Rozwijamy / zwijamy WSZYSTKIE subitem-lists i company-lists
                 const allSubitemLists = document.querySelectorAll('.subitem-list');
                 const allCompanyLists = document.querySelectorAll('.company-list');
                 const allExpanded = Array.from(allSubitemLists).every(list => list.classList.contains('show'))
@@ -3412,11 +3467,25 @@ def index():
             }
 
             // ---------------------
-            // WALIDACJA PARENT-CHILD (opcjonalna)
+            // WALIDACJA RELACJI PARENT-CHILD (opcjonalna)
             // ---------------------
             function validateParentChildSelection() {
-                // sprawdź np. czy jeśli mail (child) zaznaczony, to segment (parent) też
-                // tu Twój ewentualny kod
+                // 1) Segmenty
+                const segmentCheckboxes = document.querySelectorAll('.segment-item input[type="checkbox"]');
+                for (const segment of segmentCheckboxes) {
+                    const segmentIndex = segment.id.split('-')[1];
+                    const emailList = document.getElementById(`emails-${segmentIndex}`);
+                    if (emailList) {
+                        const childEmails = emailList.querySelectorAll('input[type="checkbox"]:checked');
+                        if (childEmails.length > 0 && !segment.checked) {
+                            showFlashMessage('error', 'Zaznacz etykiety (segmenty)!');
+                            return false;
+                        }
+                    }
+                }
+                // 2) Prefix <-> subitems <-> companies
+                // Analogicznie sprawdzasz, czy jeśli firma jest zaznaczona, to subitem i prefix też
+                // (w zależności od Twoich wymagań).
                 return true;
             }
 
@@ -3470,30 +3539,24 @@ def index():
 
             // ---------------------
             // OBSŁUGA PRZYCISKÓW "ZAZNACZ/ODZNACZ WSZYSTKO"
+            // (aktualizacja etykiet w locie)
             // ---------------------
             function updateSelectAllButtons() {
                 var selectAllSegmentsBtn = document.getElementById('select-all-segments-btn');
                 var segmentCheckboxes = document.querySelectorAll('.segment-item input[type="checkbox"]');
                 var allSegmentsChecked = Array.from(segmentCheckboxes).every(cb => cb.checked);
-                if (selectAllSegmentsBtn) {
-                    selectAllSegmentsBtn.textContent = allSegmentsChecked ? 'Odznacz wszystkie segmenty' : 'Zaznacz wszystkie segmenty';
-                }
+                selectAllSegmentsBtn.textContent = allSegmentsChecked ? 'Odznacz wszystkie segmenty' : 'Zaznacz wszystkie segmenty';
 
                 var selectAllPossibilitiesBtn = document.getElementById('select-all-possibilities-btn');
                 var prefixCheckboxes = document.querySelectorAll('.prefix-item input[type="checkbox"]');
                 var allPrefixesChecked = Array.from(prefixCheckboxes).every(cb => cb.checked);
-                if (selectAllPossibilitiesBtn) {
-                    selectAllPossibilitiesBtn.textContent = allPrefixesChecked ? 'Odznacz wszystkie możliwości' : 'Zaznacz wszystkie możliwości';
-                }
+                selectAllPossibilitiesBtn.textContent = allPrefixesChecked ? 'Odznacz wszystkie możliwości' : 'Zaznacz wszystkie możliwości';
 
                 var selectAllPotentialClientsBtn = document.querySelector('.select-deselect-potential-clients-btn');
                 var groupCheckboxes = document.querySelectorAll('.potential-client-group input[type="checkbox"]');
                 var clientCheckboxes = document.querySelectorAll('.potential-clients-list .client-item input[type="checkbox"]');
-                if (selectAllPotentialClientsBtn) {
-                    var allPotentialClientsChecked = Array.from(groupCheckboxes).every(cb => cb.checked) &&
-                                                      Array.from(clientCheckboxes).every(cb => cb.checked);
-                    selectAllPotentialClientsBtn.textContent = allPotentialClientsChecked ? 'Odznacz wszystkich klientów' : 'Zaznacz wszystkich klientów';
-                }
+                var allPotentialClientsChecked = Array.from(groupCheckboxes).every(cb => cb.checked) && Array.from(clientCheckboxes).every(cb => cb.checked);
+                selectAllPotentialClientsBtn.textContent = allPotentialClientsChecked ? 'Odznacz wszystkich klientów' : 'Zaznacz wszystkich klientów';
 
                 updateEmailToggleButtons();
                 updateCompanyToggleButtons();
@@ -3555,11 +3618,9 @@ def index():
                                 .map(input => input.value);
                             const allRecipients = emails.concat(selectedUserEmails);
                             formData.set('recipients', allRecipients.join(','));
-
                             selectedFiles.forEach((file) => {
                                 formData.append('attachments', file);
                             });
-
                             fetch('{{ url_for("send_message_ajax") }}', {
                                 method: 'POST',
                                 body: formData,
@@ -3591,7 +3652,7 @@ def index():
                         console.error('Błąd inicjalizacji CKEditor:', error);
                     });
 
-                // Klikanie w segmenty
+                // Obsługa klikania w segmenty
                 document.querySelectorAll('.segment-label').forEach(function(label) {
                     label.addEventListener('click', function(event) {
                         var index = this.getAttribute('data-index');
@@ -3599,7 +3660,7 @@ def index():
                         event.stopPropagation();
                     });
                 });
-                // Klikanie w possibility prefix
+                // Obsługa klikania w possibility prefix
                 document.querySelectorAll('.prefix-label').forEach(function(label) {
                     label.addEventListener('click', function(event) {
                         var prefixIndex = this.getAttribute('data-index');
@@ -3607,16 +3668,17 @@ def index():
                         event.stopPropagation();
                     });
                 });
-                // Klikanie w subitem
+                // Obsługa klikania w subitem
                 document.querySelectorAll('.subitem-label').forEach(function(label) {
                     label.addEventListener('click', function(event) {
                         var comboIndex = this.getAttribute('data-index');
+                        // data-index="prefixIndex-subIndex"
                         var parts = comboIndex.split('-');
                         toggleSubitemList(parts[0], parts[1]);
                         event.stopPropagation();
                     });
                 });
-                // Klikanie w grupy potencjalnych klientów
+                // Obsługa klikania w grupy potencjalnych klientów
                 document.querySelectorAll('.potential-client-group-label').forEach(function(label) {
                     label.addEventListener('click', function(event) {
                         var index = this.getAttribute('data-index');
@@ -3638,7 +3700,7 @@ def index():
                     }
                 });
 
-                // Dodawanie notatki
+                // Obsługa dodawania notatki
                 const addNoteForm = document.getElementById('add-note-form');
                 addNoteForm.addEventListener('submit', function(event) {
                     event.preventDefault();
@@ -3739,7 +3801,7 @@ def index():
                         item.appendChild(removeButton);
                         attachmentsPreview.appendChild(item);
                     });
-                    attachmentsCount.textContent = \`Załączników: \${selectedFiles.length}/\${maxAttachments}\`;
+                    attachmentsCount.textContent = `Załączników: ${selectedFiles.length}/${maxAttachments}`;
                 }
 
                 // Obsługa edycji notatki
@@ -3812,6 +3874,7 @@ def index():
                 attachUserNameClickListeners();
             });
 
+            // FUNKCJA EDYCJI NOTATKI (AJAX)
             function openEditModal(noteId, currentContent) {
                 const modal = document.getElementById('editModal');
                 const editForm = document.getElementById('edit-note-form');
@@ -3872,8 +3935,6 @@ def index():
                     showFlashMessage('error', 'Wystąpił błąd podczas edytowania notatki.');
                 });
             }
-
-            // Przycisk do rozwijania/zamykania sekcji
             function toggleSegmentsList(button) {
                 const segmentsContainer = document.getElementById('segments-container');
                 segmentsContainer.classList.toggle('show');
@@ -3897,7 +3958,7 @@ def index():
                 if (img) {
                     img.classList.toggle('rotate');
                 }
-            }
+            }    
         </script>
     </head>
     <body>
@@ -3909,8 +3970,8 @@ def index():
             </div>
             <div class="header-right">
                 <div class="user-info">
-                    <span>Witaj, {{ user.username }}!</span>
-                    <a href="{{ url_for('logout') }}">Wyloguj się</a> |
+                    <span>Witaj, {{ user.username }}!</span> 
+                    <a href="{{ url_for('logout') }}">Wyloguj się</a> | 
                     <a href="{{ url_for('settings') }}">Ustawienia konta</a>
                 </div>
             </div>
@@ -3936,12 +3997,8 @@ def index():
 
                     <!-- SEGMENTY -->
                     <div id="segments-container" class="segments-container">
-                        <button type="button" id="select-all-segments-btn" class="yellow-btn" onclick="toggleSelectAllSegments(this)">
-                            Zaznacz wszystkie segmenty
-                        </button>
-                        <button type="button" class="yellow-btn" onclick="toggleAllSegmentsExpandCollapse(this)">
-                            Rozwiń wszystkie segmenty
-                        </button>
+                        <button type="button" id="select-all-segments-btn" class="yellow-btn" onclick="toggleSelectAllSegments(this)">Zaznacz wszystkie segmenty</button>
+                        <button type="button" class="yellow-btn" onclick="toggleAllSegmentsExpandCollapse(this)">Rozwiń wszystkie segmenty</button>
                         <ul class="segment-list">
                             {% for segment, counts in segments %}
                                 {% set segment_index = loop.index %}
@@ -3957,28 +4014,21 @@ def index():
                                             <span class="count-number">{{ counts['Zagraniczny'] }}</span>
                                           )
                                         </span>
-                                    </span>
                                 </li>
                                 <ul class="email-list" id="emails-{{ segment_index }}">
-                                    <button type="button" class="yellow-btn select-deselect-emails-btn" onclick="toggleSelectAllEmailsInSegment('emails-{{ segment_index }}')">
-                                        Zaznacz Wszystkie
-                                    </button>
+                                    <button type="button" class="yellow-btn select-deselect-emails-btn" onclick="toggleSelectAllEmailsInSegment('emails-{{ segment_index }}')">Zaznacz Wszystkie</button>
                                     {% set emails_companies_polski = get_email_company_pairs_for_segment(data, segment, "Polski") %}
                                     {% set emails_companies_zagraniczny = get_email_company_pairs_for_segment(data, segment, "Zagraniczny") %}
                                     {% for pair in emails_companies_polski %}
                                         <li class="email-item">
                                             <input type="checkbox" name="include_emails" value="{{ pair.email }}" id="email-{{ segment_index }}-polski-{{ loop.index }}">
-                                            <label for="email-{{ segment_index }}-polski-{{ loop.index }}">
-                                                {{ pair.company }} (Polski)
-                                            </label>
+                                            <label for="email-{{ segment_index }}-polski-{{ loop.index }}">{{ pair.company }} (Polski)</label>
                                         </li>
                                     {% endfor %}
                                     {% for pair in emails_companies_zagraniczny %}
                                         <li class="email-item">
                                             <input type="checkbox" name="include_emails" value="{{ pair.email }}" id="email-{{ segment_index }}-zagraniczny-{{ loop.index }}">
-                                            <label for="email-{{ segment_index }}-zagraniczny-{{ loop.index }}">
-                                                {{ pair.company }} (Zagraniczny)
-                                            </label>
+                                            <label for="email-{{ segment_index }}-zagraniczny-{{ loop.index }}">{{ pair.company }} (Zagraniczny)</label>
                                         </li>
                                     {% endfor %}
                                 </ul>
@@ -3986,7 +4036,7 @@ def index():
                         </ul>
                     </div>
 
-                    <!-- MOŻLIWOŚCI -->
+                    <!-- NOWA SEKCJA MOŻLIWOŚCI -->
                     <div id="possibilities-container" class="possibilities-container">
                         <button type="button" id="select-all-possibilities-btn" class="yellow-btn" onclick="toggleSelectAllPossibilities(this)">
                             Zaznacz wszystkie możliwości
@@ -3994,9 +4044,12 @@ def index():
                         <button type="button" class="yellow-btn" onclick="toggleAllPossibilitiesExpandCollapse(this)">
                             Rozwiń wszystkie możliwości
                         </button>
+
+                        <!-- LISTA PREFIXÓW (pierwszy poziom) -->
                         <ul class="possibility-list">
                             {% for prefix, prefix_data in possibilities %}
                                 {% set prefix_index = loop.index %}
+
                                 <li class="prefix-item">
                                     <input
                                         type="checkbox"
@@ -4012,6 +4065,8 @@ def index():
                                         </span>
                                     </span>
                                 </li>
+
+                                <!-- Drugi poziom: subitems -->
                                 <ul class="subitem-list" id="subitems-{{ prefix_index }}">
                                     {% for full_str, subdetails in prefix_data['subitems'].items() %}
                                         {% set sub_index = loop.index %}
@@ -4030,6 +4085,8 @@ def index():
                                                 </span>
                                             </span>
                                         </li>
+
+                                        <!-- Trzeci poziom: firmy (entries) -->
                                         <ul class="company-list" id="companies-{{ prefix_index }}-{{ sub_index }}">
                                             <button
                                                 type="button"
@@ -4079,9 +4136,7 @@ def index():
                                     {% for client in clients %}
                                         <li class="client-item">
                                             <input type="checkbox" name="include_potential_emails" value="{{ client.email }}" id="client-{{ group_index }}-{{ loop.index }}">
-                                            <label for="client-{{ group_index }}-{{ loop.index }}">
-                                                {{ client.company }} ({{ client.language }})
-                                            </label>
+                                            <label for="client-{{ group_index }}-{{ loop.index }}">{{ client.company }} ({{ client.language }})</label>
                                         </li>
                                     {% endfor %}
                                 </ul>
@@ -4187,14 +4242,14 @@ def index():
         </footer>
     </body>
     </html>
-    """
+    '''
 
     return render_template_string(
         index_template,
         user=user,
         segments=sorted_segments,
         notes=notes,
-        possibilities=sorted_possibilities,
+        possibilities=sorted_possibilities,  # kluczowe -> triple-level
         potential_clients=potential_clients,
         get_email_company_pairs_for_segment=get_email_company_pairs_for_segment,
         data=data,

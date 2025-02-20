@@ -2639,7 +2639,8 @@ def index():
             .potential-client-group-label {
                 font-size: 15px;
                 font-weight: bold;
-                color: #001fff; /* ciemny, neonowy niebieski */
+                color: #ffffff; /* biały */
+                text-shadow: 0 0 5px #ffffff; /* efekt neonowego blasku */
                 border-bottom: 1px solid rgba(255,255,255,0.2);
                 padding-bottom: 5px;
                 display: flex;
@@ -2649,10 +2650,8 @@ def index():
                 flex: 1;
                 user-select: none;
             }
-            .prefix-label:hover {
-                text-decoration: underline;
-            }
             .segment-label:hover,
+            .prefix-label:hover,
             .potential-client-group-label:hover {
                 text-decoration: underline;
             }

@@ -2274,6 +2274,11 @@ def index():
                 color: #ffffff; /* biały dla całego bloku */
                 margin-left: 5px;
             }
+            .segment-count .count-number,
+            .subitem-count .count-number,
+            .company-count .count-number {
+                color: #FFD700 !important;
+            }
             .segment-count .group-label,
             .subitem-count .group-label,
             .company-count .group-label {

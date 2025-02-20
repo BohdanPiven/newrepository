@@ -2268,11 +2268,38 @@ def index():
                 align-items: center;
                 padding: 0 20px;
             }
+            .prefix-item,
+            .subitem-item {
+                display: flex;           /* kluczowe! */
+                align-items: center;     /* wyśrodkuj pionowo */
+                margin-bottom: 8px;      /* odstęp między wierszami */
+            }
+            .prefix-item input[type="checkbox"],
+            .subitem-item input[type="checkbox"] {
+                margin-right: 10px;      /* odstęp od etykiety */
+                transform: scale(1.2);   /* powiększenie checkboxa, jak w segmentach */
+                cursor: pointer;
+            }
+            .prefix-label {
+                font-size: 15px;         /* większa czcionka niż standardowe 13px */
+                font-weight: bold;       /* pogrubienie */
+                color: #B8860B;          /* ciemnożółto-brązowy (DarkGoldenRod) */
+    
+                /* możesz zachować styl „flex”, żeby licznik był wyrzucony w prawo */
+                border-bottom: 1px solid rgba(255,255,255,0.2);
+                padding-bottom: 5px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                cursor: pointer;
+                flex: 1;
+                user-select: none;
+            }
             .segment-count,
             .subitem-count,
             .company-count {
-                color: #ffffff; /* biały dla całego bloku */
-                margin-left: 5px;
+                margin-left: auto;
+                text-align: right;
             }
             .segment-count .count-number,
             .subitem-count .count-number,
@@ -2623,22 +2650,19 @@ def index():
                 user-select: none;
                 color: #ffffff;
             }
-            .prefix-label,
-            .subitem-label {
-                font-size: 13px; /* identyczny rozmiar co w segmentach */
-                border-bottom: 1px solid rgba(255,255,255,0.2);
-                padding-bottom: 5px;
-                display: flex;
-                justify-content: space-between;   /* “rozsunięcie” nazwy i liczb */
-                align-items: center;
-                cursor: pointer;
-                flex: 1;              /* tak by cały wiersz się rozkładał */
-                user-select: none;
-                color: #ffffff;       /* biały napis */
+            .prefix-label:hover {
+                text-decoration: underline;
             }
-            .prefix-label:hover,
             .subitem-label:hover {
                 text-decoration: underline;
+            }
+            .segment-count .group-label,
+            .segment-count .count-number,
+            .subitem-count .group-label,
+            .subitem-count .count-number,
+            .company-count .group-label,
+            .company-count .count-number {
+                color: #FFD700 !important; /* wymuś złoty */
             }
             .company-count,
             .subitem-count {

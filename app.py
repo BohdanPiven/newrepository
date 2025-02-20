@@ -2268,6 +2268,36 @@ def index():
                 align-items: center;
                 padding: 0 20px;
             }
+            .segment-label {
+                font-size: 15px;          /* jeśli chcesz większą czcionkę */
+                font-weight: bold;        /* pogrubienie */
+                color: #FFC107;           /* jaśniejszy kolor (np. Amber) */
+                border-bottom: 1px solid rgba(255,255,255,0.2);
+                padding-bottom: 5px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                cursor: pointer;
+                flex: 1;
+                user-select: none;
+            }
+            .segment-label:hover {
+                text-decoration: underline;
+            }
+            .prefix-label {
+                font-size: 15px;          
+                font-weight: bold;
+                color: #FFC107;           /* ten sam jasny kolor co segment, żeby było spójnie */
+                border-bottom: 1px solid rgba(255,255,255,0.2);
+                padding-bottom: 5px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                cursor: pointer;
+                flex: 1;
+                user-select: none;
+            }
+            }
             .prefix-item,
             .subitem-item {
                 display: flex;           /* kluczowe! */
@@ -2301,15 +2331,13 @@ def index():
                 margin-left: auto;
                 text-align: right;
             }
-            .segment-count .count-number,
-            .subitem-count .count-number,
-            .company-count .count-number {
-                color: #FFD700 !important;
-            }
             .segment-count .group-label,
+            .segment-count .count-number,
             .subitem-count .group-label,
-            .company-count .group-label {
-                color: #FFD700 !important;
+            .subitem-count .count-number,
+            .company-count .group-label,
+            .company-count .count-number {
+                color: #FFD700 !important; /* złoty */
             }
             .count-number {
                 color: #FFD700;  /* złote liczby */
@@ -2652,6 +2680,19 @@ def index():
             }
             .prefix-label:hover {
                 text-decoration: underline;
+            }
+            .subitem-label {
+                font-size: 13px;          
+                font-weight: normal;
+                color: #999999;           /* jasnoszary */
+                border-bottom: 1px solid rgba(255,255,255,0.2);
+                padding-bottom: 5px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                cursor: pointer;
+                flex: 1;
+                user-select: none;
             }
             .subitem-label:hover {
                 text-decoration: underline;

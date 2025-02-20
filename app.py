@@ -2268,35 +2268,8 @@ def index():
                 align-items: center;
                 padding: 0 20px;
             }
-            .segment-label {
-                font-size: 15px;          /* jeśli chcesz większą czcionkę */
-                font-weight: bold;        /* pogrubienie */
-                color: #FFC107;           /* jaśniejszy kolor (np. Amber) */
-                border-bottom: 1px solid rgba(255,255,255,0.2);
-                padding-bottom: 5px;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                cursor: pointer;
-                flex: 1;
-                user-select: none;
-            }
             .segment-label:hover {
                 text-decoration: underline;
-            }
-            .prefix-label {
-                font-size: 15px;          
-                font-weight: bold;
-                color: #FFC107;           /* ten sam jasny kolor co segment, żeby było spójnie */
-                border-bottom: 1px solid rgba(255,255,255,0.2);
-                padding-bottom: 5px;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                cursor: pointer;
-                flex: 1;
-                user-select: none;
-            }
             }
             .prefix-item,
             .subitem-item {
@@ -2309,21 +2282,6 @@ def index():
                 margin-right: 10px;      /* odstęp od etykiety */
                 transform: scale(1.2);   /* powiększenie checkboxa, jak w segmentach */
                 cursor: pointer;
-            }
-            .prefix-label {
-                font-size: 15px;         /* większa czcionka niż standardowe 13px */
-                font-weight: bold;       /* pogrubienie */
-                color: #B8860B;          /* ciemnożółto-brązowy (DarkGoldenRod) */
-    
-                /* możesz zachować styl „flex”, żeby licznik był wyrzucony w prawo */
-                border-bottom: 1px solid rgba(255,255,255,0.2);
-                padding-bottom: 5px;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                cursor: pointer;
-                flex: 1;
-                user-select: none;
             }
             .segment-count,
             .subitem-count,
@@ -2654,20 +2612,34 @@ def index():
                 padding-left: 0;
                 margin: 0;
             }
-            .segment-item, .potential-client-group {
+            .segment-item,
+            .prefix-item,
+            .subitem-item,
+            .potential-client-group,
+            .email-item,
+            .company-item,
+            .client-item {
                 display: flex;
                 align-items: center;
-                margin-bottom: 8px;
+                margin-bottom: 8px; /* lub inna wartość, jeśli chcesz */
             }
             .segment-item input[type="checkbox"],
-            .potential-client-group input[type="checkbox"] {
+            .prefix-item input[type="checkbox"],
+            .subitem-item input[type="checkbox"],
+            .potential-client-group input[type="checkbox"],
+            .email-item input[type="checkbox"],
+            .company-item input[type="checkbox"],
+            .client-item input[type="checkbox"] {
                 margin-right: 10px;
                 transform: scale(1.2);
                 cursor: pointer;
             }
             .segment-label,
+            .prefix-label,
             .potential-client-group-label {
-                font-size: 13px;
+                font-size: 15px;
+                font-weight: bold;
+                color: #001fff; /* ciemny, neonowy niebieski */
                 border-bottom: 1px solid rgba(255,255,255,0.2);
                 padding-bottom: 5px;
                 display: flex;
@@ -2676,15 +2648,18 @@ def index():
                 cursor: pointer;
                 flex: 1;
                 user-select: none;
-                color: #ffffff;
             }
             .prefix-label:hover {
+                text-decoration: underline;
+            }
+            .segment-label:hover,
+            .potential-client-group-label:hover {
                 text-decoration: underline;
             }
             .subitem-label {
                 font-size: 13px;          
                 font-weight: normal;
-                color: #999999;           /* jasnoszary */
+                color: #ffffff; /* biały */
                 border-bottom: 1px solid rgba(255,255,255,0.2);
                 padding-bottom: 5px;
                 display: flex;
@@ -2709,10 +2684,6 @@ def index():
             .subitem-count {
                 margin-left: auto;    /* “odsuń” je maksymalnie od nazwy */
                 text-align: right;    /* wyrównaj tekst do prawej */
-            }
-            .segment-label:hover,
-            .potential-client-group-label:hover {
-                text-decoration: underline;
             }
             .email-item, .company-item, .client-item {
                 display: flex;

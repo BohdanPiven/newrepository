@@ -33,6 +33,7 @@ import mimetypes
 import ssl
 from models import PASTEL_COLORS
 from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
+from collections import defaultdict
 
 
 # ------------------------------
@@ -520,6 +521,43 @@ def get_unique_possibilities_with_counts(data):
                 })
 
     return possibilities
+
+def sort_possibilities_by_first_letter_and_sum(possibilities_dict):
+    # 1) Zamień słownik na listę (prefix, data)
+    possibilities_list = list(possibilities_dict.items())
+
+    # 2) Pogrupuj po pierwszej literze (z ujednoliceniem np. do wielkich liter)
+    groups = defaultdict(list)
+    for prefix, data in possibilities_list:
+        first_letter = prefix[:1].upper() if prefix else ''
+        groups[first_letter].append((prefix, data))
+
+    # 3) Dla każdej grupy wyznacz maksymalną sumę (Polski + Zagraniczny),
+    #    żeby wiedzieć jak posortować całe grupy względem siebie
+    grouped_list = []
+    for letter, items in groups.items():
+        max_sum_for_group = max(
+            item[1]['Polski'] + item[1]['Zagraniczny']
+            for item in items
+        )
+        # Posortuj wpisy wewnątrz grupy malejąco po sumie
+        items_sorted = sorted(
+            items,
+            key=lambda x: (x[1]['Polski'] + x[1]['Zagraniczny']),
+            reverse=True
+        )
+        # Dodaj krotkę: (litera, max_suma, [posortowane wpisy])
+        grouped_list.append((letter, max_sum_for_group, items_sorted))
+
+    # 4) Posortuj całe grupy malejąco po max_sum_for_group
+    grouped_list.sort(key=lambda g: g[1], reverse=True)
+
+    # 5) Sklej z powrotem w jedną listę, w posortowanej kolejności
+    final_sorted = []
+    for letter, max_sum, items_sorted in grouped_list:
+        final_sorted.extend(items_sorted)
+
+    return final_sorted
 
 
 def get_potential_clients(data):
@@ -2213,16 +2251,13 @@ def index():
         key=lambda item: (item[1]['Polski'] + item[1]['Zagraniczny']),
         reverse=True
     )
-    sorted_possibilities = sorted(
-        possibilities_dict.items(),
-        key=lambda item: (item[1]['Polski'] + item[1]['Zagraniczny']),
-        reverse=True
-    )
+     # 4. Nowe sortowanie możliwości wg pierwszej litery i sum (Polski+Zagraniczny)
+    sorted_possibilities = sort_possibilities_by_first_letter_and_sum(possibilities_dict)
 
-    # 4. Notatki
+    # 5. Notatki
     notes = Note.query.order_by(Note.id.desc()).all()
 
-    # 5. Potencjalni klienci
+    # 6. Potencjalni klienci
     potential_clients = get_potential_clients(data)
 
     # Poniżej pełny szablon z poprawkami w sekcji "Możliwości"

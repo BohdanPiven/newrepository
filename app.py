@@ -522,39 +522,50 @@ def get_unique_possibilities_with_counts(data):
 
     return possibilities
 
-def sort_possibilities_by_first_letter_and_sum(possibilities_dict):
+def sort_possibilities_by_first_word_and_sum(possibilities_dict):
+    """
+    Sortowanie możliwości według pierwszego słowa w prefixie.
+    Każda grupa (o tym samym pierwszym słowie) jest trzymana razem,
+    a kolejność grup jest ustalana według najwyższej sumy (Polski+Zagraniczny) w grupie (malejąco).
+    Wewnątrz grupy poszczególne prefixy także sortujemy malejąco po sumie.
+    """
     # 1) Zamień słownik na listę (prefix, data)
     possibilities_list = list(possibilities_dict.items())
 
-    # 2) Pogrupuj po pierwszej literze (z ujednoliceniem np. do wielkich liter)
+    # 2) Pogrupuj po pierwszym słowie
     groups = defaultdict(list)
     for prefix, data in possibilities_list:
-        first_letter = prefix[:1].upper() if prefix else ''
-        groups[first_letter].append((prefix, data))
+        # Bezpieczne wczytanie pierwszego słowa; jeśli prefix pusty, to first_word = ''
+        prefix_stripped = prefix.strip()
+        if prefix_stripped:
+            first_word = prefix_stripped.split()[0]
+        else:
+            first_word = ''
+        groups[first_word].append((prefix, data))
 
     # 3) Dla każdej grupy wyznacz maksymalną sumę (Polski + Zagraniczny),
-    #    żeby wiedzieć jak posortować całe grupy względem siebie
+    #    aby posortować grupy względem siebie.
     grouped_list = []
-    for letter, items in groups.items():
+    for first_word, items in groups.items():
         max_sum_for_group = max(
             item[1]['Polski'] + item[1]['Zagraniczny']
             for item in items
         )
-        # Posortuj wpisy wewnątrz grupy malejąco po sumie
+        # Sortujemy wpisy wewnątrz grupy malejąco po sumie
         items_sorted = sorted(
             items,
             key=lambda x: (x[1]['Polski'] + x[1]['Zagraniczny']),
             reverse=True
         )
-        # Dodaj krotkę: (litera, max_suma, [posortowane wpisy])
-        grouped_list.append((letter, max_sum_for_group, items_sorted))
+        # Dodajemy krotkę (first_word, max_sum_for_group, items_sorted)
+        grouped_list.append((first_word, max_sum_for_group, items_sorted))
 
-    # 4) Posortuj całe grupy malejąco po max_sum_for_group
+    # 4) Sortujemy całe grupy malejąco po max_sum_for_group
     grouped_list.sort(key=lambda g: g[1], reverse=True)
 
-    # 5) Sklej z powrotem w jedną listę, w posortowanej kolejności
+    # 5) Sklejamy z powrotem w jedną listę
     final_sorted = []
-    for letter, max_sum, items_sorted in grouped_list:
+    for _, _, items_sorted in grouped_list:
         final_sorted.extend(items_sorted)
 
     return final_sorted
@@ -2245,14 +2256,15 @@ def index():
     segments_dict = get_unique_segments_with_counts(data)
     possibilities_dict = get_unique_possibilities_with_counts(data)
 
-    # 3. Posortowane segmenty i możliwości (w kolejności malejącej wg sumy Polski+Zagraniczny)
+    # 3. Posortowane segmenty wg sumy (Polski+Zagraniczny) - bez zmian
     sorted_segments = sorted(
         segments_dict.items(),
         key=lambda item: (item[1]['Polski'] + item[1]['Zagraniczny']),
         reverse=True
     )
-     # 4. Nowe sortowanie możliwości wg pierwszej litery i sum (Polski+Zagraniczny)
-    sorted_possibilities = sort_possibilities_by_first_letter_and_sum(possibilities_dict)
+
+    # 4. Nowe sortowanie możliwości wg pierwszego słowa w prefixie i sum (Polski+Zagraniczny)
+    sorted_possibilities = sort_possibilities_by_first_word_and_sum(possibilities_dict)
 
     # 5. Notatki
     notes = Note.query.order_by(Note.id.desc()).all()

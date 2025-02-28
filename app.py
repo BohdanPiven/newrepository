@@ -2687,7 +2687,7 @@ def index():
                 font-size: 15px;
                 font-weight: bold;
                 color: #ffffff; /* biały */
-                text-shadow: 0 0 5px #ffffff; /* efekt neonowego blasku */
+                text-shadow: 0 0 2px rgba(255,255,255,0.6);
                 border-bottom: 1px solid rgba(255,255,255,0.2);
                 padding-bottom: 5px;
                 display: flex;

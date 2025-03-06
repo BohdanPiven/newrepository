@@ -2256,14 +2256,14 @@ def index():
     segments_dict = get_unique_segments_with_counts(data)
     possibilities_dict = get_unique_possibilities_with_counts(data)
 
-    # 3. Posortowane segmenty wg sumy (Polski+Zagraniczny) - bez zmian
+    # 3. Posortowane segmenty wg sumy (Polski+Zagraniczny)
     sorted_segments = sorted(
         segments_dict.items(),
         key=lambda item: (item[1]['Polski'] + item[1]['Zagraniczny']),
         reverse=True
     )
 
-    # 4. Nowe sortowanie możliwości wg pierwszego słowa w prefixie i sum (Polski+Zagraniczny)
+    # 4. Sortowanie możliwości wg pierwszego słowa w prefixie i sum (Polski+Zagraniczny)
     sorted_possibilities = sort_possibilities_by_first_word_and_sum(possibilities_dict)
 
     # 5. Notatki
@@ -2272,7 +2272,7 @@ def index():
     # 6. Potencjalni klienci
     potential_clients = get_potential_clients(data)
 
-    # Poniżej pełny szablon z poprawkami w sekcji "Możliwości"
+    # ---- Kompletny szablon HTML (index_template) ze zmodyfikowanym JS ----
     index_template = '''
     <!DOCTYPE html>
     <html lang="pl">
@@ -2320,14 +2320,14 @@ def index():
             }
             .prefix-item,
             .subitem-item {
-                display: flex;           /* kluczowe! */
-                align-items: center;     /* wyśrodkuj pionowo */
-                margin-bottom: 8px;      /* odstęp między wierszami */
+                display: flex;
+                align-items: center;
+                margin-bottom: 8px;
             }
             .prefix-item input[type="checkbox"],
             .subitem-item input[type="checkbox"] {
-                margin-right: 10px;      /* odstęp od etykiety */
-                transform: scale(1.2);   /* powiększenie checkboxa, jak w segmentach */
+                margin-right: 10px;
+                transform: scale(1.2);
                 cursor: pointer;
             }
             .segment-count,
@@ -2342,11 +2342,7 @@ def index():
             .subitem-count .count-number,
             .company-count .group-label,
             .company-count .count-number {
-                color: #FFD700 !important; /* złoty */
-            }
-            .count-number {
-                color: #FFD700;  /* złote liczby */
-                margin-left: 5px;
+                color: #FFD700 !important;
             }
             .header-left {
                 display: flex;
@@ -2668,7 +2664,7 @@ def index():
             .client-item {
                 display: flex;
                 align-items: center;
-                margin-bottom: 8px; /* lub inna wartość, jeśli chcesz */
+                margin-bottom: 8px;
             }
             .segment-item input[type="checkbox"],
             .prefix-item input[type="checkbox"],
@@ -2686,8 +2682,21 @@ def index():
             .potential-client-group-label {
                 font-size: 15px;
                 font-weight: bold;
-                color: #ffffff; /* biały */
+                color: #ffffff;
                 text-shadow: 0 0 2px rgba(255,255,255,0.6);
+                border-bottom: 1px solid rgba(255,255,255,0.2);
+                padding-bottom: 5px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                cursor: pointer;
+                flex: 1;
+                user-select: none;
+            }
+            .subitem-label {
+                font-size: 13px;
+                font-weight: normal;
+                color: #ffffff;
                 border-bottom: 1px solid rgba(255,255,255,0.2);
                 padding-bottom: 5px;
                 display: flex;
@@ -2699,37 +2708,9 @@ def index():
             }
             .segment-label:hover,
             .prefix-label:hover,
-            .potential-client-group-label:hover {
-                text-decoration: underline;
-            }
-            .subitem-label {
-                font-size: 13px;          
-                font-weight: normal;
-                color: #ffffff; /* biały */
-                border-bottom: 1px solid rgba(255,255,255,0.2);
-                padding-bottom: 5px;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                cursor: pointer;
-                flex: 1;
-                user-select: none;
-            }
+            .potential-client-group-label:hover,
             .subitem-label:hover {
                 text-decoration: underline;
-            }
-            .segment-count .group-label,
-            .segment-count .count-number,
-            .subitem-count .group-label,
-            .subitem-count .count-number,
-            .company-count .group-label,
-            .company-count .count-number {
-                color: #FFD700 !important; /* wymuś złoty */
-            }
-            .company-count,
-            .subitem-count {
-                margin-left: auto;    /* “odsuń” je maksymalnie od nazwy */
-                text-align: right;    /* wyrównaj tekst do prawej */
             }
             .email-item, .company-item, .client-item {
                 display: flex;
@@ -3135,7 +3116,9 @@ def index():
             // OBSŁUGA ZAZNACZEŃ
             // ------------------
             function updateSelectedItems() {
-                // Segmenty
+                // -----------------------------------------
+                // SEGMENTY (przykład - już było w oryginale)
+                // -----------------------------------------
                 const selectedSegments = Array.from(document.querySelectorAll('.segment-item input[type="checkbox"]:checked'))
                     .map(cb => cb.value);
                 const selectedSegmentsDiv = document.getElementById('selected-segments');
@@ -3172,7 +3155,9 @@ def index():
                     selectedSegmentsDiv.appendChild(segmentSpan);
                 });
 
-                // Potencjalni Klienci
+                // ----------------------------------------------
+                // POTENCJALNI KLIENCI (przykład - bez zmian)
+                // ----------------------------------------------
                 const selectedPotentialClients = Array.from(document.querySelectorAll('.potential-clients-list .client-item input[type="checkbox"]:checked'))
                     .map(cb => {
                         const label = document.querySelector(`label[for="${cb.id}"]`);
@@ -3217,12 +3202,12 @@ def index():
                     selectedPotentialClientsDiv.appendChild(clientSpan);
                 });
 
-                // ---------------------------
-                //  NOWA OBSŁUGA Możliwości
-                // ---------------------------
-                // 1) Zaznaczone prefixy
-                const selectedPossibilityPrefixes = Array.from(document.querySelectorAll('.prefix-item input[type="checkbox"]:checked'))
-                    .map(cb => cb.value);
+                // ---------------------------------------------------
+                // PREFIXY (pierwszy poziom w "Możliwościach") - JEST
+                // ---------------------------------------------------
+                const selectedPossibilityPrefixes = Array.from(
+                    document.querySelectorAll('.prefix-item input[type="checkbox"]:checked')
+                ).map(cb => cb.value);
                 const selectedPossibilitiesDiv = document.getElementById('selected-possibilities');
                 selectedPossibilitiesDiv.innerHTML = '';
 
@@ -3235,6 +3220,7 @@ def index():
                     removeSpan.className = 'remove-item';
                     removeSpan.textContent = '×';
                     removeSpan.setAttribute('data-prefix', prefix);
+
                     removeSpan.addEventListener('click', function() {
                         const toRemove = this.getAttribute('data-prefix');
                         const checkbox = Array.from(document.querySelectorAll('.prefix-item input[type="checkbox"]'))
@@ -3265,11 +3251,68 @@ def index():
                     selectedPossibilitiesDiv.appendChild(prefixSpan);
                 });
 
-                // 2) Zaznaczone subitems (np. "FCL Road [[[ West Europe Premium ]]]")
-                // Zależnie od potrzeb, możesz też je osobno wizualizować – tutaj uproszczone
-                // (jeśli chcesz, możesz dodać kolejny #selected-subitems i tam wyświetlać).
+                // --------------------------------------------------
+                //  NOWY KOD: Zaznaczone SUBITEMY (drugi poziom)
+                // --------------------------------------------------
+                const selectedSubitems = Array.from(
+                    document.querySelectorAll('.subitem-item input[type="checkbox"]:checked')
+                ).map(cb => {
+                    return {
+                        label: cb.value,  // np. "FCL Road [[[ West Europe Premium ]]]"
+                        id: cb.id         // np. "subitem-1-2"
+                    };
+                });
 
-                // Wybrani użytkownicy
+                selectedSubitems.forEach(subObj => {
+                    const subSpan = document.createElement('span');
+                    subSpan.className = 'selected-item';
+                    subSpan.textContent = subObj.label;
+
+                    const removeSpan = document.createElement('span');
+                    removeSpan.className = 'remove-item';
+                    removeSpan.textContent = '×';
+                    removeSpan.setAttribute('data-subitem-id', subObj.id);
+
+                    removeSpan.addEventListener('click', function() {
+                        const subitemId = this.getAttribute('data-subitem-id');
+                        const checkbox = document.getElementById(subitemId);
+                        if (checkbox) {
+                            checkbox.checked = false;
+                            const parts = subitemId.split('-'); // ["subitem", prefixIndex, subIndex]
+                            if (parts.length === 3) {
+                                const prefixIndex = parts[1];
+                                const subIndex = parts[2];
+                                const companyList = document.getElementById(`companies-${prefixIndex}-${subIndex}`);
+                                if (companyList) {
+                                    const companyCheckboxes = companyList.querySelectorAll('.company-item input[type="checkbox"]');
+                                    companyCheckboxes.forEach(c => c.checked = false);
+                                }
+                                // Opcjonalnie: jeśli żaden subitem nie jest zaznaczony, odznacz prefix
+                                const prefixCheckbox = document.getElementById(`prefix-${prefixIndex}`);
+                                if (prefixCheckbox) {
+                                    const subitemList = document.getElementById(`subitems-${prefixIndex}`);
+                                    if (subitemList) {
+                                        const anyChecked = subitemList.querySelectorAll('.subitem-item input[type="checkbox"]:checked').length > 0;
+                                        if (!anyChecked) {
+                                            prefixCheckbox.checked = false;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        this.parentElement.remove();
+                        updateSelectedItems();
+                    });
+
+                    subSpan.appendChild(removeSpan);
+                    selectedPossibilitiesDiv.appendChild(subSpan);
+                });
+
+                // ---------------------------------------------------
+                //  (MOŻESZ DODAĆ TEŻ TRZECI POZIOM FIRM, GDYBYŚ CHCIAŁ)
+                // ---------------------------------------------------
+
+                // Wybrani użytkownicy (notatki) - pozostaje bez zmian
                 const selectedUsersDiv = document.getElementById('selected-users');
                 selectedUsersDiv.innerHTML = '';
 
@@ -3277,7 +3320,7 @@ def index():
             }
 
             // ---------------------
-            // SEKCJA SEGMENTÓW - stare
+            // SEKCJA SEGMENTÓW
             // ---------------------
             function handleSegmentChange(segmentCheckbox) {
                 const segmentIndex = segmentCheckbox.id.split('-')[1];
@@ -3377,7 +3420,7 @@ def index():
             }
 
             // --------------------------
-            //  NOWA SEKCJA MOŻLIWOŚCI (3 poziomy)
+            //  SEKCJA MOŻLIWOŚCI
             // --------------------------
             function handlePrefixChange(prefixCheckbox) {
                 const prefixIndex = prefixCheckbox.id.split('-')[1];
@@ -3403,7 +3446,6 @@ def index():
                 const parts = subitemCheckbox.id.split('-');
                 const prefixIndex = parts[1];
                 const subIndex = parts[2];
-                // Zaznaczanie firm
                 const companyList = document.getElementById(`companies-${prefixIndex}-${subIndex}`);
                 if (companyList) {
                     const companyCheckboxes = companyList.querySelectorAll('.company-item input[type="checkbox"]');
@@ -3411,7 +3453,6 @@ def index():
                         cc.checked = subitemCheckbox.checked;
                     });
                 }
-                // Ewentualnie aktualizujemy prefix, jeśli wszystkie subitemy są zaznaczone
                 const prefixCheckbox = document.getElementById(`prefix-${prefixIndex}`);
                 if (prefixCheckbox && subitemCheckbox.checked) {
                     const subitemList = document.getElementById(`subitems-${prefixIndex}`);
@@ -3425,7 +3466,6 @@ def index():
                 updateSelectedItems();
             }
             function toggleAllPossibilitiesExpandCollapse(button) {
-                // Rozwijamy / zwijamy WSZYSTKIE subitem-lists i company-lists
                 const allSubitemLists = document.querySelectorAll('.subitem-list');
                 const allCompanyLists = document.querySelectorAll('.company-list');
                 const allExpanded = Array.from(allSubitemLists).every(list => list.classList.contains('show'))
@@ -3484,25 +3524,11 @@ def index():
             }
 
             // ---------------------
-            // WALIDACJA RELACJI PARENT-CHILD (opcjonalna)
+            // WALIDACJA
             // ---------------------
             function validateParentChildSelection() {
-                // 1) Segmenty
-                const segmentCheckboxes = document.querySelectorAll('.segment-item input[type="checkbox"]');
-                for (const segment of segmentCheckboxes) {
-                    const segmentIndex = segment.id.split('-')[1];
-                    const emailList = document.getElementById(`emails-${segmentIndex}`);
-                    if (emailList) {
-                        const childEmails = emailList.querySelectorAll('input[type="checkbox"]:checked');
-                        if (childEmails.length > 0 && !segment.checked) {
-                            showFlashMessage('error', 'Zaznacz etykiety (segmenty)!');
-                            return false;
-                        }
-                    }
-                }
-                // 2) Prefix <-> subitems <-> companies
-                // Analogicznie sprawdzasz, czy jeśli firma jest zaznaczona, to subitem i prefix też
-                // (w zależności od Twoich wymagań).
+                // Tu można dodać logikę walidacji, np. jeśli dziecko jest zaznaczone, to rodzic musi być zaznaczony
+                // Obecnie jest pusta, zawsze zwraca true
                 return true;
             }
 
@@ -3556,7 +3582,6 @@ def index():
 
             // ---------------------
             // OBSŁUGA PRZYCISKÓW "ZAZNACZ/ODZNACZ WSZYSTKO"
-            // (aktualizacja etykiet w locie)
             // ---------------------
             function updateSelectAllButtons() {
                 var selectAllSegmentsBtn = document.getElementById('select-all-segments-btn');
@@ -3593,7 +3618,7 @@ def index():
                 companyLists.forEach(function(companyList) {
                     var toggleBtn = companyList.querySelector('.select-deselect-companies-btn');
                     if (!toggleBtn) return;
-                    var companyCheckboxes = companyList.querySelectorAll('input[type="checkbox"]');
+                    var companyCheckboxes = companyList.querySelectorAll('.company-item input[type="checkbox"]');
                     var allChecked = Array.from(companyCheckboxes).every(cb => cb.checked);
                     toggleBtn.textContent = allChecked ? 'Odznacz Wszystkie' : 'Zaznacz Wszystkie';
                 });
@@ -3689,7 +3714,6 @@ def index():
                 document.querySelectorAll('.subitem-label').forEach(function(label) {
                     label.addEventListener('click', function(event) {
                         var comboIndex = this.getAttribute('data-index');
-                        // data-index="prefixIndex-subIndex"
                         var parts = comboIndex.split('-');
                         toggleSubitemList(parts[0], parts[1]);
                         event.stopPropagation();
@@ -3818,7 +3842,7 @@ def index():
                         item.appendChild(removeButton);
                         attachmentsPreview.appendChild(item);
                     });
-                    attachmentsCount.textContent = `Załączników: ${selectedFiles.length}/${maxAttachments}`;
+                    attachmentsCount.textContent = `Załączników: ${selectedFiles.length}/${max_attachments}`;
                 }
 
                 // Obsługa edycji notatki
@@ -3975,7 +3999,7 @@ def index():
                 if (img) {
                     img.classList.toggle('rotate');
                 }
-            }    
+            }
         </script>
     </head>
     <body>
@@ -3987,8 +4011,8 @@ def index():
             </div>
             <div class="header-right">
                 <div class="user-info">
-                    <span>Witaj, {{ user.username }}!</span> 
-                    <a href="{{ url_for('logout') }}">Wyloguj się</a> | 
+                    <span>Witaj, {{ user.username }}!</span>
+                    <a href="{{ url_for('logout') }}">Wyloguj się</a> |
                     <a href="{{ url_for('settings') }}">Ustawienia konta</a>
                 </div>
             </div>
@@ -4017,7 +4041,7 @@ def index():
                         <button type="button" id="select-all-segments-btn" class="yellow-btn" onclick="toggleSelectAllSegments(this)">Zaznacz wszystkie segmenty</button>
                         <button type="button" class="yellow-btn" onclick="toggleAllSegmentsExpandCollapse(this)">Rozwiń wszystkie segmenty</button>
                         <ul class="segment-list">
-                            {% for segment, counts in segments %}
+                            {% for segment, counts in sorted_segments %}
                                 {% set segment_index = loop.index %}
                                 <li class="segment-item">
                                     <input type="checkbox" name="segments" value="{{ segment }}" id="segment-{{ segment_index }}" onchange="handleSegmentChange(this)">
@@ -4031,6 +4055,7 @@ def index():
                                             <span class="count-number">{{ counts['Zagraniczny'] }}</span>
                                           )
                                         </span>
+                                    </span>
                                 </li>
                                 <ul class="email-list" id="emails-{{ segment_index }}">
                                     <button type="button" class="yellow-btn select-deselect-emails-btn" onclick="toggleSelectAllEmailsInSegment('emails-{{ segment_index }}')">Zaznacz Wszystkie</button>
@@ -4053,7 +4078,7 @@ def index():
                         </ul>
                     </div>
 
-                    <!-- NOWA SEKCJA MOŻLIWOŚCI -->
+                    <!-- MOŻLIWOŚCI -->
                     <div id="possibilities-container" class="possibilities-container">
                         <button type="button" id="select-all-possibilities-btn" class="yellow-btn" onclick="toggleSelectAllPossibilities(this)">
                             Zaznacz wszystkie możliwości
@@ -4061,12 +4086,9 @@ def index():
                         <button type="button" class="yellow-btn" onclick="toggleAllPossibilitiesExpandCollapse(this)">
                             Rozwiń wszystkie możliwości
                         </button>
-
-                        <!-- LISTA PREFIXÓW (pierwszy poziom) -->
                         <ul class="possibility-list">
-                            {% for prefix, prefix_data in possibilities %}
+                            {% for prefix, prefix_data in sorted_possibilities %}
                                 {% set prefix_index = loop.index %}
-
                                 <li class="prefix-item">
                                     <input
                                         type="checkbox"
@@ -4082,8 +4104,6 @@ def index():
                                         </span>
                                     </span>
                                 </li>
-
-                                <!-- Drugi poziom: subitems -->
                                 <ul class="subitem-list" id="subitems-{{ prefix_index }}">
                                     {% for full_str, subdetails in prefix_data['subitems'].items() %}
                                         {% set sub_index = loop.index %}
@@ -4102,8 +4122,6 @@ def index():
                                                 </span>
                                             </span>
                                         </li>
-
-                                        <!-- Trzeci poziom: firmy (entries) -->
                                         <ul class="company-list" id="companies-{{ prefix_index }}-{{ sub_index }}">
                                             <button
                                                 type="button"
@@ -4266,7 +4284,7 @@ def index():
         user=user,
         segments=sorted_segments,
         notes=notes,
-        possibilities=sorted_possibilities,  # kluczowe -> triple-level
+        possibilities=sorted_possibilities,
         potential_clients=potential_clients,
         get_email_company_pairs_for_segment=get_email_company_pairs_for_segment,
         data=data,

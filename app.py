@@ -2236,6 +2236,10 @@ from flask import render_template_string
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+# [NOWA TRASA I LINK W GÓRNEJ BELCE — tylko ta zmiana!]
+@app.route('/automation')
+def automation():
+    return "Sekcja automatyzacji – w przygotowaniu."
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -3984,7 +3988,8 @@ def index():
                 <div class="user-info">
                     <span>Witaj, {{ user.username }}!</span>
                     <a href="{{ url_for('logout') }}">Wyloguj się</a> |
-                    <a href="{{ url_for('settings') }}">Ustawienia konta</a>
+                    <a href="{{ url_for('settings') }}">Ustawienia konta</a> |
+                    <a href="{{ url_for('automation') }}">Automation</a>
                 </div>
             </div>
         </header>

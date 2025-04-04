@@ -2239,7 +2239,51 @@ def allowed_file(filename):
 # [NOWA TRASA I LINK W GÓRNEJ BELCE — tylko ta zmiana!]
 @app.route('/automation')
 def automation():
-    return "Sekcja automatyzacji – w przygotowaniu."
+    automation_template = '''
+    <!DOCTYPE html>
+    <html lang="pl">
+    <head>
+        <meta charset="UTF-8">
+        <title>Automation</title>
+        <style>
+            body { 
+                font-family: Arial, sans-serif; 
+                padding: 20px; 
+                background-color: #f5f5f5;
+                color: #333;
+            }
+            a { 
+                color: #1f8ef1; 
+                text-decoration: none; 
+                font-size: 16px;
+            }
+            a:hover { 
+                text-decoration: underline; 
+            }
+            .container {
+                max-width: 600px;
+                margin: 0 auto;
+                background-color: #ffffff;
+                padding: 20px;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            h1 { 
+                margin-bottom: 20px; 
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Sekcja Automation</h1>
+            <p>Tu będzie znajdować się funkcjonalność automatyzacji procesów.</p>
+            <p><a href="{{ url_for('index') }}">Powrót do panelu głównego</a></p>
+        </div>
+    </body>
+    </html>
+    '''
+    return render_template_string(automation_template)
+
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -3987,9 +4031,9 @@ def index():
             <div class="header-right">
                 <div class="user-info">
                     <span>Witaj, {{ user.username }}!</span>
+                    <a href="{{ url_for('automation') }}">Automation</a> |
                     <a href="{{ url_for('logout') }}">Wyloguj się</a> |
-                    <a href="{{ url_for('settings') }}">Ustawienia konta</a> |
-                    <a href="{{ url_for('automation') }}">Automation</a>
+                    <a href="{{ url_for('settings') }}">Ustawienia konta</a>
                 </div>
             </div>
         </header>

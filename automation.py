@@ -317,6 +317,7 @@ def automation_tiktok_plan():
 
 
 
+
 @automation_bp.route('/tiktok/plan/delete_ajax', methods=['POST'])
 def delete_scheduled_post_ajax():
     from automation_models import ScheduledPost, db

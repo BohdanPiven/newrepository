@@ -1,5 +1,7 @@
 from flask import Blueprint, render_template_string, url_for, request, flash, redirect, session
 from datetime import datetime
+from automation_models import db, ScheduledPost
+
 
 automation_bp = Blueprint('automation', __name__, url_prefix='/automation')
 

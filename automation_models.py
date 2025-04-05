@@ -1,4 +1,4 @@
-from app import db  # lub zrób import db z miejsca, gdzie masz zdefiniowane db = SQLAlchemy()
+from app import db  # lub skąd importujesz `db`
 from datetime import date, time
 
 class ScheduledPost(db.Model):

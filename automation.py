@@ -1,7 +1,7 @@
+# automation.py
 from flask import Blueprint, render_template_string, url_for, request, flash, redirect, session
-from datetime import datetime
-# from automation_models import db, ScheduledPost
-
+from datetime import datetime, date, time
+from automation_models import db, ScheduledPost
 
 automation_bp = Blueprint('automation', __name__, url_prefix='/automation')
 
@@ -25,22 +25,22 @@ def automation_home():
                 background-color: #f2f2f2;
             }
             .container {
-                max-width: 600px;         /* nieco węższy kontener */
-                margin: 20px auto;        /* mniejszy margines pionowy */
+                max-width: 600px;
+                margin: 20px auto;
                 background-color: #fff;
-                padding: 20px;            /* zmniejszony padding wewnątrz kontenera */
+                padding: 20px;
                 box-shadow: 0 4px 8px rgba(0,0,0,0.1);
                 position: relative;
             }
             .back-button {
                 position: absolute;
-                top: 10px;        /* mniejszy odstęp od góry */
-                left: 10px;       /* mniejszy odstęp od lewej */
-                font-size: 14px;  /* odrobinę mniejszy font */
+                top: 10px;
+                left: 10px;
+                font-size: 14px;
                 text-decoration: none;
                 color: #fff;
                 background-color: #1f8ef1;
-                padding: 6px 10px;  /* mniejsze wymiary przycisku */
+                padding: 6px 10px;
                 border-radius: 4px;
                 display: inline-flex;
                 align-items: center;
@@ -53,26 +53,26 @@ def automation_home():
                 margin-right: 5px;
             }
             h1 {
-                font-size: 20px;     
-                margin-bottom: 10px; 
+                font-size: 20px;
+                margin-bottom: 10px;
                 text-align: left;
             }
             p {
-                font-size: 14px;    
-                margin-bottom: 10px; 
+                font-size: 14px;
+                margin-bottom: 10px;
                 text-align: left;
-                color: #555; 
+                color: #555;
             }
             .platform-list a {
                 display: block;
-                margin: 6px 0;  
+                margin: 6px 0;
                 padding: 8px 12px;
                 background-color: #1f8ef1;
                 color: #fff;
                 text-decoration: none;
                 border-radius: 4px;
                 text-align: left;
-                font-size: 14px;  
+                font-size: 14px;
             }
             .platform-list a:hover {
                 background-color: #0a6db9;
@@ -143,8 +143,7 @@ def automation_tiktok():
 
 @automation_bp.route('/tiktok/plan', methods=['GET', 'POST'])
 def automation_tiktok_plan():
-    from automation_models import ScheduledPost
-    # Sprawdź, czy użytkownik jest zalogowany:
+    # Sprawdź, czy użytkownik jest zalogowany
     if 'user_id' not in session:
         flash("Musisz być zalogowany, aby zarządzać planem treści.", "error")
         return redirect(url_for('login'))
@@ -157,12 +156,11 @@ def automation_tiktok_plan():
         topic = request.form.get('topic')
         description = request.form.get('description')
 
-        # Konwersja stringa na obiekty date/time
-        from datetime import date, time
+        # Konwersja ciągów znaków na obiekty date/time
         date_obj = datetime.strptime(post_date_str, "%Y-%m-%d").date()
         time_obj = datetime.strptime(post_time_str, "%H:%M").time()
 
-        # Tworzymy obiekt ScheduledPost i zapisujemy do bazy
+        # Tworzymy nowy obiekt ScheduledPost i zapisujemy go do bazy
         new_post = ScheduledPost(
             date=date_obj,
             time=time_obj,
@@ -176,6 +174,7 @@ def automation_tiktok_plan():
         flash("Nowy wpis został dodany do harmonogramu.", "success")
         return redirect(url_for('automation.automation_tiktok_plan'))
 
+    # Pobieramy zaplanowane posty dla danego użytkownika
     scheduled_posts = ScheduledPost.query.filter_by(user_id=user_id).order_by(
         ScheduledPost.date.asc(), ScheduledPost.time.asc()
     ).all()
@@ -332,8 +331,8 @@ def automation_tiktok_rodzaje():
              margin: 0 auto;
              background-color: #fff;
              padding: 40px;
-             position: relative;
              box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+             position: relative;
          }
          .back-button {
              position: absolute;
@@ -397,8 +396,8 @@ def automation_tiktok_scenariusze():
              margin: 0 auto;
              background-color: #fff;
              padding: 40px;
-             position: relative;
              box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+             position: relative;
          }
          .back-button {
              position: absolute;

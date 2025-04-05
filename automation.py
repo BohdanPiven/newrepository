@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template_string, url_for
-from flask import Blueprint, render_template_string, url_for, request
+from flask import Blueprint, render_template_string, url_for, request, flash
 
 
 automation_bp = Blueprint('automation', __name__, url_prefix='/automation')

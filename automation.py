@@ -1,4 +1,6 @@
 from flask import Blueprint, render_template_string, url_for
+from flask import Blueprint, render_template_string, url_for, request
+
 
 automation_bp = Blueprint('automation', __name__, url_prefix='/automation')
 

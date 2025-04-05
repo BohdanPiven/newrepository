@@ -147,6 +147,9 @@ UPLOAD_FOLDER = os.path.join(app.root_path, 'uploads')
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+from automation import automation_bp
+app.register_blueprint(automation_bp)
+
 # ----------------------------------------
 # KONFIGURACJA GOOGLE CLOUD STORAGE
 # ----------------------------------------
@@ -4273,8 +4276,6 @@ if __name__ == '__main__':
     # Tworzenie katalogu do przechowywania załączników (redundantne, już utworzone wcześniej)
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-    from automation import automation_bp
-    app.register_blueprint(automation_bp)
 
     # Inicjalizacja APScheduler
     scheduler = BackgroundScheduler()

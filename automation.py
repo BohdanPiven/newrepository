@@ -141,9 +141,10 @@ def automation_tiktok():
     return render_template_string(tiktok_template)
 
 
+
 @automation_bp.route('/tiktok/plan', methods=['GET', 'POST'])
 def automation_tiktok_plan():
-    from automation_models import ScheduledPost, db  # importy modeli
+    from automation_models import ScheduledPost, db  # Upewnij się, że importujesz modele z automation_models.py
     # Sprawdź, czy użytkownik jest zalogowany
     if 'user_id' not in session:
         flash("Musisz być zalogowany, aby zarządzać planem treści.", "error")
@@ -152,17 +153,17 @@ def automation_tiktok_plan():
     user_id = session['user_id']
 
     if request.method == 'POST':
-        # Pobranie danych z formularza
+        # Pobierz dane z formularza
         post_date_str = request.form.get('post_date')
         post_time_str = request.form.get('post_time')
         topic = request.form.get('topic')
         description = request.form.get('description')
 
-        # Konwersja stringów na obiekty date/time
+        # Konwersja ciągów znaków na obiekty date i time
         date_obj = datetime.strptime(post_date_str, "%Y-%m-%d").date()
         time_obj = datetime.strptime(post_time_str, "%H:%M").time()
 
-        # Tworzenie i zapisywanie nowego wpisu
+        # Utwórz nowy obiekt ScheduledPost i zapisz do bazy
         new_post = ScheduledPost(
             date=date_obj,
             time=time_obj,
@@ -176,12 +177,11 @@ def automation_tiktok_plan():
         flash("Nowy wpis został dodany do harmonogramu.", "success")
         return redirect(url_for('automation.automation_tiktok_plan'))
 
-    # Pobieramy istniejące wpisy
+    # Pobierz wpisy zaplanowane dla danego użytkownika
     scheduled_posts = ScheduledPost.query.filter_by(user_id=user_id).order_by(
         ScheduledPost.date.asc(), ScheduledPost.time.asc()
     ).all()
 
-    # Szablon z AJAX-owym usuwaniem
     plan_template = '''
     <!DOCTYPE html>
     <html lang="pl">
@@ -216,86 +216,42 @@ def automation_tiktok_plan():
              display: inline-flex;
              align-items: center;
          }
-         .back-button:hover {
-             background-color: #0a6db9;
-         }
-         .back-button:before {
-             content: "←";
-             margin-right: 5px;
-         }
-         h1 {
-             text-align: left;
-             margin-bottom: 20px;
-             font-size: 20px;
-         }
-         form {
-             margin-bottom: 20px;
-         }
-         label {
-             display: block;
-             margin-top: 10px;
-             font-size: 14px;
-             color: #333;
-         }
+         .back-button:hover { background-color: #0a6db9; }
+         .back-button:before { content: "←"; margin-right: 5px; }
+         h1 { text-align: left; margin-bottom: 20px; font-size: 20px; }
+         form { margin-bottom: 20px; }
+         label { display: block; margin-top: 10px; font-size: 14px; color: #333; }
          input[type="date"],
          input[type="time"],
          input[type="text"],
          textarea {
-             width: 100%;
-             padding: 8px;
-             margin-top: 5px;
-             border: 1px solid #ccc;
-             border-radius: 4px;
-             font-size: 14px;
+             width: 100%; padding: 8px; margin-top: 5px;
+             border: 1px solid #ccc; border-radius: 4px; font-size: 14px;
          }
          button.submit-btn {
-             margin-top: 15px;
-             padding: 10px 20px;
-             background-color: #1f8ef1;
-             color: #fff;
-             border: none;
-             border-radius: 4px;
-             cursor: pointer;
-             font-size: 14px;
+             margin-top: 15px; padding: 10px 20px;
+             background-color: #1f8ef1; color: #fff;
+             border: none; border-radius: 4px; cursor: pointer; font-size: 14px;
          }
-         button.submit-btn:hover {
-             background-color: #0a6db9;
-         }
+         button.submit-btn:hover { background-color: #0a6db9; }
          .delete-btn {
-             background-color: #e74c3c;
-             color: #fff;
-             border: none;
-             padding: 6px 12px;
-             border-radius: 4px;
-             cursor: pointer;
-             font-size: 14px;
-             margin-top: 10px;
+             background-color: #e74c3c; color: #fff;
+             border: none; padding: 6px 12px; border-radius: 4px;
+             cursor: pointer; font-size: 14px; margin-top: 10px;
          }
-         .delete-btn:hover {
-             background-color: #c0392b;
-         }
-         .post-list {
-             margin-top: 30px;
-         }
+         .delete-btn:hover { background-color: #c0392b; }
+         .post-list { margin-top: 30px; }
          .post-item {
-             border-bottom: 1px solid #eee;
-             padding: 10px 0;
-             font-size: 14px;
+             border-bottom: 1px solid #eee; padding: 10px 0; font-size: 14px;
          }
-         .post-item:last-child {
-             border-bottom: none;
-         }
-         .post-item strong {
-             color: #1f8ef1;
-         }
+         .post-item:last-child { border-bottom: none; }
+         .post-item strong { color: #1f8ef1; }
       </style>
     </head>
     <body>
       <div class="container">
          <a href="{{ url_for('automation.automation_tiktok') }}" class="back-button">back</a>
          <h1>Plan Treści dla TikToka</h1>
-
-         <!-- Formularz dodawania nowego wpisu -->
          <form method="post">
              <label for="post_date">Data publikacji:</label>
              <input type="date" id="post_date" name="post_date" required>
@@ -312,7 +268,6 @@ def automation_tiktok_plan():
              <button type="submit" class="submit-btn">Dodaj wpis do harmonogramu</button>
          </form>
          
-         <!-- Lista zaplanowanych postów -->
          <div class="post-list">
              <h2>Zaplanowane posty:</h2>
              {% for post in scheduled_posts %}
@@ -320,7 +275,6 @@ def automation_tiktok_plan():
                  <p><strong>{{ post.topic }}</strong></p>
                  <p>{{ post.date }} o {{ post.time }}</p>
                  <p>{{ post.description }}</p>
-                 <!-- Przycisk usuwania z AJAX-em -->
                  <button class="delete-btn" onclick="removeScheduledPost({{ post.id }})">Usuń</button>
              </div>
              {% endfor %}
@@ -328,7 +282,7 @@ def automation_tiktok_plan():
       </div>
 
       <script>
-      // Funkcja AJAX do usuwania wpisu
+      // Funkcja AJAX do usuwania wpisu bez odświeżania strony
       function removeScheduledPost(postId) {
         if (!confirm("Czy na pewno chcesz usunąć ten wpis?")) {
           return;
@@ -343,11 +297,9 @@ def automation_tiktok_plan():
         .then(response => response.json())
         .then(data => {
           if (data.success) {
-            // Usuwamy element z DOM
+            // Usuń element z DOM
             const item = document.getElementById("post-item-" + postId);
-            if (item) {
-              item.remove();
-            }
+            if (item) { item.remove(); }
           } else {
             alert(data.message);
           }
@@ -358,14 +310,12 @@ def automation_tiktok_plan():
     </body>
     </html>
     '''
-
     return render_template_string(plan_template, scheduled_posts=scheduled_posts)
 
 
 @automation_bp.route('/tiktok/plan/delete_ajax', methods=['POST'])
 def delete_scheduled_post_ajax():
     from automation_models import ScheduledPost, db
-
     if 'user_id' not in session:
         return jsonify({"success": False, "message": "Musisz być zalogowany."}), 401
     

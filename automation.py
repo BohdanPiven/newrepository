@@ -19,14 +19,13 @@ def automation_home():
             }
             .container {
                 max-width: 800px;
-                margin: 0 auto;
+                margin: 40px auto;
                 background-color: #fff;
                 padding: 40px;
-                position: relative;
                 box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+                position: relative;
                 min-height: 100vh;
             }
-            /* Przyciski powrotu - wyróżnione, z ikoną strzałki */
             .back-button {
                 position: absolute;
                 top: 20px;
@@ -47,40 +46,37 @@ def automation_home():
                 content: "←";
                 margin-right: 5px;
             }
-            /* Sekcja z linkami do platform – tekst wyrównany do prawej */
-            .platform-list {
-                text-align: right;
+            h1 {
+                text-align: left;
+                margin-bottom: 20px;
+            }
+            p {
+                text-align: left;
+                margin-bottom: 20px;
             }
             .platform-list a {
-                display: inline-block;
+                display: block;
                 margin: 10px 0;
-                padding: 10px 20px;
+                padding: 10px;
                 background-color: #1f8ef1;
                 color: #fff;
                 text-decoration: none;
                 border-radius: 4px;
+                text-align: left;
             }
             .platform-list a:hover {
                 background-color: #0a6db9;
-            }
-            h1 {
-                text-align: right;
-                margin-bottom: 30px;
-            }
-            p {
-                text-align: right;
-                margin-bottom: 20px;
             }
         </style>
     </head>
     <body>
         <div class="container">
-            <!-- Przycisk powrotu do głównego panelu -->
+            <!-- Przyciski powrotu -->
             <a href="{{ url_for('index') }}" class="back-button">back</a>
             <h1>Panel Automatyzacji</h1>
             <p>Wybierz platformę, którą chcesz konfigurować lub automatyzować:</p>
             <div class="platform-list">
-                <a href="{{ url_for('automation.automation_tiktok') }}">TikTok</a><br>
+                <a href="{{ url_for('automation.automation_tiktok') }}">TikTok</a>
                 <a href="{{ url_for('automation.automation_facebook') }}">Facebook</a>
             </div>
         </div>
@@ -88,7 +84,6 @@ def automation_home():
     </html>
     '''
     return render_template_string(automation_home_template)
-
 
 
 @automation_bp.route('/tiktok')
@@ -180,11 +175,11 @@ def automation_tiktok_plan():
              margin-right: 5px;
          }
          h1 {
-             text-align: right;
+             text-align: left;
              margin-bottom: 30px;
          }
          p {
-             text-align: right;
+             text-align: left;
              margin-bottom: 20px;
          }
       </style>
@@ -246,11 +241,11 @@ def automation_tiktok_rodzaje():
              margin-right: 5px;
          }
          h1 {
-             text-align: right;
+             text-align: left;
              margin-bottom: 30px;
          }
          p {
-             text-align: right;
+             text-align: left;
              margin-bottom: 20px;
          }
       </style>
@@ -312,11 +307,11 @@ def automation_tiktok_scenariusze():
              margin-right: 5px;
          }
          h1 {
-             text-align: right;
+             text-align: left;
              margin-bottom: 30px;
          }
          p {
-             text-align: right;
+             text-align: left;
              margin-bottom: 20px;
          }
       </style>
@@ -331,6 +326,7 @@ def automation_tiktok_scenariusze():
     </html>
     '''
     return render_template_string(scenariusze_template)
+
 
 @automation_bp.route('/facebook')
 def automation_facebook():

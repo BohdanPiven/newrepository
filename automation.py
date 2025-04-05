@@ -141,10 +141,10 @@ def automation_tiktok():
     return render_template_string(tiktok_template)
 
 
-
 @automation_bp.route('/tiktok/plan', methods=['GET', 'POST'])
 def automation_tiktok_plan():
-    from automation_models import ScheduledPost, db  # Upewnij się, że importujesz modele z automation_models.py
+    # Importujemy modele i obiekt db z automation_models.py
+    from automation_models import ScheduledPost, db
     # Sprawdź, czy użytkownik jest zalogowany
     if 'user_id' not in session:
         flash("Musisz być zalogowany, aby zarządzać planem treści.", "error")
@@ -153,7 +153,7 @@ def automation_tiktok_plan():
     user_id = session['user_id']
 
     if request.method == 'POST':
-        # Pobierz dane z formularza
+        # Pobieramy dane z formularza
         post_date_str = request.form.get('post_date')
         post_time_str = request.form.get('post_time')
         topic = request.form.get('topic')
@@ -163,7 +163,7 @@ def automation_tiktok_plan():
         date_obj = datetime.strptime(post_date_str, "%Y-%m-%d").date()
         time_obj = datetime.strptime(post_time_str, "%H:%M").time()
 
-        # Utwórz nowy obiekt ScheduledPost i zapisz do bazy
+        # Tworzymy nowy obiekt ScheduledPost i zapisujemy go do bazy
         new_post = ScheduledPost(
             date=date_obj,
             time=time_obj,
@@ -177,7 +177,7 @@ def automation_tiktok_plan():
         flash("Nowy wpis został dodany do harmonogramu.", "success")
         return redirect(url_for('automation.automation_tiktok_plan'))
 
-    # Pobierz wpisy zaplanowane dla danego użytkownika
+    # Pobieramy zaplanowane posty dla danego użytkownika
     scheduled_posts = ScheduledPost.query.filter_by(user_id=user_id).order_by(
         ScheduledPost.date.asc(), ScheduledPost.time.asc()
     ).all()
@@ -225,24 +225,40 @@ def automation_tiktok_plan():
          input[type="time"],
          input[type="text"],
          textarea {
-             width: 100%; padding: 8px; margin-top: 5px;
-             border: 1px solid #ccc; border-radius: 4px; font-size: 14px;
+             width: 100%;
+             padding: 8px;
+             margin-top: 5px;
+             border: 1px solid #ccc;
+             border-radius: 4px;
+             font-size: 14px;
          }
          button.submit-btn {
-             margin-top: 15px; padding: 10px 20px;
-             background-color: #1f8ef1; color: #fff;
-             border: none; border-radius: 4px; cursor: pointer; font-size: 14px;
+             margin-top: 15px;
+             padding: 10px 20px;
+             background-color: #1f8ef1;
+             color: #fff;
+             border: none;
+             border-radius: 4px;
+             cursor: pointer;
+             font-size: 14px;
          }
          button.submit-btn:hover { background-color: #0a6db9; }
          .delete-btn {
-             background-color: #e74c3c; color: #fff;
-             border: none; padding: 6px 12px; border-radius: 4px;
-             cursor: pointer; font-size: 14px; margin-top: 10px;
+             background-color: #e74c3c;
+             color: #fff;
+             border: none;
+             padding: 6px 12px;
+             border-radius: 4px;
+             cursor: pointer;
+             font-size: 14px;
+             margin-top: 10px;
          }
          .delete-btn:hover { background-color: #c0392b; }
          .post-list { margin-top: 30px; }
          .post-item {
-             border-bottom: 1px solid #eee; padding: 10px 0; font-size: 14px;
+             border-bottom: 1px solid #eee;
+             padding: 10px 0;
+             font-size: 14px;
          }
          .post-item:last-child { border-bottom: none; }
          .post-item strong { color: #1f8ef1; }
@@ -282,7 +298,7 @@ def automation_tiktok_plan():
       </div>
 
       <script>
-      // Funkcja AJAX do usuwania wpisu bez odświeżania strony
+      // Funkcja AJAX do usuwania wpisu bez przeładowania strony
       function removeScheduledPost(postId) {
         if (!confirm("Czy na pewno chcesz usunąć ten wpis?")) {
           return;
@@ -316,13 +332,14 @@ def automation_tiktok_plan():
 @automation_bp.route('/tiktok/plan/delete_ajax', methods=['POST'])
 def delete_scheduled_post_ajax():
     from automation_models import ScheduledPost, db
+    # Upewnij się, że mamy importowane jsonify – można go też dodać na górze pliku
+    from flask import jsonify
     if 'user_id' not in session:
         return jsonify({"success": False, "message": "Musisz być zalogowany."}), 401
     
     user_id = session['user_id']
     data = request.get_json()
     post_id = data.get('post_id')
-
     if not post_id:
         return jsonify({"success": False, "message": "Brak ID wpisu (post_id)."}), 400
 

@@ -3983,7 +3983,7 @@ def index():
             <div class="header-right">
                 <div class="user-info">
                     <span>Witaj, {{ user.username }}!</span>
-                    <a href="{{ url_for('automation_home') }}">Automation</a> |
+                    <a href="{{ url_for('automation.automation_home') }}">Automation</a> |
                     <a href="{{ url_for('settings') }}">Ustawienia konta</a> |
                     <a href="{{ url_for('logout') }}">Wyloguj się</a>
                 </div>

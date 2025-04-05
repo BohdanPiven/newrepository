@@ -2,7 +2,7 @@ from flask import Blueprint, render_template_string, url_for
 
 automation_bp = Blueprint('automation', __name__, url_prefix='/automation')
 
-@automation_bp.route('/')
+@automation_bp.route('/', endpoint='automation_home')
 def automation_home():
     automation_home_template = '''
     <!DOCTYPE html>

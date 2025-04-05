@@ -11,30 +11,33 @@ def automation_home():
         <meta charset="UTF-8">
         <title>Automation - Główna</title>
         <style>
+            /* Resetowanie marginesów i paddingu */
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
             body {
                 font-family: Arial, sans-serif;
                 background-color: #f2f2f2;
-                margin: 0;
-                padding: 0;
             }
             .container {
-                max-width: 800px;
-                margin: 40px auto;
+                max-width: 600px;         /* nieco węższy kontener */
+                margin: 20px auto;        /* mniejszy margines pionowy */
                 background-color: #fff;
-                padding: 40px;
+                padding: 20px;            /* zmniejszony padding wewnątrz kontenera */
                 box-shadow: 0 4px 8px rgba(0,0,0,0.1);
                 position: relative;
-                min-height: 100vh;
             }
             .back-button {
                 position: absolute;
-                top: 20px;
-                left: 20px;
-                font-size: 16px;
+                top: 10px;        /* mniejszy odstęp od góry */
+                left: 10px;       /* mniejszy odstęp od lewej */
+                font-size: 14px;  /* odrobinę mniejszy font */
                 text-decoration: none;
                 color: #fff;
                 background-color: #1f8ef1;
-                padding: 8px 12px;
+                padding: 6px 10px;  /* mniejsze wymiary przycisku */
                 border-radius: 4px;
                 display: inline-flex;
                 align-items: center;
@@ -47,22 +50,26 @@ def automation_home():
                 margin-right: 5px;
             }
             h1 {
+                font-size: 20px;     /* mniejszy rozmiar czcionki */
+                margin-bottom: 10px; /* mniejszy odstęp pod tytułem */
                 text-align: left;
-                margin-bottom: 20px;
             }
             p {
+                font-size: 14px;     /* mniejszy font w akapicie */
+                margin-bottom: 10px; /* mniejszy odstęp między akapitami */
                 text-align: left;
-                margin-bottom: 20px;
+                color: #555;         /* delikatnie ciemniejszy kolor tekstu */
             }
             .platform-list a {
                 display: block;
-                margin: 10px 0;
-                padding: 10px;
+                margin: 6px 0;              /* zmniejszone odstępy między przyciskami */
+                padding: 8px 12px;          /* mniejszy rozmiar przycisków */
                 background-color: #1f8ef1;
                 color: #fff;
                 text-decoration: none;
                 border-radius: 4px;
                 text-align: left;
+                font-size: 14px;            /* nieco mniejsza czcionka */
             }
             .platform-list a:hover {
                 background-color: #0a6db9;
@@ -84,6 +91,7 @@ def automation_home():
     </html>
     '''
     return render_template_string(automation_home_template)
+
 
 
 @automation_bp.route('/tiktok')

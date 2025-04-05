@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template_string, url_for, request, flash, redirect, session
 from datetime import datetime
-from automation_models import db, ScheduledPost
+# from automation_models import db, ScheduledPost
 
 
 automation_bp = Blueprint('automation', __name__, url_prefix='/automation')
@@ -143,6 +143,7 @@ def automation_tiktok():
 
 @automation_bp.route('/tiktok/plan', methods=['GET', 'POST'])
 def automation_tiktok_plan():
+    from automation_models import ScheduledPost
     # Sprawdź, czy użytkownik jest zalogowany:
     if 'user_id' not in session:
         flash("Musisz być zalogowany, aby zarządzać planem treści.", "error")

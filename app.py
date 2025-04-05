@@ -35,9 +35,8 @@ from models import PASTEL_COLORS
 from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 from collections import defaultdict
 
-
 # ------------------------------
-# *** KONFIGURACJA CELERY W TYM SAMYM PLIKU ***
+# KONFIGURACJA CELERY W TYM SAMYM PLIKU
 # ------------------------------
 from celery import Celery
 
@@ -46,43 +45,23 @@ load_dotenv()
 
 # Pobierz REDIS_URL z konfiguracji środowiskowej
 redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
-
-# Jeśli używamy protokołu rediss:// i parametr ssl_cert_reqs nie jest ustawiony, dopisujemy go automatycznie
 if redis_url.startswith("rediss://"):
     parsed = urlparse(redis_url)
     query = parse_qs(parsed.query)
     if 'ssl_cert_reqs' not in query:
-        # Dodajemy parametr; wartość tutaj może być np. "none" (później w konfiguracji Celery używamy 'CERT_NONE')
         query['ssl_cert_reqs'] = 'none'
         new_query = urlencode(query, doseq=True)
         redis_url = urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment))
 
-# Inicjalizacja aplikacji Celery z użyciem redis_url jako brokera i backendu
-celery_app = Celery(
-    "app",
-    broker=redis_url,
-    backend=redis_url
-)
-
-# Jeśli używamy rediss://, ustawiamy dodatkowe opcje SSL dla Celery
+celery_app = Celery("app", broker=redis_url, backend=redis_url)
 if redis_url.startswith("rediss://"):
     celery_app.conf.update(
-        broker_transport_options={
-            'visibility_timeout': 3600,  # 1 godz. rezerwacji zadań w kolejce
-            'ssl_cert_reqs': 'CERT_NONE'
-        },
-        result_backend_transport_options={
-            'ssl_cert_reqs': 'CERT_NONE'
-        },
-        broker_use_ssl={
-            'ssl_cert_reqs': 'CERT_NONE'
-        },
-        redis_backend_use_ssl={
-            'ssl_cert_reqs': 'CERT_NONE'
-        }
+        broker_transport_options={'visibility_timeout': 3600, 'ssl_cert_reqs': 'CERT_NONE'},
+        result_backend_transport_options={'ssl_cert_reqs': 'CERT_NONE'},
+        broker_use_ssl={'ssl_cert_reqs': 'CERT_NONE'},
+        redis_backend_use_ssl={'ssl_cert_reqs': 'CERT_NONE'}
     )
 
-# Dodaj bieżący katalog do ścieżki Pythona
 sys.path.append(os.path.abspath(os.getcwd()))
 
 # Inicjalizacja aplikacji Flask
@@ -96,18 +75,13 @@ if database_url:
         database_url = database_url.replace("postgres://", "postgresql://", 1)
     print(f"Używana baza danych: {database_url}")
 else:
-    # Jeśli lokalnie brak DATABASE_URL => SQLite
     database_url = 'sqlite:///' + os.path.join(basedir, 'users.db')
     print(f"Używana baza danych (lokalny SQLite): {database_url}")
 
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-# Podstawowa konfiguracja
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default_secret_key')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB
-
-# Bezpieczne ustawienia ciasteczek sesji
 app.config['SESSION_COOKIE_SECURE'] = False  # Ustaw True w produkcji (HTTPS)
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
@@ -118,27 +92,16 @@ if not ENCRYPTION_KEY:
     raise ValueError("Brak zmiennej ENCRYPTION_KEY w środowisku!")
 fernet = Fernet(ENCRYPTION_KEY.encode())
 
-# Konfiguracja Flask-Mail (tylko serwer + port + TLS; bez hasła globalnego!)
+# Konfiguracja Flask-Mail (bez globalnych danych logowania)
 app.config['MAIL_SERVER'] = 'smtp.office365.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
 
-# UWAGA: Usuwamy/zakomentowujemy globalne MAIL_USERNAME / MAIL_PASSWORD z .env
-# (Niepotrzebne, bo korzystamy z hasła usera z bazy!)
-# MAIL_USERNAME = os.getenv('MAIL_USERNAME')
-# MAIL_PASSWORD_ENCRYPTED = os.getenv('MAIL_PASSWORD')
-# try:
-#     MAIL_PASSWORD = fernet.decrypt(MAIL_PASSWORD_ENCRYPTED.encode()).decode()
-# except:
-#     MAIL_PASSWORD = MAIL_PASSWORD_ENCRYPTED
-# app.config['MAIL_USERNAME'] = MAIL_USERNAME
-# app.config['MAIL_PASSWORD'] = MAIL_PASSWORD
-
+# Inicjalizacja bazy danych i migracji
 db.init_app(app)
 migrate = Migrate(app, db)
-# mail = Mail(app)
 
-# Globalne słowniki do śledzenia postępu i zatrzymywania wysyłki e-maili (opcjonalnie)
+# Globalne słowniki do śledzenia postępu i zatrzymywania wysyłki e-maili
 email_sending_progress = {}
 email_sending_stop_events = {}
 
@@ -147,6 +110,7 @@ UPLOAD_FOLDER = os.path.join(app.root_path, 'uploads')
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+# Rejestracja blueprintu z automation (importuj po inicjalizacji db i migracji)
 from automation import automation_bp
 app.register_blueprint(automation_bp)
 
@@ -156,7 +120,6 @@ app.register_blueprint(automation_bp)
 creds_b64 = os.getenv("GOOGLE_CREDENTIALS_BASE64")
 if not creds_b64:
     raise ValueError("Brak zmiennej GOOGLE_CREDENTIALS_BASE64 – nie można zainicjalizować GCS.")
-
 try:
     creds_json = base64.b64decode(creds_b64).decode("utf-8")
     creds_info = json.loads(creds_json)
@@ -170,57 +133,32 @@ if not GCS_BUCKET:
     raise ValueError("Brak zmiennej środowiskowej GCS_BUCKET_NAME!")
 bucket = storage_client.bucket(GCS_BUCKET)
 
-# Dozwolone typy plików
-ALLOWED_EXTENSIONS = {
-    'png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'zip'
-}
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'zip'}
 app.config['MAX_ATTACHMENTS'] = 5
 
-# Konfiguracja Google Sheets API (o ile potrzebne)
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
 SPREADSHEET_ID = os.getenv('SPREADSHEET_ID', '')
 
 def highlight_triple_brackets(text):
-    """
-    Zastępuje wystąpienia [[[ ... ]]] na <span style="color: orange; white-space: nowrap; margin: 0 3px;">...</span>.
-
-    Dzięki temu:
-      - fragmenty w [[[ ... ]]] będą w kolorze pomarańczowym,
-      - nie będą się łamać w środku (white-space: nowrap;),
-      - zachowają niewielki odstęp (margin: 0 3px) od sąsiadującego tekstu.
-    """
     pattern = r"\[\[\[(.*?)\]\]\]"
     replacement = r'<span style="color: orange; white-space: nowrap; margin: 0 3px;">\1</span>'
     return re.sub(pattern, replacement, text)
 
 def is_allowed_file(file):
-    """
-    Sprawdza, czy plik (FileStorage) ma dozwolone rozszerzenie i prawidłowy typ MIME.
-    """
-    # Sprawdzenie rozszerzenia
     if '.' not in file.filename or file.filename.rsplit('.', 1)[1].lower() not in ALLOWED_EXTENSIONS:
         return False
-
-    # Odczyt fragmentu pliku do zbadania MIME
     file.seek(0)
     sample = file.read(1024)
     file.seek(0)
-
     mime_type = magic.from_buffer(sample, mime=True)
     allowed_mime_types = [
-        'application/pdf',
-        'image/jpeg',
-        'image/png',
-        'image/gif',
-        'application/msword',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'application/vnd.ms-excel',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'text/plain',
-        'application/zip'
+        'application/pdf', 'image/jpeg', 'image/png', 'image/gif',
+        'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'text/plain', 'application/zip'
     ]
-
     return mime_type in allowed_mime_types
+
 
 
 def upload_file_to_gcs(file, expiration=3600):

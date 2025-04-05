@@ -40,11 +40,14 @@ def automation_home():
             <p>Wybierz platformę, którą chcesz konfigurować lub automatyzować:</p>
             <a href="{{ url_for('automation.automation_tiktok') }}">TikTok</a>
             <a href="{{ url_for('automation.automation_facebook') }}">Facebook</a>
+            <!-- Link powrotny do głównego panelu -->
+            <p><a href="{{ url_for('index') }}">Powrót do panelu głównego</a></p>
         </div>
     </body>
     </html>
     '''
     return render_template_string(automation_home_template)
+
 
 @automation_bp.route('/tiktok')
 def automation_tiktok():

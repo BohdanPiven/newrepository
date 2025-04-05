@@ -1,8 +1,7 @@
-# automation.py
 from flask import Blueprint, render_template_string, url_for, request, flash, redirect, session, jsonify
 from datetime import datetime
-from app import db  # lub inny sposób importu instancji SQLAlchemy
-from automation_models import ScheduledPost
+from app import db  # import instancji SQLAlchemy z Twojego pliku głównego (app.py)
+from automation_models import ScheduledPost  # Twój model zdefiniowany w automation_models.py
 
 automation_bp = Blueprint('automation', __name__, url_prefix='/automation')
 
@@ -62,6 +61,7 @@ def automation_home():
     '''
     return render_template_string(home_template)
 
+
 @automation_bp.route('/tiktok')
 def automation_tiktok():
     """
@@ -93,7 +93,8 @@ def automation_tiktok():
             <nav>
                 <a href="{{ url_for('automation.automation_tiktok_plan') }}">Plan treści</a> |
                 <a href="{{ url_for('automation.automation_tiktok_rodzaje') }}">Rodzaje wideo</a> |
-                <a href="{{ url_for('automation.automation_tiktok_scenariusze') }}">Scenariusze</a>
+                <a href="{{ url_for('automation.automation_tiktok_scenariusze') }}">Scenariusze</a> |
+                <a href="{{ url_for('automation.automation_tiktok_timeline') }}">Timeline</a>
             </nav>
             <hr>
             <p>Tu możesz skonfigurować automatyzację i plan publikacji na TikToku.</p>
@@ -104,11 +105,11 @@ def automation_tiktok():
     '''
     return render_template_string(tiktok_template)
 
+
 @automation_bp.route('/tiktok/plan', methods=['GET', 'POST'])
 def automation_tiktok_plan():
     """
-    Strona planu treści: wyświetlanie, dodawanie wpisów.
-    Obsługa edycji i usuwania w oddzielnych trasach.
+    Widok harmonogramu – umożliwia dodawanie nowych wpisów oraz wyświetlanie zaplanowanych postów.
     """
     if 'user_id' not in session:
         flash("Musisz być zalogowany, aby zarządzać planem treści.", "error")
@@ -117,14 +118,17 @@ def automation_tiktok_plan():
     user_id = session['user_id']
 
     if request.method == 'POST':
+        # Pobieramy dane z formularza
         post_date_str = request.form.get('post_date')
         post_time_str = request.form.get('post_time')
         topic = request.form.get('topic')
         description = request.form.get('description')
 
+        # Konwersja ciągów znaków na obiekty date/time
         date_obj = datetime.strptime(post_date_str, "%Y-%m-%d").date()
         time_obj = datetime.strptime(post_time_str, "%H:%M").time()
 
+        # Tworzymy nowy wpis i zapisujemy go do bazy
         new_post = ScheduledPost(
             date=date_obj,
             time=time_obj,
@@ -138,7 +142,7 @@ def automation_tiktok_plan():
         flash("Nowy wpis został dodany do harmonogramu.", "success")
         return redirect(url_for('automation.automation_tiktok_plan'))
 
-    # Wyświetlanie postów
+    # Pobieramy zaplanowane posty dla zalogowanego użytkownika
     scheduled_posts = ScheduledPost.query.filter_by(user_id=user_id).order_by(
         ScheduledPost.date.asc(), ScheduledPost.time.asc()
     ).all()
@@ -150,11 +154,11 @@ def automation_tiktok_plan():
       <meta charset="UTF-8">
       <title>Plan Treści (TikTok)</title>
       <style>
-         body {
-             font-family: Arial, sans-serif;
-             background-color: #f2f2f2;
-             margin: 0;
-             padding: 0;
+         body { 
+             font-family: Arial, sans-serif; 
+             background-color: #f2f2f2; 
+             margin: 0; 
+             padding: 0; 
          }
          .container {
              max-width: 800px;
@@ -177,27 +181,11 @@ def automation_tiktok_plan():
              display: inline-flex;
              align-items: center;
          }
-         .back-button:hover {
-             background-color: #0a6db9;
-         }
-         .back-button:before {
-             content: "←";
-             margin-right: 5px;
-         }
-         h1 {
-             text-align: left;
-             margin-bottom: 20px;
-             font-size: 20px;
-         }
-         form {
-             margin-bottom: 20px;
-         }
-         label {
-             display: block;
-             margin-top: 10px;
-             font-size: 14px;
-             color: #333;
-         }
+         .back-button:hover { background-color: #0a6db9; }
+         .back-button:before { content: "←"; margin-right: 5px; }
+         h1 { text-align: left; margin-bottom: 20px; font-size: 20px; }
+         form { margin-bottom: 20px; }
+         label { display: block; margin-top: 10px; font-size: 14px; color: #333; }
          input[type="date"],
          input[type="time"],
          input[type="text"],
@@ -219,26 +207,12 @@ def automation_tiktok_plan():
              cursor: pointer;
              font-size: 14px;
          }
-         button.submit-btn:hover {
-             background-color: #0a6db9;
-         }
-         .post-list {
-             margin-top: 30px;
-         }
-         .post-item {
-             border-bottom: 1px solid #eee;
-             padding: 10px 0;
-             font-size: 14px;
-         }
-         .post-item:last-child {
-             border-bottom: none;
-         }
-         .post-item strong {
-             color: #1f8ef1;
-         }
-         .action-buttons {
-             margin-top: 5px;
-         }
+         button.submit-btn:hover { background-color: #0a6db9; }
+         .post-list { margin-top: 30px; }
+         .post-item { border-bottom: 1px solid #eee; padding: 10px 0; font-size: 14px; }
+         .post-item:last-child { border-bottom: none; }
+         .post-item strong { color: #1f8ef1; }
+         .action-buttons { margin-top: 5px; }
          .action-buttons a,
          .action-buttons form {
              display: inline-block;
@@ -246,17 +220,15 @@ def automation_tiktok_plan():
          }
          .action-buttons a {
              color: #fff;
-             background-color: #17a2b8; /* np. niebieskawy */
+             background-color: #17a2b8;
              padding: 5px 10px;
              border-radius: 4px;
              text-decoration: none;
              font-size: 13px;
          }
-         .action-buttons a:hover {
-             background-color: #138496;
-         }
+         .action-buttons a:hover { background-color: #138496; }
          .delete-btn {
-             background-color: #dc3545; /* czerwony */
+             background-color: #dc3545;
              color: #fff;
              border: none;
              padding: 5px 10px;
@@ -264,32 +236,29 @@ def automation_tiktok_plan():
              cursor: pointer;
              font-size: 13px;
          }
-         .delete-btn:hover {
-             background-color: #c82333;
-         }
+         .delete-btn:hover { background-color: #c82333; }
       </style>
     </head>
     <body>
       <div class="container">
          <a href="{{ url_for('automation.automation_tiktok') }}" class="back-button">back</a>
          <h1>Plan Treści dla TikToka</h1>
-         <!-- Formularz dodawania nowego wpisu -->
          <form method="post">
              <label for="post_date">Data publikacji:</label>
              <input type="date" id="post_date" name="post_date" required>
-
+             
              <label for="post_time">Godzina publikacji:</label>
              <input type="time" id="post_time" name="post_time" required>
-
+             
              <label for="topic">Temat:</label>
              <input type="text" id="topic" name="topic" required>
-
+             
              <label for="description">Opis/treść:</label>
              <textarea id="description" name="description" rows="3" required></textarea>
-
+             
              <button type="submit" class="submit-btn">Dodaj wpis do harmonogramu</button>
          </form>
-
+         
          <div class="post-list">
              <h2>Zaplanowane posty:</h2>
              {% for post in scheduled_posts %}
@@ -298,17 +267,9 @@ def automation_tiktok_plan():
                  <p>{{ post.date }} o {{ post.time }}</p>
                  <p>{{ post.description }}</p>
                  <div class="action-buttons">
-                     <!-- Link do edycji (GET) -->
                      <a href="{{ url_for('automation.edit_scheduled_post', post_id=post.id) }}">Edytuj</a>
-
-                     <!-- Formularz do usuwania (POST) -->
-                     <form action="{{ url_for('automation.delete_scheduled_post', post_id=post.id) }}"
-                           method="post"
-                           style="display:inline;">
-                         <button type="submit" class="delete-btn"
-                                 onclick="return confirm('Czy na pewno chcesz usunąć ten wpis?');">
-                             Usuń
-                         </button>
+                     <form action="{{ url_for('automation.delete_scheduled_post', post_id=post.id) }}" method="post" style="display:inline;" onsubmit="return confirm('Czy na pewno chcesz usunąć ten wpis?');">
+                         <button type="submit" class="delete-btn">Usuń</button>
                      </form>
                  </div>
              </div>
@@ -323,7 +284,7 @@ def automation_tiktok_plan():
 @automation_bp.route('/tiktok/plan/edit/<int:post_id>', methods=['GET', 'POST'])
 def edit_scheduled_post(post_id):
     """
-    Edycja istniejącego wpisu w harmonogramie.
+    Umożliwia edycję istniejącego wpisu w harmonogramie.
     """
     if 'user_id' not in session:
         flash("Musisz być zalogowany, aby edytować wpisy.", "error")
@@ -332,13 +293,11 @@ def edit_scheduled_post(post_id):
     user_id = session['user_id']
     post = ScheduledPost.query.get_or_404(post_id)
 
-    # Sprawdź, czy post należy do zalogowanego użytkownika
     if post.user_id != user_id:
         flash("Brak dostępu do edycji tego wpisu.", "error")
         return redirect(url_for('automation.automation_tiktok_plan'))
 
     if request.method == 'POST':
-        # Aktualizujemy dane
         post_date_str = request.form.get('post_date')
         post_time_str = request.form.get('post_time')
         topic = request.form.get('topic')
@@ -353,7 +312,6 @@ def edit_scheduled_post(post_id):
         flash("Wpis został zaktualizowany.", "success")
         return redirect(url_for('automation.automation_tiktok_plan'))
 
-    # Jeśli GET – wyświetlamy formularz z istniejącymi danymi
     edit_template = '''
     <!DOCTYPE html>
     <html lang="pl">
@@ -363,26 +321,48 @@ def edit_scheduled_post(post_id):
       <style>
          body { font-family: Arial, sans-serif; background-color: #f2f2f2; margin: 0; padding: 0; }
          .container {
-             max-width: 600px; margin: 20px auto; background-color: #fff;
-             padding: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+             max-width: 600px;
+             margin: 20px auto;
+             background-color: #fff;
+             padding: 20px;
+             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
              position: relative;
          }
          .back-button {
-             position: absolute; top: 10px; left: 10px;
-             font-size: 14px; text-decoration: none; color: #fff;
-             background-color: #1f8ef1; padding: 6px 10px; border-radius: 4px;
+             position: absolute;
+             top: 10px;
+             left: 10px;
+             font-size: 14px;
+             text-decoration: none;
+             color: #fff;
+             background-color: #1f8ef1;
+             padding: 6px 10px;
+             border-radius: 4px;
          }
          .back-button:hover { background-color: #0a6db9; }
          .back-button:before { content: "←"; margin-right: 5px; }
          h1 { text-align: left; margin-bottom: 20px; font-size: 20px; }
          label { display: block; margin-top: 10px; font-size: 14px; color: #333; }
-         input[type="date"], input[type="time"], input[type="text"], textarea {
-             width: 100%; padding: 8px; margin-top: 5px; border: 1px solid #ccc;
-             border-radius: 4px; font-size: 14px;
+         input[type="date"],
+         input[type="time"],
+         input[type="text"],
+         textarea {
+             width: 100%;
+             padding: 8px;
+             margin-top: 5px;
+             border: 1px solid #ccc;
+             border-radius: 4px;
+             font-size: 14px;
          }
          button.submit-btn {
-             margin-top: 15px; padding: 10px 20px; background-color: #28a745;
-             color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;
+             margin-top: 15px;
+             padding: 10px 20px;
+             background-color: #28a745;
+             color: #fff;
+             border: none;
+             border-radius: 4px;
+             cursor: pointer;
+             font-size: 14px;
          }
          button.submit-btn:hover { background-color: #218838; }
       </style>
@@ -394,17 +374,17 @@ def edit_scheduled_post(post_id):
          <form method="post">
              <label for="post_date">Data publikacji:</label>
              <input type="date" id="post_date" name="post_date" value="{{ post.date }}" required>
-
+             
              <label for="post_time">Godzina publikacji:</label>
              <input type="time" id="post_time" name="post_time"
                     value="{{ post.time.strftime('%H:%M') if post.time else '' }}" required>
-
+             
              <label for="topic">Temat:</label>
              <input type="text" id="topic" name="topic" value="{{ post.topic }}" required>
-
+             
              <label for="description">Opis/treść:</label>
              <textarea id="description" name="description" rows="3" required>{{ post.description }}</textarea>
-
+             
              <button type="submit" class="submit-btn">Zapisz zmiany</button>
          </form>
       </div>
@@ -416,7 +396,7 @@ def edit_scheduled_post(post_id):
 @automation_bp.route('/tiktok/plan/delete/<int:post_id>', methods=['POST'])
 def delete_scheduled_post(post_id):
     """
-    Usunięcie wpisu z harmonogramu.
+    Usuwa wpis z harmonogramu.
     """
     if 'user_id' not in session:
         flash("Musisz być zalogowany, aby usuwać wpisy.", "error")
@@ -435,27 +415,25 @@ def delete_scheduled_post(post_id):
     flash("Wpis został usunięty.", "success")
     return redirect(url_for('automation.automation_tiktok_plan'))
 
+
 @automation_bp.route('/tiktok/timeline')
 def automation_tiktok_timeline():
-    # Upewnij się, że użytkownik jest zalogowany
+    """
+    Wizualizacja harmonogramu przy użyciu FullCalendar.
+    """
     if 'user_id' not in session:
         flash("Musisz być zalogowany, aby przeglądać harmonogram.", "error")
         return redirect(url_for('login'))
     
     user_id = session['user_id']
-    # Import ScheduledPost z automatyzacyjnych modeli
-    from automation_models import ScheduledPost
-
-    # Pobieramy zaplanowane posty dla danego użytkownika
     scheduled_posts = ScheduledPost.query.filter_by(user_id=user_id).order_by(
         ScheduledPost.date.asc(), ScheduledPost.time.asc()
     ).all()
 
     # Przygotowujemy dane dla FullCalendar – każdy post to zdarzenie
     events = []
-    from datetime import datetime
     for post in scheduled_posts:
-        # Łączymy datę i czas, aby uzyskać pełny timestamp
+        from datetime import datetime
         event_start = datetime.combine(post.date, post.time).isoformat()
         events.append({
             'title': post.topic,
@@ -463,14 +441,13 @@ def automation_tiktok_timeline():
             'description': post.description,
         })
 
-    # Szablon HTML z FullCalendar
     timeline_template = '''
     <!DOCTYPE html>
     <html lang="pl">
     <head>
       <meta charset="UTF-8">
       <title>Timeline - Plan Treści dla TikToka</title>
-      <!-- Wczytanie FullCalendar CSS i JS z CDN -->
+      <!-- FullCalendar z CDN -->
       <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet">
       <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
       <style>
@@ -542,6 +519,7 @@ def automation_tiktok_rodzaje():
     '''
     return render_template_string(rodzaje_template)
 
+
 @automation_bp.route('/tiktok/scenariusze')
 def automation_tiktok_scenariusze():
     scenariusze_template = '''
@@ -556,6 +534,7 @@ def automation_tiktok_scenariusze():
     </html>
     '''
     return render_template_string(scenariusze_template)
+
 
 @automation_bp.route('/facebook')
 def automation_facebook():

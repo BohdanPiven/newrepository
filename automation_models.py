@@ -1,5 +1,4 @@
-# automation_models.py
-from app import db  # lub inny sposób importu instancji SQLAlchemy, np. from my_app import db
+from app import db  # Upewnij się, że importujesz instancję SQLAlchemy z głównego pliku aplikacji
 from datetime import date, time
 
 class ScheduledPost(db.Model):

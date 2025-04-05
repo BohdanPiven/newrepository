@@ -1,6 +1,5 @@
 from flask import Blueprint, render_template_string, url_for, request, flash, redirect, session
 from datetime import datetime
-# from automation_models import ScheduledPost
 
 automation_bp = Blueprint('automation', __name__, url_prefix='/automation')
 
@@ -52,26 +51,26 @@ def automation_home():
                 margin-right: 5px;
             }
             h1 {
-                font-size: 20px;     /* mniejszy rozmiar czcionki */
-                margin-bottom: 10px; /* mniejszy odstęp pod tytułem */
+                font-size: 20px;     
+                margin-bottom: 10px; 
                 text-align: left;
             }
             p {
-                font-size: 14px;     /* mniejszy font w akapicie */
-                margin-bottom: 10px; /* mniejszy odstęp między akapitami */
+                font-size: 14px;    
+                margin-bottom: 10px; 
                 text-align: left;
-                color: #555;         /* delikatnie ciemniejszy kolor tekstu */
+                color: #555; 
             }
             .platform-list a {
                 display: block;
-                margin: 6px 0;              /* zmniejszone odstępy między przyciskami */
-                padding: 8px 12px;          /* mniejszy rozmiar przycisków */
+                margin: 6px 0;  
+                padding: 8px 12px;
                 background-color: #1f8ef1;
                 color: #fff;
                 text-decoration: none;
                 border-radius: 4px;
                 text-align: left;
-                font-size: 14px;            /* nieco mniejsza czcionka */
+                font-size: 14px;  
             }
             .platform-list a:hover {
                 background-color: #0a6db9;
@@ -93,7 +92,6 @@ def automation_home():
     </html>
     '''
     return render_template_string(automation_home_template)
-
 
 
 @automation_bp.route('/tiktok')
@@ -140,9 +138,6 @@ def automation_tiktok():
     '''
     return render_template_string(tiktok_template)
 
-from flask import Blueprint, render_template_string, url_for, request, flash, redirect, session
-from datetime import datetime
-from models import db, ScheduledPost
 
 @automation_bp.route('/tiktok/plan', methods=['GET', 'POST'])
 def automation_tiktok_plan():
@@ -154,17 +149,14 @@ def automation_tiktok_plan():
     user_id = session['user_id']
 
     if request.method == 'POST':
-        # Pobieramy dane z formularza
         post_date_str = request.form.get('post_date')
         post_time_str = request.form.get('post_time')
         topic = request.form.get('topic')
         description = request.form.get('description')
 
-        # Konwersja stringa na obiekty date/time (uwaga na format)
-        from datetime import datetime, date, time
-        # Np. "2025-04-10"
+        # Konwersja stringa na obiekty date/time
+        from datetime import date, time
         date_obj = datetime.strptime(post_date_str, "%Y-%m-%d").date()
-        # Np. "10:00"
         time_obj = datetime.strptime(post_time_str, "%H:%M").time()
 
         # Tworzymy obiekt ScheduledPost i zapisujemy do bazy
@@ -181,8 +173,9 @@ def automation_tiktok_plan():
         flash("Nowy wpis został dodany do harmonogramu.", "success")
         return redirect(url_for('automation.automation_tiktok_plan'))
 
-    # Jeżeli GET: pobieramy wszystkie posty danego użytkownika z bazy:
-    scheduled_posts = ScheduledPost.query.filter_by(user_id=user_id).order_by(ScheduledPost.date.asc(), ScheduledPost.time.asc()).all()
+    scheduled_posts = ScheduledPost.query.filter_by(user_id=user_id).order_by(
+        ScheduledPost.date.asc(), ScheduledPost.time.asc()
+    ).all()
 
     plan_template = '''
     <!DOCTYPE html>
@@ -316,7 +309,6 @@ def automation_tiktok_plan():
     return render_template_string(plan_template, scheduled_posts=scheduled_posts)
 
 
-
 @automation_bp.route('/tiktok/rodzaje')
 def automation_tiktok_rodzaje():
     rodzaje_template = '''
@@ -339,7 +331,6 @@ def automation_tiktok_rodzaje():
              padding: 40px;
              position: relative;
              box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-             min-height: 100vh;
          }
          .back-button {
              position: absolute;
@@ -405,7 +396,6 @@ def automation_tiktok_scenariusze():
              padding: 40px;
              position: relative;
              box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-             min-height: 100vh;
          }
          .back-button {
              position: absolute;

@@ -1,4 +1,6 @@
-from flask import Blueprint, render_template_string, url_for, request, flash, redirect
+from flask import Blueprint, render_template_string, url_for, request, flash, redirect, session
+from datetime import datetime
+from models import db, ScheduledPost
 
 automation_bp = Blueprint('automation', __name__, url_prefix='/automation')
 
@@ -138,28 +140,50 @@ def automation_tiktok():
     '''
     return render_template_string(tiktok_template)
 
+from flask import Blueprint, render_template_string, url_for, request, flash, redirect, session
+from datetime import datetime
+from models import db, ScheduledPost
+
 @automation_bp.route('/tiktok/plan', methods=['GET', 'POST'])
 def automation_tiktok_plan():
-    # Na potrzeby testów trzymamy dane w pamięci – w praktyce zapiszemy je w bazie danych
-    scheduled_posts = [
-        {"date": "2025-04-10", "time": "10:00", "topic": "Porada CV", "description": "Jak napisać CV, które przyciąga uwagę."},
-        {"date": "2025-04-12", "time": "15:00", "topic": "Przygotowanie do rozmowy", "description": "Kluczowe pytania i odpowiedzi."}
-    ]
-    
+    # Sprawdź, czy użytkownik jest zalogowany:
+    if 'user_id' not in session:
+        flash("Musisz być zalogowany, aby zarządzać planem treści.", "error")
+        return redirect(url_for('login'))
+
+    user_id = session['user_id']
+
     if request.method == 'POST':
         # Pobieramy dane z formularza
-        post_date = request.form.get('post_date')
-        post_time = request.form.get('post_time')
+        post_date_str = request.form.get('post_date')
+        post_time_str = request.form.get('post_time')
         topic = request.form.get('topic')
         description = request.form.get('description')
-        
-        # Tutaj dodałbyś logikę zapisu do bazy danych – na potrzeby testu dodajemy do listy
-        new_post = {"date": post_date, "time": post_time, "topic": topic, "description": description}
-        scheduled_posts.append(new_post)
+
+        # Konwersja stringa na obiekty date/time (uwaga na format)
+        from datetime import datetime, date, time
+        # Np. "2025-04-10"
+        date_obj = datetime.strptime(post_date_str, "%Y-%m-%d").date()
+        # Np. "10:00"
+        time_obj = datetime.strptime(post_time_str, "%H:%M").time()
+
+        # Tworzymy obiekt ScheduledPost i zapisujemy do bazy
+        new_post = ScheduledPost(
+            date=date_obj,
+            time=time_obj,
+            topic=topic,
+            description=description,
+            user_id=user_id
+        )
+        db.session.add(new_post)
+        db.session.commit()
+
         flash("Nowy wpis został dodany do harmonogramu.", "success")
-        # W praktyce przekieruj do GET, żeby odświeżyć listę
         return redirect(url_for('automation.automation_tiktok_plan'))
-    
+
+    # Jeżeli GET: pobieramy wszystkie posty danego użytkownika z bazy:
+    scheduled_posts = ScheduledPost.query.filter_by(user_id=user_id).order_by(ScheduledPost.date.asc(), ScheduledPost.time.asc()).all()
+
     plan_template = '''
     <!DOCTYPE html>
     <html lang="pl">
@@ -289,7 +313,6 @@ def automation_tiktok_plan():
     </body>
     </html>
     '''
-    # Przekaż również listę zaplanowanych postów do szablonu
     return render_template_string(plan_template, scheduled_posts=scheduled_posts)
 
 

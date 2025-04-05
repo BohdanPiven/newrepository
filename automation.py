@@ -435,6 +435,97 @@ def delete_scheduled_post(post_id):
     flash("Wpis został usunięty.", "success")
     return redirect(url_for('automation.automation_tiktok_plan'))
 
+@automation_bp.route('/tiktok/timeline')
+def automation_tiktok_timeline():
+    # Upewnij się, że użytkownik jest zalogowany
+    if 'user_id' not in session:
+        flash("Musisz być zalogowany, aby przeglądać harmonogram.", "error")
+        return redirect(url_for('login'))
+    
+    user_id = session['user_id']
+    # Import ScheduledPost z automatyzacyjnych modeli
+    from automation_models import ScheduledPost
+
+    # Pobieramy zaplanowane posty dla danego użytkownika
+    scheduled_posts = ScheduledPost.query.filter_by(user_id=user_id).order_by(
+        ScheduledPost.date.asc(), ScheduledPost.time.asc()
+    ).all()
+
+    # Przygotowujemy dane dla FullCalendar – każdy post to zdarzenie
+    events = []
+    from datetime import datetime
+    for post in scheduled_posts:
+        # Łączymy datę i czas, aby uzyskać pełny timestamp
+        event_start = datetime.combine(post.date, post.time).isoformat()
+        events.append({
+            'title': post.topic,
+            'start': event_start,
+            'description': post.description,
+        })
+
+    # Szablon HTML z FullCalendar
+    timeline_template = '''
+    <!DOCTYPE html>
+    <html lang="pl">
+    <head>
+      <meta charset="UTF-8">
+      <title>Timeline - Plan Treści dla TikToka</title>
+      <!-- Wczytanie FullCalendar CSS i JS z CDN -->
+      <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet">
+      <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+      <style>
+         body {
+             font-family: Arial, sans-serif;
+             background-color: #f2f2f2;
+             margin: 20px;
+             padding: 0;
+         }
+         #calendar {
+             max-width: 900px;
+             margin: 0 auto;
+         }
+         .back-button {
+             display: inline-block;
+             margin-bottom: 20px;
+             text-decoration: none;
+             background-color: #1f8ef1;
+             color: #fff;
+             padding: 6px 10px;
+             border-radius: 4px;
+         }
+         .back-button:hover {
+             background-color: #0a6db9;
+         }
+      </style>
+    </head>
+    <body>
+      <a href="{{ url_for('automation.automation_tiktok') }}" class="back-button">← Back</a>
+      <h1>Timeline - Plan Treści dla TikToka</h1>
+      <div id="calendar"></div>
+      <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var calendarEl = document.getElementById('calendar');
+            var calendar = new FullCalendar.Calendar(calendarEl, {
+              initialView: 'dayGridMonth',
+              headerToolbar: {
+                left: 'prev,next today',
+                center: 'title',
+                right: 'dayGridMonth,timeGridWeek,timeGridDay'
+              },
+              events: {{ events|tojson }},
+              eventClick: function(info) {
+                // Wyświetlenie alertu z informacjami o wpisie
+                alert('Temat: ' + info.event.title + '\\nOpis: ' + info.event.extendedProps.description);
+              }
+            });
+            calendar.render();
+        });
+      </script>
+    </body>
+    </html>
+    '''
+    return render_template_string(timeline_template, events=events)
+
 
 @automation_bp.route('/tiktok/rodzaje')
 def automation_tiktok_rodzaje():

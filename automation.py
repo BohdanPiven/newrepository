@@ -138,8 +138,28 @@ def automation_tiktok():
     '''
     return render_template_string(tiktok_template)
 
-@automation_bp.route('/tiktok/plan')
+@automation_bp.route('/tiktok/plan', methods=['GET', 'POST'])
 def automation_tiktok_plan():
+    # Na potrzeby testów trzymamy dane w pamięci – w praktyce zapiszemy je w bazie danych
+    scheduled_posts = [
+        {"date": "2025-04-10", "time": "10:00", "topic": "Porada CV", "description": "Jak napisać CV, które przyciąga uwagę."},
+        {"date": "2025-04-12", "time": "15:00", "topic": "Przygotowanie do rozmowy", "description": "Kluczowe pytania i odpowiedzi."}
+    ]
+    
+    if request.method == 'POST':
+        # Pobieramy dane z formularza
+        post_date = request.form.get('post_date')
+        post_time = request.form.get('post_time')
+        topic = request.form.get('topic')
+        description = request.form.get('description')
+        
+        # Tutaj dodałbyś logikę zapisu do bazy danych – na potrzeby testu dodajemy do listy
+        new_post = {"date": post_date, "time": post_time, "topic": topic, "description": description}
+        scheduled_posts.append(new_post)
+        flash("Nowy wpis został dodany do harmonogramu.", "success")
+        # W praktyce przekieruj do GET, żeby odświeżyć listę
+        return redirect(url_for('automation.automation_tiktok_plan'))
+    
     plan_template = '''
     <!DOCTYPE html>
     <html lang="pl">
@@ -155,22 +175,21 @@ def automation_tiktok_plan():
          }
          .container {
              max-width: 800px;
-             margin: 0 auto;
+             margin: 20px auto;
              background-color: #fff;
-             padding: 40px;
-             position: relative;
+             padding: 20px;
              box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-             min-height: 100vh;
+             position: relative;
          }
          .back-button {
              position: absolute;
-             top: 20px;
-             left: 20px;
-             font-size: 16px;
+             top: 10px;
+             left: 10px;
+             font-size: 14px;
              text-decoration: none;
              color: #fff;
              background-color: #1f8ef1;
-             padding: 8px 12px;
+             padding: 6px 10px;
              border-radius: 4px;
              display: inline-flex;
              align-items: center;
@@ -184,11 +203,55 @@ def automation_tiktok_plan():
          }
          h1 {
              text-align: left;
-             margin-bottom: 30px;
-         }
-         p {
-             text-align: left;
              margin-bottom: 20px;
+             font-size: 20px;
+         }
+         form {
+             margin-bottom: 20px;
+         }
+         label {
+             display: block;
+             margin-top: 10px;
+             font-size: 14px;
+             color: #333;
+         }
+         input[type="date"],
+         input[type="time"],
+         input[type="text"],
+         textarea {
+             width: 100%;
+             padding: 8px;
+             margin-top: 5px;
+             border: 1px solid #ccc;
+             border-radius: 4px;
+             font-size: 14px;
+         }
+         button.submit-btn {
+             margin-top: 15px;
+             padding: 10px 20px;
+             background-color: #1f8ef1;
+             color: #fff;
+             border: none;
+             border-radius: 4px;
+             cursor: pointer;
+             font-size: 14px;
+         }
+         button.submit-btn:hover {
+             background-color: #0a6db9;
+         }
+         .post-list {
+             margin-top: 30px;
+         }
+         .post-item {
+             border-bottom: 1px solid #eee;
+             padding: 10px 0;
+             font-size: 14px;
+         }
+         .post-item:last-child {
+             border-bottom: none;
+         }
+         .post-item strong {
+             color: #1f8ef1;
          }
       </style>
     </head>
@@ -196,12 +259,39 @@ def automation_tiktok_plan():
       <div class="container">
          <a href="{{ url_for('automation.automation_tiktok') }}" class="back-button">back</a>
          <h1>Plan Treści dla TikToka</h1>
-         <p>Tu opisujesz organizację i plan treści dla TikToka.</p>
+         <form method="post">
+             <label for="post_date">Data publikacji:</label>
+             <input type="date" id="post_date" name="post_date" required>
+             
+             <label for="post_time">Godzina publikacji:</label>
+             <input type="time" id="post_time" name="post_time" required>
+             
+             <label for="topic">Temat:</label>
+             <input type="text" id="topic" name="topic" required>
+             
+             <label for="description">Opis/treść:</label>
+             <textarea id="description" name="description" rows="3" required></textarea>
+             
+             <button type="submit" class="submit-btn">Dodaj wpis do harmonogramu</button>
+         </form>
+         
+         <div class="post-list">
+             <h2>Zaplanowane posty:</h2>
+             {% for post in scheduled_posts %}
+             <div class="post-item">
+                 <p><strong>{{ post.topic }}</strong></p>
+                 <p>{{ post.date }} o {{ post.time }}</p>
+                 <p>{{ post.description }}</p>
+             </div>
+             {% endfor %}
+         </div>
       </div>
     </body>
     </html>
     '''
-    return render_template_string(plan_template)
+    # Przekaż również listę zaplanowanych postów do szablonu
+    return render_template_string(plan_template, scheduled_posts=scheduled_posts)
+
 
 
 @automation_bp.route('/tiktok/rodzaje')

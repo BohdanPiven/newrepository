@@ -143,6 +143,7 @@ def automation_tiktok():
 
 @automation_bp.route('/tiktok/plan', methods=['GET', 'POST'])
 def automation_tiktok_plan():
+    from automation_models import ScheduledPost, db  # importy modeli
     # Sprawdź, czy użytkownik jest zalogowany
     if 'user_id' not in session:
         flash("Musisz być zalogowany, aby zarządzać planem treści.", "error")
@@ -151,17 +152,17 @@ def automation_tiktok_plan():
     user_id = session['user_id']
 
     if request.method == 'POST':
-        # Pobieramy dane z formularza
+        # Pobranie danych z formularza
         post_date_str = request.form.get('post_date')
         post_time_str = request.form.get('post_time')
         topic = request.form.get('topic')
         description = request.form.get('description')
 
-        # Konwersja ciągów znaków na obiekty date/time
+        # Konwersja stringów na obiekty date/time
         date_obj = datetime.strptime(post_date_str, "%Y-%m-%d").date()
         time_obj = datetime.strptime(post_time_str, "%H:%M").time()
 
-        # Tworzymy nowy wpis harmonogramu i zapisujemy go do bazy
+        # Tworzenie i zapisywanie nowego wpisu
         new_post = ScheduledPost(
             date=date_obj,
             time=time_obj,
@@ -175,11 +176,12 @@ def automation_tiktok_plan():
         flash("Nowy wpis został dodany do harmonogramu.", "success")
         return redirect(url_for('automation.automation_tiktok_plan'))
 
-    # Pobieramy zaplanowane posty dla aktualnego użytkownika
+    # Pobieramy istniejące wpisy
     scheduled_posts = ScheduledPost.query.filter_by(user_id=user_id).order_by(
         ScheduledPost.date.asc(), ScheduledPost.time.asc()
     ).all()
 
+    # Szablon z AJAX-owym usuwaniem
     plan_template = '''
     <!DOCTYPE html>
     <html lang="pl">
@@ -214,7 +216,9 @@ def automation_tiktok_plan():
              display: inline-flex;
              align-items: center;
          }
-         .back-button:hover { background-color: #0a6db9; }
+         .back-button:hover {
+             background-color: #0a6db9;
+         }
          .back-button:before {
              content: "←";
              margin-right: 5px;
@@ -224,7 +228,9 @@ def automation_tiktok_plan():
              margin-bottom: 20px;
              font-size: 20px;
          }
-         form { margin-bottom: 20px; }
+         form {
+             margin-bottom: 20px;
+         }
          label {
              display: block;
              margin-top: 10px;
@@ -252,7 +258,9 @@ def automation_tiktok_plan():
              cursor: pointer;
              font-size: 14px;
          }
-         button.submit-btn:hover { background-color: #0a6db9; }
+         button.submit-btn:hover {
+             background-color: #0a6db9;
+         }
          .delete-btn {
              background-color: #e74c3c;
              color: #fff;
@@ -263,21 +271,31 @@ def automation_tiktok_plan():
              font-size: 14px;
              margin-top: 10px;
          }
-         .delete-btn:hover { background-color: #c0392b; }
-         .post-list { margin-top: 30px; }
+         .delete-btn:hover {
+             background-color: #c0392b;
+         }
+         .post-list {
+             margin-top: 30px;
+         }
          .post-item {
              border-bottom: 1px solid #eee;
              padding: 10px 0;
              font-size: 14px;
          }
-         .post-item:last-child { border-bottom: none; }
-         .post-item strong { color: #1f8ef1; }
+         .post-item:last-child {
+             border-bottom: none;
+         }
+         .post-item strong {
+             color: #1f8ef1;
+         }
       </style>
     </head>
     <body>
       <div class="container">
          <a href="{{ url_for('automation.automation_tiktok') }}" class="back-button">back</a>
          <h1>Plan Treści dla TikToka</h1>
+
+         <!-- Formularz dodawania nowego wpisu -->
          <form method="post">
              <label for="post_date">Data publikacji:</label>
              <input type="date" id="post_date" name="post_date" required>
@@ -294,37 +312,79 @@ def automation_tiktok_plan():
              <button type="submit" class="submit-btn">Dodaj wpis do harmonogramu</button>
          </form>
          
+         <!-- Lista zaplanowanych postów -->
          <div class="post-list">
              <h2>Zaplanowane posty:</h2>
              {% for post in scheduled_posts %}
-             <div class="post-item">
+             <div class="post-item" id="post-item-{{ post.id }}">
                  <p><strong>{{ post.topic }}</strong></p>
                  <p>{{ post.date }} o {{ post.time }}</p>
                  <p>{{ post.description }}</p>
-                 <form action="{{ url_for('automation.delete_scheduled_post', post_id=post.id) }}" method="post" onsubmit="return confirm('Czy na pewno chcesz usunąć ten wpis?');">
-                     <button type="submit" class="delete-btn">Usuń</button>
-                 </form>
+                 <!-- Przycisk usuwania z AJAX-em -->
+                 <button class="delete-btn" onclick="removeScheduledPost({{ post.id }})">Usuń</button>
              </div>
              {% endfor %}
          </div>
       </div>
+
+      <script>
+      // Funkcja AJAX do usuwania wpisu
+      function removeScheduledPost(postId) {
+        if (!confirm("Czy na pewno chcesz usunąć ten wpis?")) {
+          return;
+        }
+        fetch("{{ url_for('automation.delete_scheduled_post_ajax') }}", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ post_id: postId })
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            // Usuwamy element z DOM
+            const item = document.getElementById("post-item-" + postId);
+            if (item) {
+              item.remove();
+            }
+          } else {
+            alert(data.message);
+          }
+        })
+        .catch(error => console.error("Błąd:", error));
+      }
+      </script>
     </body>
     </html>
     '''
+
     return render_template_string(plan_template, scheduled_posts=scheduled_posts)
 
 
-@automation_bp.route('/tiktok/plan/delete/<int:post_id>', methods=['POST'])
-def delete_scheduled_post(post_id):
+@automation_bp.route('/tiktok/plan/delete_ajax', methods=['POST'])
+def delete_scheduled_post_ajax():
     from automation_models import ScheduledPost, db
+
+    if 'user_id' not in session:
+        return jsonify({"success": False, "message": "Musisz być zalogowany."}), 401
+    
+    user_id = session['user_id']
+    data = request.get_json()
+    post_id = data.get('post_id')
+
+    if not post_id:
+        return jsonify({"success": False, "message": "Brak ID wpisu (post_id)."}), 400
+
     scheduled_post = ScheduledPost.query.get(post_id)
-    if scheduled_post and scheduled_post.user_id == session.get('user_id'):
-        db.session.delete(scheduled_post)
-        db.session.commit()
-        flash("Wpis został usunięty z harmonogramu.", "success")
-    else:
-        flash("Wpis nie istnieje lub nie masz uprawnień do jego usunięcia.", "error")
-    return redirect(url_for('automation.automation_tiktok_plan'))
+    if not scheduled_post or scheduled_post.user_id != user_id:
+        return jsonify({"success": False, "message": "Wpis nie istnieje lub brak dostępu."}), 403
+
+    db.session.delete(scheduled_post)
+    db.session.commit()
+
+    return jsonify({"success": True, "message": "Wpis usunięty."}), 200
+
 
 
 @automation_bp.route('/tiktok/rodzaje')

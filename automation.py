@@ -64,9 +64,6 @@ def automation_home():
 
 @automation_bp.route('/tiktok')
 def automation_tiktok():
-    """
-    Prosta strona z nawigacją do planu treści / rodzajów wideo / scenariuszy.
-    """
     tiktok_template = '''
     <!DOCTYPE html>
     <html lang="pl">
@@ -85,6 +82,18 @@ def automation_tiktok():
                 margin: 0 10px; text-decoration: none; color: #1f8ef1;
             }
             nav a:hover { text-decoration: underline; }
+            .login-link {
+                display: inline-block;
+                margin-top: 20px;
+                padding: 10px 15px;
+                background-color: #1f8ef1;
+                color: #fff;
+                text-decoration: none;
+                border-radius: 4px;
+            }
+            .login-link:hover {
+                background-color: #0a6db9;
+            }
         </style>
     </head>
     <body>
@@ -98,12 +107,21 @@ def automation_tiktok():
             </nav>
             <hr>
             <p>Tu możesz skonfigurować automatyzację i plan publikacji na TikToku.</p>
+            
+            <!-- DODAJ LINK DO LOGOWANIA PRZEZ TIKTOK: -->
+            <p>
+              <a href="{{ url_for('tiktok_auth.tiktok_login') }}" class="login-link">
+                Zaloguj się przez TikTok
+              </a>
+            </p>
+            
             <p><a href="{{ url_for('automation.automation_home') }}">Powrót do listy platform</a></p>
         </div>
     </body>
     </html>
     '''
     return render_template_string(tiktok_template)
+
 
 
 @automation_bp.route('/tiktok/plan', methods=['GET', 'POST'])

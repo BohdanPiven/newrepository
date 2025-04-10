@@ -22,7 +22,12 @@ def tiktok_login():
         "response_type=code&"
         "state=xyz123"
     )
+
+    # Dodaj print tutaj
+    print("DEBUG authorize_url:", authorize_url)
+
     return redirect(authorize_url)
+
 
 @tiktok_auth_bp.route('/callback')
 def tiktok_callback():

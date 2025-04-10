@@ -563,7 +563,10 @@ def automation_facebook():
     fb_template = '''
     <!DOCTYPE html>
     <html lang="pl">
-    <head><title>Automatyzacja Facebook</title></head>
+    <head>
+        <meta charset="UTF-8">
+        <title>Automatyzacja Facebook</title>
+    </head>
     <body>
         <h1>Automatyzacja Facebook - Placeholder</h1>
         <p>Konfiguracja automatyzacji dla Facebooka (w przyszłości).</p>
@@ -576,8 +579,8 @@ def automation_facebook():
 @automation_bp.route('/facebook/publish', methods=['GET', 'POST'])
 def automation_facebook_publish():
     """
-    Formularz do wprowadzania treści posta i wgrywania pliku,
-    a następnie wywołanie automatyzacji publikacji (Selenium).
+    Formularz do wprowadzania treści posta i wgrywania pliku, a następnie wywołanie funkcji publikującej,
+    która wykorzystuje Selenium do publikacji postu na Facebooku.
     """
     form_html = '''
     <!DOCTYPE html>
@@ -593,7 +596,7 @@ def automation_facebook_publish():
         }
         h1 { margin-bottom: 20px; }
         label { display: block; margin: 10px 0 5px; }
-        input[type="file"], textarea, input[type="text"] {
+        input[type="file"], textarea {
           width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;
         }
         button { margin-top: 15px; padding: 10px 20px; background: #1f8ef1; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
@@ -622,31 +625,28 @@ def automation_facebook_publish():
     if request.method == 'GET':
         return render_template_string(form_html)
 
-    # POST:
+    # POST: przetwarzanie formularza
     post_text = request.form.get('post_text', '').strip()
     media_file = request.files.get('media_file')
 
-    # Walidacja minimalna
     if not post_text:
         flash("Treść posta jest wymagana.", "error")
         return render_template_string(form_html)
 
-    # Jeśli wybrano plik, zapisz go lokalnie w folderze "uploads"
     file_path = None
     if media_file and media_file.filename:
         uploads_dir = os.path.join(os.getcwd(), 'uploads')
         os.makedirs(uploads_dir, exist_ok=True)
         
-        safe_filename = media_file.filename  # w praktyce sanitacja
+        safe_filename = media_file.filename  # W praktyce zastosuj sanitację nazwy pliku
         file_path = os.path.join(uploads_dir, safe_filename)
         media_file.save(file_path)
 
-    # Wywołanie Selenium
     try:
+        # Wywołanie funkcji publikującej – ta funkcja wykonuje logowanie i iteruje po grupach
         report = publish_post_to_facebook(post_text=post_text, file_path=file_path)
-        flash("Post został opublikowany. Sprawdź konsolę lub raport e-mail.", "success")
+        flash("Post został opublikowany. Sprawdź raport e-mail lub konsolę.", "success")
     except Exception as e:
         flash(f"Wystąpił błąd: {str(e)}", "error")
 
     return redirect(url_for('automation.automation_facebook_publish'))
-

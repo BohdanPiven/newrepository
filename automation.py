@@ -1,7 +1,11 @@
 from flask import Blueprint, render_template_string, url_for, request, flash, redirect, session, jsonify
 from datetime import datetime
+import os  # Potrzebne do obsługi plików
 from app import db  # import instancji SQLAlchemy z Twojego pliku głównego (app.py)
 from automation_models import ScheduledPost  # Twój model zdefiniowany w automation_models.py
+
+# ➊ – zaimportuj funkcję publikującą z Twojego pliku selenium_facebook_post.py:
+from selenium_facebook_post import publish_post_to_facebook
 
 automation_bp = Blueprint('automation', __name__, url_prefix='/automation')
 
@@ -568,4 +572,81 @@ def automation_facebook():
     </html>
     '''
     return render_template_string(fb_template)
+
+@automation_bp.route('/facebook/publish', methods=['GET', 'POST'])
+def automation_facebook_publish():
+    """
+    Formularz do wprowadzania treści posta i wgrywania pliku,
+    a następnie wywołanie automatyzacji publikacji (Selenium).
+    """
+    form_html = '''
+    <!DOCTYPE html>
+    <html lang="pl">
+    <head>
+      <meta charset="UTF-8">
+      <title>Publikacja na Facebook</title>
+      <style>
+        body { font-family: Arial, sans-serif; background-color: #f2f2f2; }
+        .container {
+          max-width: 600px; margin: 30px auto; background: #fff; padding: 20px; 
+          border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        h1 { margin-bottom: 20px; }
+        label { display: block; margin: 10px 0 5px; }
+        input[type="file"], textarea, input[type="text"] {
+          width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;
+        }
+        button { margin-top: 15px; padding: 10px 20px; background: #1f8ef1; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0a6db9; }
+        .back-link { display: inline-block; margin-top: 20px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h1>Publikacja na Facebook</h1>
+        <form method="POST" enctype="multipart/form-data">
+          <label for="post_text">Treść posta:</label>
+          <textarea id="post_text" name="post_text" rows="4" required></textarea>
+          
+          <label for="media_file">Załącz plik (obrazek lub wideo MP4, opcjonalnie):</label>
+          <input type="file" id="media_file" name="media_file" accept="image/*,video/mp4">
+          
+          <button type="submit">Publikuj</button>
+        </form>
+        <p class="back-link"><a href="{{ url_for('automation.automation_facebook') }}">Powrót</a></p>
+      </div>
+    </body>
+    </html>
+    '''
+
+    if request.method == 'GET':
+        return render_template_string(form_html)
+
+    # POST:
+    post_text = request.form.get('post_text', '').strip()
+    media_file = request.files.get('media_file')
+
+    # Walidacja minimalna
+    if not post_text:
+        flash("Treść posta jest wymagana.", "error")
+        return render_template_string(form_html)
+
+    # Jeśli wybrano plik, zapisz go lokalnie w folderze "uploads"
+    file_path = None
+    if media_file and media_file.filename:
+        uploads_dir = os.path.join(os.getcwd(), 'uploads')
+        os.makedirs(uploads_dir, exist_ok=True)
+        
+        safe_filename = media_file.filename  # w praktyce sanitacja
+        file_path = os.path.join(uploads_dir, safe_filename)
+        media_file.save(file_path)
+
+    # Wywołanie Selenium
+    try:
+        report = publish_post_to_facebook(post_text=post_text, file_path=file_path)
+        flash("Post został opublikowany. Sprawdź konsolę lub raport e-mail.", "success")
+    except Exception as e:
+        flash(f"Wystąpił błąd: {str(e)}", "error")
+
+    return redirect(url_for('automation.automation_facebook_publish'))
 

@@ -114,6 +114,10 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 from automation import automation_bp
 app.register_blueprint(automation_bp)
 
+# Dodaj tutaj import i rejestrację blueprintu z TikTok
+from tiktok_auth import tiktok_auth_bp
+app.register_blueprint(tiktok_auth_bp)
+
 # ----------------------------------------
 # KONFIGURACJA GOOGLE CLOUD STORAGE
 # ----------------------------------------

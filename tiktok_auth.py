@@ -37,24 +37,24 @@ TIKTOK_TOKEN_URL = "https://open.tiktokapis.com/v2/oauth/token/"
 # ───────────────────────────────────────────────────────────────────────────────
 # /login  → przekierowanie do logowania TikToka
 # ───────────────────────────────────────────────────────────────────────────────
-@tiktok_auth_bp.route("/login")
-def tiktok_login() -> "flask.Response":
-    scopes = "user.info.basic,video.upload,video.list"
 
-    redirect_enc = quote_plus(TIKTOK_REDIRECT_URI, safe="")  # <‑‑ URI‑encoding
+SCOPES = "user.info.basic video.upload video.list"
+
+@tiktok_auth_bp.route("/login")
+def tiktok_login():
+    redirect_enc = quote_plus(TIKTOK_REDIRECT_URI, safe="")
+    scopes_enc   = quote_plus(SCOPES,              safe="")  # ❷ kodujemy
 
     authorize_url = (
         f"{TIKTOK_AUTH_URL}"
         f"?client_key={TIKTOK_CLIENT_KEY}"
         f"&redirect_uri={redirect_enc}"
-        f"&scope={scopes}"
+        f"&scope={scopes_enc}"
         f"&response_type=code"
         f"&state=xyz123"
     )
 
-    # log w kontekście aplikacji
     current_app.logger.debug("authorize_url: %s", authorize_url)
-
     return redirect(authorize_url)
 
 # ───────────────────────────────────────────────────────────────────────────────

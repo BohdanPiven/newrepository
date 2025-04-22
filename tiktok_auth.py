@@ -32,11 +32,11 @@ TIKTOK_REDIRECT_URI  = os.getenv("TIKTOK_REDIRECT_URI")     # https://…/tiktok
 # ───────────────────────────────────────────────
 # Sandbox v2 endpointy
 # ───────────────────────────────────────────────
-TIKTOK_AUTH_URL   = "https://www.tiktok.com/v2/auth/authorize/"
+TIKTOK_AUTH_URL   = "https://www.tiktok.com/v2/auth/authorize"
 TIKTOK_TOKEN_URL  = "https://open.tiktokapis.com/v2/oauth/token/"
 TIKTOK_UPLOAD_URL = "https://open-sandbox.tiktokapis.com/v2/post/publish/video/upload/"
 
-SCOPES = "user.info.basic video.upload video.list"          # spacją, nie przecinkami!
+SCOPES = "user.info.basic,video.upload,video.list"          # spacją, nie przecinkami!
 
 # ───────────────────────────────────────────────
 # /login  → przekierowanie do logowania TikToka
@@ -51,6 +51,7 @@ def tiktok_login() -> "flask.Response":
         f"&response_type=code"
         f"&state=xyz123"
     )
+    current_app.logger.warning("ENV client_key=%r", TIKTOK_CLIENT_KEY)
     current_app.logger.debug("authorize_url = %s", auth_url)
     return redirect(auth_url)
 

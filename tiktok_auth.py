@@ -20,7 +20,7 @@ TIKTOK_REDIRECT_URI  = os.getenv(
 # ------------------------------------------------------------------------------
 # Sandbox v2 endpointy
 # ------------------------------------------------------------------------------
-TIKTOK_AUTH_URL  = "https://www.tiktok.com/v2/auth/authorize/"
+TIKTOK_AUTH_URL = "https://www.tiktok.com/v2/auth/authorize"
 TIKTOK_TOKEN_URL = "https://open.tiktokapis.com/v2/oauth/token/"
 
 # ------------------------------------------------------------------------------

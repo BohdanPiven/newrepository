@@ -27,8 +27,8 @@ TIKTOK_REDIRECT_URI  = os.getenv("TIKTOK_REDIRECT_URI")
 # ────────────────────────────────────────────────────────────────────────────────
 # SANDBOX v2 Endpoints (UWAGA: sandboxowa domena!)
 # ────────────────────────────────────────────────────────────────────────────────
-TIKTOK_AUTH_URL  = "https://www.tiktok.com/v2/auth/authorize"   
-TIKTOK_TOKEN_URL = "https://open-sandbox.tiktokapis.com/v2/oauth/token"
+TIKTOK_AUTH_URL  = "https://www.tiktok.com/v2/auth/authorize"
+TIKTOK_TOKEN_URL  = "https://open-sandbox.tiktokapis.com/v2/oauth/token"
 TIKTOK_UPLOAD_URL = "https://open-sandbox.tiktokapis.com/v2/post/publish/video/upload"
 
 SCOPES = "user.info.basic,video.upload,video.list"

@@ -1,5 +1,5 @@
-import os
-import requests
+import os, requests
+from urllib.parse import quote_plus 
 from flask import Blueprint, redirect, request, flash, url_for, session, jsonify, current_app
 
 # ------------------------------------------------------------------------------
@@ -28,18 +28,20 @@ TIKTOK_TOKEN_URL = "https://open.tiktokapis.com/v2/oauth/token/"
 # ------------------------------------------------------------------------------
 @tiktok_auth_bp.route("/login")
 def tiktok_login():
-    scopes = "user.info.basic,video.upload,video.list"
+    scopes        = "user.info.basic,video.upload,video.list"
+
+    # ❷  zakoduj redirect_uri
+    redirect_enc  = quote_plus(TIKTOK_REDIRECT_URI, safe="")
 
     authorize_url = (
         f"{TIKTOK_AUTH_URL}"
         f"?client_key={TIKTOK_CLIENT_KEY}"
-        f"&redirect_uri={TIKTOK_REDIRECT_URI}"
+        f"&redirect_uri={redirect_enc}"
         f"&scope={scopes}"
-        "&response_type=code"
-        "&state=xyz123"
+        f"&response_type=code"
+        f"&state=xyz123"
     )
-
-    print("DEBUG authorize_url:", authorize_url)
+    app.logger.debug("DEBUG authorize_url: %s", authorize_url)
     return redirect(authorize_url)
 
 

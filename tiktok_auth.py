@@ -9,7 +9,7 @@ TIKTOK_CLIENT_KEY    = os.getenv("TIKTOK_CLIENT_KEY")
 TIKTOK_CLIENT_SECRET = os.getenv("TIKTOK_CLIENT_SECRET")
 TIKTOK_REDIRECT_URI  = os.getenv("TIKTOK_REDIRECT_URI")
 
-AUTH_URL   = "https://open-sandbox.tiktokapis.com/v2/auth/authorize"
+AUTH_URL   = "https://www.tiktok.com/v2/auth/authorize"
 TOKEN_URL  = "https://open-sandbox.tiktokapis.com/v2/oauth/token/"
 
 SCOPES     = "user.info.basic,video.upload,video.list"

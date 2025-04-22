@@ -1,11 +1,11 @@
 """
-tiktok_auth.py
-Blueprint obsługujący logowanie TikTok Sandbox v2 + przykładowy upload wideo.
+tiktok_auth.py ― Blueprint do logowania TikTok Sandbox v2 (+ testowy upload).
 """
 
 import os
 import requests
 from urllib.parse import quote
+
 from flask import (
     Blueprint,
     redirect,
@@ -25,24 +25,25 @@ tiktok_auth_bp = Blueprint("tiktok_auth", __name__, url_prefix="/tiktok_auth")
 # ───────────────────────────────────────────────
 # Zmienne środowiskowe  (Heroku Config Vars)
 # ───────────────────────────────────────────────
-TIKTOK_CLIENT_KEY    = os.getenv("TIKTOK_CLIENT_KEY")       # sandbox client_key
-TIKTOK_CLIENT_SECRET = os.getenv("TIKTOK_CLIENT_SECRET")    # sandbox client_secret
+TIKTOK_CLIENT_KEY    = os.getenv("TIKTOK_CLIENT_KEY")       # ★ sandbox client_key
+TIKTOK_CLIENT_SECRET = os.getenv("TIKTOK_CLIENT_SECRET")    # ★ sandbox client_secret
 TIKTOK_REDIRECT_URI  = os.getenv("TIKTOK_REDIRECT_URI")     # https://…/tiktok_auth/callback
 
 # ───────────────────────────────────────────────
 # Sandbox v2 endpointy
 # ───────────────────────────────────────────────
-TIKTOK_AUTH_URL   = "https://www.tiktok.com/v2/auth/authorize"
+TIKTOK_AUTH_URL   = "https://www.tiktok.com/v2/auth/authorize"           # ← bez „/” na końcu
 TIKTOK_TOKEN_URL  = "https://open.tiktokapis.com/v2/oauth/token/"
 TIKTOK_UPLOAD_URL = "https://open-sandbox.tiktokapis.com/v2/post/publish/video/upload/"
 
-SCOPES = "user.info.basic,video.upload,video.list"          # spacją, nie przecinkami!
+# WAŻNE ▶︎ spacją, NIE przecinkiem ‑ dokładnie tak chce Login Kit v2
+SCOPES = "user.info.basic video.upload video.list"
 
 # ───────────────────────────────────────────────
 # /login  → przekierowanie do logowania TikToka
 # ───────────────────────────────────────────────
 @tiktok_auth_bp.route("/login")
-def tiktok_login() -> "flask.Response":
+def tiktok_login():
     auth_url = (
         f"{TIKTOK_AUTH_URL}"
         f"?client_key={TIKTOK_CLIENT_KEY}"
@@ -51,8 +52,11 @@ def tiktok_login() -> "flask.Response":
         f"&response_type=code"
         f"&state=xyz123"
     )
+
+    # diagnostyka
     current_app.logger.warning("ENV client_key=%r", TIKTOK_CLIENT_KEY)
     current_app.logger.debug("authorize_url = %s", auth_url)
+
     return redirect(auth_url)
 
 # ───────────────────────────────────────────────
@@ -97,7 +101,7 @@ def tiktok_callback():
         flash(f"TikTok: {data.get('description','unknown')}", "error")
         return redirect(url_for("automation.automation_tiktok"))
 
-    # — sukces —
+    # — sukces —
     session["tiktok_access_token"] = data["access_token"]
     session["tiktok_open_id"]      = data["open_id"]
 
@@ -115,7 +119,7 @@ def tiktok_test_upload():
         flash("Najpierw zaloguj się przez TikTok.", "error")
         return redirect(url_for("automation.automation_tiktok"))
 
-    video_file_path = "test.mp4"   # upewnij się, że plik istnieje
+    video_file_path = "test.mp4"
 
     try:
         with open(video_file_path, "rb") as f:

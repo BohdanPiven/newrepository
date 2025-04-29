@@ -19,33 +19,26 @@ tiktok_auth_bp = Blueprint(
     url_prefix="/tiktok_auth"
 )
 
-# ——————————————————————————
-# 1) Środowiskowe zmienne (Heroku Config Vars)
-# ——————————————————————————
+# -- Środowiskowe zmienne (Heroku Config Vars) --
 TIKTOK_CLIENT_KEY    = os.getenv("TIKTOK_CLIENT_KEY")
 TIKTOK_CLIENT_SECRET = os.getenv("TIKTOK_CLIENT_SECRET")
 TIKTOK_REDIRECT_URI  = os.getenv("TIKTOK_REDIRECT_URI")
 
-# ——————————————————————————
-# 2) TikTok OAuth Endpoints (Sandbox)
-# ——————————————————————————
-AUTH_URL          = "https://open.tiktokapis.com/v2/auth/authorize"
-TOKEN_URL         = "https://open.tiktokapis.com/v2/oauth/token/"
-USER_INFO_URL     = "https://open.tiktokapis.com/v2/user/info/"
-VIDEO_UPLOAD_URL  = "https://open.tiktokapis.com/v2/post/publish/video/upload/"
-VIDEO_LIST_URL    = "https://open.tiktokapis.com/v2/post/publish/video/list/"
+# -- TikTok OAuth Endpoints (Sandbox uses open.tiktokapis.com) --
+AUTH_URL                = "https://open.tiktokapis.com/v2/auth/authorize/"
+TOKEN_URL               = "https://open.tiktokapis.com/v2/oauth/token/"
+USER_INFO_URL           = "https://open.tiktokapis.com/v2/user/info/"
+VIDEO_INIT_UPLOAD_URL   = "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/"
 
-# ——————————————————————————
-# 3) Scope’y wymagane przez Sandbox
-# ——————————————————————————
+# -- Scope’y, których potrzeba --
+# - user.info.basic  — żeby pobrać open_id i access_token
+# - video.upload      — żeby zainicjalizować upload filmu
+# - (opcjonalnie) video.list — żeby później listować wrzucone filmy
 SCOPES = "user.info.basic video.upload video.list"
 
 
 @tiktok_auth_bp.route("/login")
 def login():
-    """
-    Przekierowanie do TikTok Sandbox OAuth.
-    """
     params = {
         "client_key":    TIKTOK_CLIENT_KEY,
         "redirect_uri":  TIKTOK_REDIRECT_URI,
@@ -53,27 +46,23 @@ def login():
         "response_type": "code",
         "state":         "xyz123",
     }
+    # wygeneruj query-string
     query = "&".join(f"{k}={quote_plus(v)}" for k, v in params.items())
-    authorize_url = f"{AUTH_URL}?{query}"
-    return redirect(authorize_url)
+    return redirect(f"{AUTH_URL}?{query}")
 
 
 @tiktok_auth_bp.route("/callback")
 def callback():
-    """
-    Odbiór kodu, wymiana na access_token + open_id i zapis w sesji.
-    """
-    # a) Sprawdź błąd z TikToka
-    if request.args.get("error"):
-        flash(f"TikTok error: {request.args['error']}", "error")
+    error = request.args.get("error")
+    if error:
+        flash(f"TikTok error: {error}", "error")
         return redirect(url_for("automation.automation_tiktok"))
 
     code = request.args.get("code")
     if not code:
-        flash("Brak parametru code od TikToka.", "error")
+        flash("Missing code from TikTok.", "error")
         return redirect(url_for("automation.automation_tiktok"))
 
-    # b) Wymiana kodu na token
     try:
         resp = requests.post(
             TOKEN_URL,
@@ -88,32 +77,30 @@ def callback():
             timeout=10,
         )
         resp.raise_for_status()
-    except Exception as e:
+    except requests.RequestException as e:
         current_app.logger.error("Token request failed: %s", e)
-        flash("Błąd podczas pobierania tokenu.", "error")
+        flash("TikTok token request failed.", "error")
         return redirect(url_for("automation.automation_tiktok"))
 
-    data = resp.json().get("data", resp.json())
-    open_id       = data.get("open_id")
-    access_token  = data.get("access_token")
+    result = resp.json()
+    current_app.logger.debug("Token response JSON: %r", result)
+
+    open_id      = result.get("open_id")      or result.get("data", {}).get("open_id")
+    access_token = result.get("access_token") or result.get("data", {}).get("access_token")
 
     if not open_id or not access_token:
-        msg = data.get("description") or data.get("message") or "Unknown error"
-        flash(f"TikTok token error: {msg}", "error")
+        desc = result.get("description") or result.get("message") or "Unknown error"
+        flash(f"TikTok token error: {desc}", "error")
         return redirect(url_for("automation.automation_tiktok"))
 
-    # c) Zapisujemy w sesji
     session["tiktok_open_id"]      = open_id
     session["tiktok_access_token"] = access_token
-    flash("Zalogowano do TikTok Sandbox pomyślnie!", "success")
+    flash("Zalogowano pomyślnie.", "success")
     return redirect(url_for("automation.automation_tiktok"))
 
 
 @tiktok_auth_bp.route("/logout")
 def logout():
-    """
-    Czyszczenie sesji TikTok.
-    """
     session.pop("tiktok_open_id", None)
     session.pop("tiktok_access_token", None)
     flash("Wylogowano z TikTok Sandbox.", "success")

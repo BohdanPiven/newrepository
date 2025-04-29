@@ -2,7 +2,7 @@
 
 import os
 import requests
-from urllib.parse import quote
+from urllib.parse import quote_plus
 from flask import (
     Blueprint,
     redirect,
@@ -27,16 +27,16 @@ TIKTOK_CLIENT_SECRET = os.getenv("TIKTOK_CLIENT_SECRET")
 TIKTOK_REDIRECT_URI  = os.getenv("TIKTOK_REDIRECT_URI")
 
 # ——————————————————————————
-# 2) Sandbox OAuth Endpoints
+# 2) TikTok OAuth Endpoints (Sandbox)
 # ——————————————————————————
-AUTH_URL         = "https://open.tiktokapis.com/v2/auth/authorize"
-TOKEN_URL        = "https://open.tiktokapis.com/v2/oauth/token/"
-USER_INFO_URL    = "https://open.tiktokapis.com/v2/user/info/"
-VIDEO_UPLOAD_URL = "https://open.tiktokapis.com/v2/post/publish/video/upload/"
-VIDEO_LIST_URL   = "https://open.tiktokapis.com/v2/post/publish/video/list/"
+AUTH_URL          = "https://open.tiktokapis.com/v2/auth/authorize"
+TOKEN_URL         = "https://open.tiktokapis.com/v2/oauth/token/"
+USER_INFO_URL     = "https://open.tiktokapis.com/v2/user/info/"
+VIDEO_UPLOAD_URL  = "https://open.tiktokapis.com/v2/post/publish/video/upload/"
+VIDEO_LIST_URL    = "https://open.tiktokapis.com/v2/post/publish/video/list/"
 
 # ——————————————————————————
-# 3) Scope’y wymagane (dodaj je w Developer Portal → Sandbox → Scopes)
+# 3) Scope’y wymagane przez Sandbox
 # ——————————————————————————
 SCOPES = "user.info.basic video.upload video.list"
 
@@ -44,22 +44,17 @@ SCOPES = "user.info.basic video.upload video.list"
 @tiktok_auth_bp.route("/login")
 def login():
     """
-    Przekierowanie użytkownika do TikTok Sandbox OAuth.
+    Przekierowanie do TikTok Sandbox OAuth.
     """
-    # miejsce, w którym kodujemy spację jako %20 (nie jako +)
-    scope_encoded = quote(SCOPES, safe='')
-
-    # kodujemy też redirect_uri
-    redirect_encoded = quote(TIKTOK_REDIRECT_URI, safe='')
-
-    authorize_url = (
-        f"{AUTH_URL}"
-        f"?client_key={quote(TIKTOK_CLIENT_KEY, safe='')}"
-        f"&redirect_uri={redirect_encoded}"
-        f"&scope={scope_encoded}"
-        f"&response_type=code"
-        f"&state=xyz123"
-    )
+    params = {
+        "client_key":    TIKTOK_CLIENT_KEY,
+        "redirect_uri":  TIKTOK_REDIRECT_URI,
+        "scope":         SCOPES,
+        "response_type": "code",
+        "state":         "xyz123",
+    }
+    query = "&".join(f"{k}={quote_plus(v)}" for k, v in params.items())
+    authorize_url = f"{AUTH_URL}?{query}"
     return redirect(authorize_url)
 
 
@@ -68,6 +63,7 @@ def callback():
     """
     Odbiór kodu, wymiana na access_token + open_id i zapis w sesji.
     """
+    # a) Sprawdź błąd z TikToka
     if request.args.get("error"):
         flash(f"TikTok error: {request.args['error']}", "error")
         return redirect(url_for("automation.automation_tiktok"))
@@ -77,6 +73,7 @@ def callback():
         flash("Brak parametru code od TikToka.", "error")
         return redirect(url_for("automation.automation_tiktok"))
 
+    # b) Wymiana kodu na token
     try:
         resp = requests.post(
             TOKEN_URL,
@@ -96,15 +93,16 @@ def callback():
         flash("Błąd podczas pobierania tokenu.", "error")
         return redirect(url_for("automation.automation_tiktok"))
 
-    payload = resp.json().get("data", resp.json())
-    open_id      = payload.get("open_id")
-    access_token = payload.get("access_token")
+    data = resp.json().get("data", resp.json())
+    open_id       = data.get("open_id")
+    access_token  = data.get("access_token")
 
     if not open_id or not access_token:
-        msg = payload.get("description") or payload.get("message") or "Unknown error"
+        msg = data.get("description") or data.get("message") or "Unknown error"
         flash(f"TikTok token error: {msg}", "error")
         return redirect(url_for("automation.automation_tiktok"))
 
+    # c) Zapisujemy w sesji
     session["tiktok_open_id"]      = open_id
     session["tiktok_access_token"] = access_token
     flash("Zalogowano do TikTok Sandbox pomyślnie!", "success")

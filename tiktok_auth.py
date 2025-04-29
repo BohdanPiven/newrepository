@@ -1,10 +1,16 @@
 # tiktok_auth.py
+
 import os
 import requests
 from urllib.parse import quote_plus
 from flask import (
-    Blueprint, redirect, request, flash,
-    url_for, session, jsonify, current_app
+    Blueprint,
+    redirect,
+    request,
+    flash,
+    url_for,
+    session,
+    current_app
 )
 
 tiktok_auth_bp = Blueprint(
@@ -13,12 +19,12 @@ tiktok_auth_bp = Blueprint(
     url_prefix="/tiktok_auth"
 )
 
-# Środowiskowe
+# -- Środowiskowe zmienne (w Heroku: Config Vars) --
 TIKTOK_CLIENT_KEY    = os.getenv("TIKTOK_CLIENT_KEY")
 TIKTOK_CLIENT_SECRET = os.getenv("TIKTOK_CLIENT_SECRET")
 TIKTOK_REDIRECT_URI  = os.getenv("TIKTOK_REDIRECT_URI")
 
-# OAuth endpoints
+# -- TikTok OAuth Endpoints (Sandbox uses open.tiktokapis.com) --
 AUTH_URL         = "https://www.tiktok.com/v2/auth/authorize"
 TOKEN_URL        = "https://open.tiktokapis.com/v2/oauth/token/"
 USER_INFO_URL    = "https://open.tiktokapis.com/v2/user/info/"
@@ -29,7 +35,10 @@ SCOPES = "user.info.basic"
 
 @tiktok_auth_bp.route("/login")
 def login():
-    """Przekierowanie do TikTok OAuth (Sandbox)"""
+    """
+    Przekierowuje użytkownika do TikTok OAuth (Sandbox) po params:
+    client_key, redirect_uri, scope, response_type=code, state
+    """
     params = {
         "client_key":    TIKTOK_CLIENT_KEY,
         "redirect_uri":  TIKTOK_REDIRECT_URI,
@@ -39,23 +48,28 @@ def login():
     }
     query = "&".join(f"{k}={quote_plus(v)}" for k, v in params.items())
     authorize_url = f"{AUTH_URL}?{query}"
-    current_app.logger.debug("Authorize URL: %s", authorize_url)
     return redirect(authorize_url)
 
 
 @tiktok_auth_bp.route("/callback")
 def callback():
-    """Obsługa callback — wymiana code na token + open_id"""
+    """
+    Obsługa callbacku: odbiera 'code', wymienia na token + open_id,
+    zapisuje w sesji lub wyrzuca błąd.
+    """
+    # 1) Sprawdź, czy TikTok zwrócił error
     error = request.args.get("error")
     if error:
         flash(f"TikTok error: {error}", "error")
         return redirect(url_for("automation.automation_tiktok"))
 
+    # 2) Odczytaj code
     code = request.args.get("code")
     if not code:
         flash("Missing code from TikTok.", "error")
         return redirect(url_for("automation.automation_tiktok"))
 
+    # 3) Wymień code na access_token + open_id
     try:
         resp = requests.post(
             TOKEN_URL,
@@ -76,54 +90,30 @@ def callback():
         return redirect(url_for("automation.automation_tiktok"))
 
     result = resp.json()
-    current_app.logger.warning("🎯 TikTok token response JSON: %r", result)
+    current_app.logger.debug("🎯 Token response JSON: %r", result)
 
-    data = result.get("data", {})
-    open_id = data.get("open_id")
-    access_token = data.get("access_token")
+    # 4) Wyciągnij open_id i access_token (niektóre wersje mają je w data)
+    open_id = result.get("open_id") or result.get("data", {}).get("open_id")
+    access_token = result.get("access_token") or result.get("data", {}).get("access_token")
 
     if not open_id or not access_token:
-        desc = data.get("description") or result.get("message") or "Unknown error"
+        desc = result.get("description") or result.get("message") or "Unknown error"
         flash(f"TikTok token error: {desc}", "error")
         return redirect(url_for("automation.automation_tiktok"))
 
-    session["tiktok_access_token"] = access_token
+    # 5) Zapisz w sesji i potwierdź sukces
     session["tiktok_open_id"]      = open_id
+    session["tiktok_access_token"] = access_token
     flash("Zalogowano pomyślnie.", "success")
     return redirect(url_for("automation.automation_tiktok"))
 
 
 @tiktok_auth_bp.route("/logout")
 def logout():
-    """Wylogowanie — czyści sesję TikTok"""
-    session.pop("tiktok_access_token", None)
+    """
+    Czyści sesję OAuth TikToka (open_id i access_token).
+    """
     session.pop("tiktok_open_id", None)
+    session.pop("tiktok_access_token", None)
     flash("Wylogowano z TikTok Sandbox.", "success")
-    return redirect(url_for("automation.automation_tiktok"))
-
-
-@tiktok_auth_bp.route("/test_upload")
-def test_upload():
-    """Testowe upload video"""
-    access_token = session.get("tiktok_access_token")
-    if not access_token:
-        flash("Musisz się najpierw zalogować.", "error")
-        return redirect(url_for("automation.automation_tiktok"))
-
-    try:
-        with open("test.mp4", "rb") as f:
-            resp = requests.post(
-                UPLOAD_VIDEO_URL,
-                files={"video": f},
-                headers={"Authorization": f"Bearer {access_token}"},
-                timeout=30,
-            )
-            resp.raise_for_status()
-        return jsonify(resp.json())
-    except FileNotFoundError:
-        flash("Plik test.mp4 nie został znaleziony.", "error")
-    except requests.RequestException as e:
-        current_app.logger.error("Upload failed: %s", e)
-        flash("Wysyłka wideo nie powiodła się.", "error")
-
     return redirect(url_for("automation.automation_tiktok"))

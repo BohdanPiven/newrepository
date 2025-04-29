@@ -24,7 +24,7 @@ TIKTOK_CLIENT_SECRET = os.getenv("TIKTOK_CLIENT_SECRET")
 TIKTOK_REDIRECT_URI  = os.getenv("TIKTOK_REDIRECT_URI")
 
 # **POPRAWIONE** endpointy:
-AUTH_URL              = "https://open.tiktokapis.com/v2/oauth/authorize"
+AUTH_URL              = "https://open.tiktokapis.com/v2/auth/authorize"
 TOKEN_URL             = "https://open.tiktokapis.com/v2/oauth/token/"
 USER_INFO_URL         = "https://open.tiktokapis.com/v2/user/info/"
 VIDEO_INIT_UPLOAD_URL = "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/"

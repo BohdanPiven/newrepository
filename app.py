@@ -3,10 +3,7 @@ import threading
 import logging
 from dotenv import load_dotenv
 import sys
-from flask import (
-    Flask, render_template_string, request, redirect, url_for,
-    flash, session, send_from_directory, jsonify
-)
+from flask import Flask, render_template_string, request, redirect, url_for, flash, session, send_from_directory, jsonify
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
@@ -18,20 +15,23 @@ from googleapiclient.discovery import build
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 from flask_migrate import Migrate
-from google.cloud import storage
+from google.cloud import storage  # <-- GCS import
 import uuid
 from datetime import datetime, timedelta, timezone
 from werkzeug.security import generate_password_hash, check_password_hash
 import re
 from random import randint
-from models import db, User, LicenseKey, Note, VerificationCode, PASTEL_COLORS
+# from flask_mail import Mail, Message
+from models import db, User, LicenseKey, Note, VerificationCode
 from cryptography.fernet import Fernet
 from werkzeug.exceptions import RequestEntityTooLarge
-import magic
+import magic  # Upewnij się, że ta biblioteka jest zainstalowana
 import bleach
+from flask import jsonify
 from email.message import EmailMessage
 import mimetypes
 import ssl
+from models import PASTEL_COLORS
 from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 from collections import defaultdict
 
@@ -40,18 +40,18 @@ from collections import defaultdict
 # ------------------------------
 from celery import Celery
 
-# Wczytanie zmiennych środowiskowych (.env lokalnie, Config Vars na Heroku)
+# Wczytanie zmiennych środowiskowych (lokalnie z .env, na Heroku z Config Vars)
 load_dotenv()
 
-# Obsługa REDIS_URL z SSL (Heroku Redis)
+# Pobierz REDIS_URL z konfiguracji środowiskowej
 redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
 if redis_url.startswith("rediss://"):
     parsed = urlparse(redis_url)
     query = parse_qs(parsed.query)
-    query.setdefault('ssl_cert_reqs', ['none'])
-    new_query = urlencode(query, doseq=True)
-    redis_url = urlunparse((parsed.scheme, parsed.netloc, parsed.path,
-                           parsed.params, new_query, parsed.fragment))
+    if 'ssl_cert_reqs' not in query:
+        query['ssl_cert_reqs'] = 'none'
+        new_query = urlencode(query, doseq=True)
+        redis_url = urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment))
 
 celery_app = Celery("app", broker=redis_url, backend=redis_url)
 if redis_url.startswith("rediss://"):
@@ -64,22 +64,15 @@ if redis_url.startswith("rediss://"):
 
 sys.path.append(os.path.abspath(os.getcwd()))
 
-# Inicjalizacja Flask
+# Inicjalizacja aplikacji Flask
 app = Flask(__name__)
 basedir = os.path.abspath(os.path.dirname(__file__))
 
-# —————————————————————
-# SECRET_KEY do podpisywania sesji
-# —————————————————————
-# na Heroku dodaj Config Var:
-# SECRET_KEY = <długa losowa wartość>
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'zmien-to-na-coś-trudno-odgadnionego')
-
-# Konfiguracja bazy danych
+# Konfiguracja bazy danych (Heroku/Postgres lub SQLite)
 database_url = os.getenv("DATABASE_URL")
-if database_url and database_url.startswith("postgres://"):
-    database_url = database_url.replace("postgres://", "postgresql://", 1)
 if database_url:
+    if database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql://", 1)
     print(f"Używana baza danych: {database_url}")
 else:
     database_url = 'sqlite:///' + os.path.join(basedir, 'users.db')
@@ -87,17 +80,26 @@ else:
 
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-# Pozostałe ustawienia Flask
-app.config['MAX_CONTENT_LENGTH']      = 16 * 1024 * 1024
-app.config['SESSION_COOKIE_SECURE']   = False   # True w produkcji (HTTPS)
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default_secret_key')
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB
+app.config['SESSION_COOKIE_SECURE'] = False  # Ustaw True w produkcji (HTTPS)
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
-# Inicjalizacja bazy i migracji
+# Inicjalizacja szyfrowania (Fernet)
+ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY')
+if not ENCRYPTION_KEY:
+    raise ValueError("Brak zmiennej ENCRYPTION_KEY w środowisku!")
+fernet = Fernet(ENCRYPTION_KEY.encode())
+
+# Konfiguracja Flask-Mail (bez globalnych danych logowania)
+app.config['MAIL_SERVER'] = 'smtp.office365.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+
+# Inicjalizacja bazy danych i migracji
 db.init_app(app)
 migrate = Migrate(app, db)
-
 
 # Globalne słowniki do śledzenia postępu i zatrzymywania wysyłki e-maili
 email_sending_progress = {}

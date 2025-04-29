@@ -12,7 +12,7 @@ TIKTOK_REDIRECT_URI  = os.getenv("TIKTOK_REDIRECT_URI")
 AUTH_URL   = "https://www.tiktok.com/v2/auth/authorize"
 TOKEN_URL  = "https://open-sandbox.tiktokapis.com/v2/oauth/token/"
 
-SCOPES     = "user.info.basic,video.upload,video.list"
+SCOPES = "user.info.basic"
 
 @tiktok_auth_bp.route("/login")
 def login():

@@ -80,6 +80,7 @@ def callback():
         return redirect(url_for("automation.automation_tiktok"))
 
     result = resp.json()
+    current_app.logger.warning("TikTok token response: %r", result)
     data = result.get("data", {})
     open_id = data.get("open_id")
     access_token = data.get("access_token")

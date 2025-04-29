@@ -16,3 +16,13 @@ Thumbs.db
 *.tmp
 *.swp
 crypto-isotope-434019-r0-9877c9567fe7.json
+# virtualenv
+myprojectenv/
+
+# pliki Pythona
+__pycache__/
+*.py[cod]
+
+# sqlite
+*.db
+users.db

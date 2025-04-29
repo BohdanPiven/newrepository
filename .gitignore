@@ -26,3 +26,12 @@ __pycache__/
 # sqlite
 *.db
 users.db
+# virtualenv
+myprojectenv/
+
+# local DB
+users.db
+
+# __pycache__ i pliki Pythona
+__pycache__/
+*.py[cod]

@@ -29,16 +29,14 @@ AUTH_URL         = "https://www.tiktok.com/v2/auth/authorize"
 TOKEN_URL        = "https://open.tiktokapis.com/v2/oauth/token/"
 USER_INFO_URL    = "https://open.tiktokapis.com/v2/user/info/"
 UPLOAD_VIDEO_URL = "https://open.tiktokapis.com/v2/post/publish/video/upload/"
-LIST_VIDEO_URL   = "https://open.tiktokapis.com/v2/post/publish/video/list/"  # jeśli będziesz potrzebować listowania
 
-# Dodaliśmy scope'y do uploadu i listowania wideo
-SCOPES = "user.info.basic video.upload video.list"
+SCOPES = "user.info.basic"
 
 
 @tiktok_auth_bp.route("/login")
 def login():
     """
-    Przekierowuje użytkownika do TikTok OAuth (Sandbox) z parametrami:
+    Przekierowuje użytkownika do TikTok OAuth (Sandbox) po params:
     client_key, redirect_uri, scope, response_type=code, state
     """
     params = {
@@ -106,7 +104,7 @@ def callback():
     # 5) Zapisz w sesji i potwierdź sukces
     session["tiktok_open_id"]      = open_id
     session["tiktok_access_token"] = access_token
-    flash("Zalogowano pomyślnie z uprawnieniami do wideo.", "success")
+    flash("Zalogowano pomyślnie.", "success")
     return redirect(url_for("automation.automation_tiktok"))
 
 

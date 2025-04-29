@@ -7,10 +7,11 @@ from flask import (
     request,
     flash,
     redirect,
-    session
+    session,
+    jsonify
 )
 from datetime import datetime
-from app import db  # instancja SQLAlchemy
+from app import db
 from automation_models import ScheduledPost
 from selenium_facebook_post import publish_post_to_facebook
 
@@ -22,7 +23,7 @@ def automation_home():
     home_template = '''
     <!DOCTYPE html>
     <html lang="pl">
-    <head><meta charset="UTF-8"><title>Automation - Główna</title>
+    <head><meta charset="UTF-8"><title>Panel Automatyzacji</title>
       <style>
         *{margin:0;padding:0;box-sizing:border-box;}
         body{font-family:Arial,sans-serif;background:#f2f2f2;}
@@ -106,23 +107,22 @@ def automation_tiktok_plan():
         return redirect(url_for('automation.automation_tiktok'))
 
     user_id = session['tiktok_open_id']
-
     if request.method == 'POST':
-        date_obj = datetime.strptime(request.form['post_date'], "%Y-%m-%d").date()
-        time_obj = datetime.strptime(request.form['post_time'], "%H:%M").time()
+        d = datetime.strptime(request.form['post_date'], "%Y-%m-%d").date()
+        t = datetime.strptime(request.form['post_time'], "%H:%M").time()
         new_post = ScheduledPost(
-            date=date_obj,
-            time=time_obj,
+            date=d,
+            time=t,
             topic=request.form['topic'],
             description=request.form['description'],
             user_id=user_id
         )
         db.session.add(new_post)
         db.session.commit()
-        flash("Nowy wpis został dodany do harmonogramu.", "success")
+        flash("Dodano nowy wpis.", "success")
         return redirect(url_for('automation.automation_tiktok_plan'))
 
-    scheduled_posts = ScheduledPost.query\
+    posts = ScheduledPost.query\
         .filter_by(user_id=user_id)\
         .order_by(ScheduledPost.date.asc(), ScheduledPost.time.asc())\
         .all()
@@ -146,10 +146,10 @@ def automation_tiktok_plan():
     <body>
       <h1>Plan treści TikTok</h1>
       <ul>
-        {% for p in scheduled_posts %}
+        {% for p in posts %}
           <li>{{ p.date }} {{ p.time }} – {{ p.topic }}</li>
         {% else %}
-          <li>Brak zaplanowanych wpisów.</li>
+          <li>Brak wpisów.</li>
         {% endfor %}
       </ul>
       <form method="post">
@@ -163,7 +163,7 @@ def automation_tiktok_plan():
     </body>
     </html>
     '''
-    return render_template_string(plan_template, scheduled_posts=scheduled_posts)
+    return render_template_string(plan_template, posts=posts)
 
 
 @automation_bp.route('/tiktok/rodzaje')
@@ -194,14 +194,14 @@ def automation_tiktok_rodzaje():
           <a href="{{ url_for('automation.automation_tiktok_timeline') }}">Timeline</a>
         </nav>
         <ul>
-          <li>Poradniki („How to…”)</li>
-          <li>Q&A – pytania i odpowiedzi</li>
-          <li>Kulisy pracy / day in the life</li>
-          <li>Unboxing i recenzje</li>
-          <li>Wyzwania i trendy</li>
-          <li>Filtry i efekty kreatywne</li>
+          <li>Poradniki („How to…”)            </li>
+          <li>Q&A – pytania i odpowiedzi       </li>
+          <li>Kulisy pracy / day in the life    </li>
+          <li>Unboxing i recenzje              </li>
+          <li>Wyzwania i trendy                </li>
+          <li>Filtry i efekty kreatywne        </li>
         </ul>
-        <p><a href="{{ url_for('automation.automation_tiktok') }}">← Powrót do Automatyzacji TikTok</a></p>
+        <p><a href="{{ url_for('automation.automation_tiktok') }}">← Powrót</a></p>
       </div>
     </body>
     </html>
@@ -222,8 +222,6 @@ def automation_tiktok_scenariusze():
         h1{margin-bottom:20px;}
         nav a{margin:0 10px;color:#1f8ef1;text-decoration:none;}
         nav a:hover{text-decoration:underline;}
-        ul{margin-top:20px;}
-        li{margin-bottom:8px;}
         pre{background:#eef;padding:10px;border-radius:4px;overflow:auto;}
       </style>
     </head>
@@ -236,24 +234,37 @@ def automation_tiktok_scenariusze():
           <a href="{{ url_for('automation.automation_tiktok_scenariusze') }}" style="font-weight:bold">Scenariusze</a> |
           <a href="{{ url_for('automation.automation_tiktok_timeline') }}">Timeline</a>
         </nav>
-        <ul>
-          <li><strong>Wprowadzenie</strong>: Hook (pierwsze 3 s), przedstaw temat</li>
-          <li><strong>Treść główna</strong>: 2–3 klipy, każda z jasnym przekazem</li>
-          <li><strong>Zakończenie</strong>: Call-to-action (komentarz/obserwuj/like)</li>
-        </ul>
-        <p>Przykładowy szkielet w kodzie:</p>
+        <p>Poniżej przykładowy szkielet postu:</p>
         <pre>
-1. Intro: „Cześć! Chcesz dowiedzieć się, jak…?”
-2. Punkt 1: „Po pierwsze…”
-3. Punkt 2: „Po drugie…”
-4. Outro: „Daj znać w komentarzu, co myślisz!” 
+1. Hook (0–3s): „Cześć! Chcesz wiedzieć…?”
+2. Treść: 2–3 klipy po 5–7s każdy
+3. Call-to-action: „Daj like, jeśli chcesz więcej!” 
         </pre>
-        <p><a href="{{ url_for('automation.automation_tiktok') }}">← Powrót do Automatyzacji TikTok</a></p>
+        <p><a href="{{ url_for('automation.automation_tiktok') }}">← Powrót</a></p>
       </div>
     </body>
     </html>
     '''
     return render_template_string(tpl)
+
+
+@automation_bp.route('/tiktok/events')
+def automation_tiktok_events():
+    """Zwraca wszystkie zaplanowane posty jako JSON dla FullCalendar."""
+    if 'tiktok_open_id' not in session:
+        return jsonify([])
+
+    user_id = session['tiktok_open_id']
+    posts = ScheduledPost.query.filter_by(user_id=user_id).all()
+    events = []
+    for p in posts:
+        start = f"{p.date.isoformat()}T{p.time.isoformat()}"
+        events.append({
+            "title": p.topic,
+            "start": start,
+            "url": url_for('automation.automation_tiktok_plan')  # klik przeniesie do planu
+        })
+    return jsonify(events)
 
 
 @automation_bp.route('/tiktok/timeline')
@@ -271,7 +282,7 @@ def automation_tiktok_timeline():
         h1{margin-bottom:20px;}
         nav a{margin:0 10px;color:#1f8ef1;text-decoration:none;}
         nav a:hover{text-decoration:underline;}
-        #calendar{max-width:800px;margin:0 auto;}
+        #calendar{max-width:800px;margin:20px auto;}
       </style>
     </head>
     <body>
@@ -285,7 +296,7 @@ def automation_tiktok_timeline():
           <a href="{{ url_for('automation.automation_tiktok_timeline') }}" style="font-weight:bold">Timeline</a>
         </nav>
         <div id="calendar"></div>
-        <p><a href="{{ url_for('automation.automation_tiktok') }}">← Powrót do Automatyzacji TikTok</a></p>
+        <p><a href="{{ url_for('automation.automation_tiktok') }}">← Powrót</a></p>
       </div>
       <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -293,10 +304,7 @@ def automation_tiktok_timeline():
           var calendar = new FullCalendar.Calendar(calendarEl, {
             initialView: 'dayGridMonth',
             height: 600,
-            events: [
-              // tutaj możesz podać dynamicznie swoje wydarzenia
-              // { title: 'Nowy post', start: '2025-05-01' },
-            ]
+            events: '{{ url_for("automation.automation_tiktok_events") }}'
           });
           calendar.render();
         });

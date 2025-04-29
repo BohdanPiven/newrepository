@@ -118,6 +118,9 @@ app.register_blueprint(automation_bp)
 from tiktok_auth import tiktok_auth_bp
 app.register_blueprint(tiktok_auth_bp)
 
+from tiktok_video import video_bp
+app.register_blueprint(video_bp)
+
 # ----------------------------------------
 # KONFIGURACJA GOOGLE CLOUD STORAGE
 # ----------------------------------------

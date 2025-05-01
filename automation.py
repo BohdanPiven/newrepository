@@ -1,4 +1,5 @@
 # automation.py
+
 from flask import (
     Blueprint, render_template_string, url_for, request,
     flash, redirect, session, jsonify, get_flashed_messages,
@@ -6,6 +7,7 @@ from flask import (
 )
 from datetime import datetime
 import requests
+
 from app import db
 from automation_models import ScheduledPost
 from selenium_facebook_post import publish_post_to_facebook
@@ -78,8 +80,11 @@ def automation_tiktok():
         <hr>
         {% set succ = get_flashed_messages(category_filter=['success']) %}
         {% set err  = get_flashed_messages(category_filter=['error']) %}
-        {% if succ %}<div style="background:#dfd;padding:10px;border-radius:4px">{{ succ[-1] }}</div>
-        {% elif err %}<div style="background:#fdd;padding:10px;border-radius:4px">{{ err[-1] }}</div>{% endif %}
+        {% if succ %}
+          <div style="background:#dfd;padding:10px;border-radius:4px">{{ succ[-1] }}</div>
+        {% elif err %}
+          <div style="background:#fdd;padding:10px;border-radius:4px">{{ err[-1] }}</div>
+        {% endif %}
         {% if session.get('tiktok_open_id') %}
           <p>✅ Połączono jako <code>{{ session.tiktok_open_id }}</code></p>
           <a href="{{ url_for('tiktok_auth.logout') }}" class="login-link">Wyloguj się</a>
@@ -102,11 +107,14 @@ def automation_tiktok_plan():
     if request.method == 'POST':
         d = datetime.strptime(request.form['post_date'], "%Y-%m-%d").date()
         t = datetime.strptime(request.form['post_time'], "%H:%M").time()
-        new = ScheduledPost(date=d, time=t,
-                            topic=request.form['topic'],
-                            description=request.form['description'],
-                            user_id=uid)
-        db.session.add(new); db.session.commit()
+        new = ScheduledPost(
+            date=d, time=t,
+            topic=request.form['topic'],
+            description=request.form['description'],
+            user_id=uid
+        )
+        db.session.add(new)
+        db.session.commit()
         flash("Dodano wpis.", "success")
         return redirect(url_for('automation.automation_tiktok_plan'))
 
@@ -114,12 +122,17 @@ def automation_tiktok_plan():
              .filter_by(user_id=uid)
              .order_by(ScheduledPost.date.asc(), ScheduledPost.time.asc())
              .all())
+
     tpl = '''
     <!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8"><title>Plan treści TikTok</title>
       <style>body{font-family:Arial,sans-serif;padding:20px}</style>
     </head><body>
       <h1>Plan treści TikTok</h1>
-      <ul>{% for p in posts %}<li>{{ p.date }} {{ p.time }} – {{ p.topic }}</li>{% endfor %}</ul>
+      <ul>
+      {% for p in posts %}
+        <li>{{ p.date }} {{ p.time }} – {{ p.topic }}</li>
+      {% endfor %}
+      </ul>
       <form method="post">
         <label>Data: <input type="date" name="post_date" required></label><br>
         <label>Czas: <input type="time" name="post_time" required></label><br>
@@ -138,9 +151,10 @@ def tiktok_events():
     uid = session.get('tiktok_open_id')
     if not uid:
         return jsonify([])
+
     evts = [{
         "title": p.topic,
-        "start": f"{p.date}T{p.time}",
+        "start": f"{p.date.isoformat()}T{p.time.strftime('%H:%M:%S')}",
         "url": url_for('automation.automation_tiktok_plan')
     } for p in ScheduledPost.query.filter_by(user_id=uid)]
     return jsonify(evts)
@@ -172,10 +186,11 @@ def automation_tiktok_timeline():
       <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
       <script>
         document.addEventListener('DOMContentLoaded', function() {
-          new FullCalendar.Calendar(document.getElementById('calendar'), {
-            initialView: 'dayGridMonth', locale:'pl',
-            events: '{{ url_for("automation.tiktok_events") }}'
-          }).render();
+          new FullCalendar.Calendar(
+            document.getElementById('calendar'),
+            { initialView:'dayGridMonth', locale:'pl',
+              events:'{{ url_for("automation.tiktok_events") }}' }
+          ).render();
         });
       </script>
     </body></html>
@@ -191,7 +206,8 @@ def automation_tiktok_rodzaje():
       <h1>Rodzaje wideo na TikToku</h1>
       <p>Poradniki, Q&A, kulisy pracy itp.</p>
       <p><a href="{{ url_for('automation.automation_tiktok') }}">← Powrót</a></p>
-    </body></html>'''
+    </body></html>
+    '''
     return render_template_string(tpl)
 
 
@@ -203,7 +219,8 @@ def automation_tiktok_scenariusze():
       <h1>Scenariusze Postów i Wytyczne</h1>
       <p>Przykładowe schematy i wytyczne.</p>
       <p><a href="{{ url_for('automation.automation_tiktok') }}">← Powrót</a></p>
-    </body></html>'''
+    </body></html>
+    '''
     return render_template_string(tpl)
 
 
@@ -241,10 +258,14 @@ def automation_tiktok_video():
             return redirect(url_for('automation.automation_tiktok_video'))
 
         access_token = session['tiktok_access_token']
-        files = {'video_file': (vid.filename, vid.read(), 'application/octet-stream')}
-        headers = {'Authorization': f'Bearer {access_token}'}
+        files = {
+            'video_file': (vid.filename, vid.read(), 'application/octet-stream')
+        }
+        headers = {
+            'Authorization': f'Bearer {access_token}'
+        }
 
-        # log przed wysyłką
+        # log before upload
         current_app.logger.info("[TikTok upload] POST %s, file=%s", UPLOAD_VIDEO_URL, vid.filename)
         resp = requests.post(
             UPLOAD_VIDEO_URL,
@@ -252,7 +273,7 @@ def automation_tiktok_video():
             files=files,
             data={'open_id': session['tiktok_open_id']}
         )
-        # log odpowiedzi
+        # log after upload
         current_app.logger.info("[TikTok upload] status=%s, body=%s", resp.status_code, resp.text)
 
         if resp.ok:

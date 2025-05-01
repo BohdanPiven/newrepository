@@ -1,10 +1,17 @@
 # automation.py
-import requests
-from flask import get_flashed_messages
 from flask import (
-    Blueprint, render_template_string, url_for, request,
-    flash, redirect, session, jsonify, get_flashed_messages
+    Blueprint,
+    render_template_string,
+    url_for,
+    request,
+    flash,
+    redirect,
+    session,
+    jsonify,
+    get_flashed_messages,
+    current_app
 )
+import requests
 from datetime import datetime
 from app import db
 from automation_models import ScheduledPost
@@ -136,7 +143,6 @@ def automation_tiktok_plan():
 
 @automation_bp.route('/tiktok/events')
 def tiktok_events():
-    """Zwraca listę wydarzeń w formacie FullCalendar JSON."""
     uid = session.get('tiktok_open_id')
     if not uid:
         return jsonify([])
@@ -175,7 +181,6 @@ def automation_tiktok_timeline():
         <div id="calendar" style="margin-top:20px"></div>
         <p><a href="{{ url_for('automation.automation_tiktok') }}">← Powrót</a></p>
       </div>
-
       <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
       <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -191,6 +196,7 @@ def automation_tiktok_timeline():
     </body></html>
     '''
     return render_template_string(tpl)
+
 
 @automation_bp.route('/tiktok/rodzaje')
 def automation_tiktok_rodzaje():
@@ -217,6 +223,7 @@ def automation_tiktok_scenariusze():
     '''
     return render_template_string(tpl)
 
+
 @automation_bp.route('/tiktok/video', methods=['GET', 'POST'])
 def automation_tiktok_video():
     if 'tiktok_open_id' not in session:
@@ -225,22 +232,13 @@ def automation_tiktok_video():
 
     tpl = '''
     <!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8"><title>Wideo TikTok</title>
-      <style>
-        body{font-family:Arial,sans-serif;padding:20px}
-        form{margin-top:20px;}
-        input[type=file]{display:block;margin-bottom:10px;}
-        .flash.success{background:#dfd;padding:10px;border-radius:4px;margin-bottom:1rem;}
-        .flash.error{background:#fdd;padding:10px;border-radius:4px;margin-bottom:1rem;}
-        .back{display:block;margin-top:20px;}
+      <style>body{font-family:Arial,sans-serif;padding:20px}
+             form{margin-top:20px;}
+             input[type=file]{display:block;margin-bottom:10px;}
+             .back{display:block;margin-top:20px;}
       </style>
     </head><body>
       <h1>Wyślij wideo do TikTok Sandbox</h1>
-
-      {# tu wyświetlamy flashy #}
-      {% for category, msg in get_flashed_messages(with_categories=true) %}
-        <div class="flash {{ category }}">{{ msg }}</div>
-      {% endfor %}
-
       {% if session.get('tiktok_access_token') %}
         <form method="post" enctype="multipart/form-data">
           <label>Plik (mp4/mov): <input type="file" name="video_file" accept=".mp4,.mov" required></label><br>
@@ -259,15 +257,21 @@ def automation_tiktok_video():
             flash("Nie wybrano pliku.", "error")
             return redirect(url_for('automation.automation_tiktok_video'))
 
-        # ładowanie pliku i wywołanie API
         access_token = session['tiktok_access_token']
-        files = {'video_file': (vid.filename, vid.stream.read(), 'application/octet-stream')}
-        headers = {'Authorization': f'Bearer {access_token}'}
+        files = {
+            'video_file': (vid.filename, vid.stream.read(), 'application/octet-stream')
+        }
+        headers = {
+            'Authorization': f'Bearer {access_token}'
+        }
+        resp = requests.post(
+            UPLOAD_VIDEO_URL,
+            headers=headers,
+            files=files,
+            data={'open_id': session['tiktok_open_id']}
+        )
 
-        resp = requests.post(UPLOAD_VIDEO_URL, headers=headers, files=files,
-                             data={'open_id': session['tiktok_open_id']})
-
-        # LOG dla debugowania w heroku logs
+        # debug w logach
         current_app.logger.debug(f"[TikTok upload] status={resp.status_code}, body={resp.text}")
 
         if resp.ok:

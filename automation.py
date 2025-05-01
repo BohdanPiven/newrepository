@@ -1,5 +1,6 @@
 # automation.py
 import requests
+from flask import get_flashed_messages
 from flask import (
     Blueprint, render_template_string, url_for, request,
     flash, redirect, session, jsonify, get_flashed_messages
@@ -224,13 +225,22 @@ def automation_tiktok_video():
 
     tpl = '''
     <!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8"><title>Wideo TikTok</title>
-      <style>body{font-family:Arial,sans-serif;padding:20px}
-             form{margin-top:20px;}
-             input[type=file]{display:block;margin-bottom:10px;}
-             .back{display:block;margin-top:20px;}
+      <style>
+        body{font-family:Arial,sans-serif;padding:20px}
+        form{margin-top:20px;}
+        input[type=file]{display:block;margin-bottom:10px;}
+        .flash.success{background:#dfd;padding:10px;border-radius:4px;margin-bottom:1rem;}
+        .flash.error{background:#fdd;padding:10px;border-radius:4px;margin-bottom:1rem;}
+        .back{display:block;margin-top:20px;}
       </style>
     </head><body>
       <h1>Wyślij wideo do TikTok Sandbox</h1>
+
+      {# tu wyświetlamy flashy #}
+      {% for category, msg in get_flashed_messages(with_categories=true) %}
+        <div class="flash {{ category }}">{{ msg }}</div>
+      {% endfor %}
+
       {% if session.get('tiktok_access_token') %}
         <form method="post" enctype="multipart/form-data">
           <label>Plik (mp4/mov): <input type="file" name="video_file" accept=".mp4,.mov" required></label><br>
@@ -249,21 +259,17 @@ def automation_tiktok_video():
             flash("Nie wybrano pliku.", "error")
             return redirect(url_for('automation.automation_tiktok_video'))
 
-        # wysyłka do API TikToka
+        # ładowanie pliku i wywołanie API
         access_token = session['tiktok_access_token']
-        files = {
-            'video_file': (vid.filename, vid.stream.read(), 'application/octet-stream')
-        }
-        headers = {
-            'Authorization': f'Bearer {access_token}'
-        }
-        # endpoint sandboxowy:
-        resp = requests.post(
-            UPLOAD_VIDEO_URL,
-            headers=headers,
-            files=files,
-            data={'open_id': session['tiktok_open_id']}
-        )
+        files = {'video_file': (vid.filename, vid.stream.read(), 'application/octet-stream')}
+        headers = {'Authorization': f'Bearer {access_token}'}
+
+        resp = requests.post(UPLOAD_VIDEO_URL, headers=headers, files=files,
+                             data={'open_id': session['tiktok_open_id']})
+
+        # LOG dla debugowania w heroku logs
+        current_app.logger.debug(f"[TikTok upload] status={resp.status_code}, body={resp.text}")
+
         if resp.ok:
             flash("Wideo wysłano pomyślnie.", "success")
         else:

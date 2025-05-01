@@ -2,10 +2,10 @@
 from flask import (
     Blueprint, render_template_string, url_for, request,
     flash, redirect, session, jsonify, get_flashed_messages,
-    current_app   # <-- dodajemy
+    current_app
 )
-import requests   # pamiętaj, żeby importować requests jeśli jeszcze nie było
 from datetime import datetime
+import requests
 from app import db
 from automation_models import ScheduledPost
 from selenium_facebook_post import publish_post_to_facebook
@@ -78,7 +78,8 @@ def automation_tiktok():
         <hr>
         {% set succ = get_flashed_messages(category_filter=['success']) %}
         {% set err  = get_flashed_messages(category_filter=['error']) %}
-        {% if succ %}<div style="background:#dfd;padding:10px;border-radius:4px">{{ succ[-1] }}</div>{% elif err %}<div style="background:#fdd;padding:10px;border-radius:4px">{{ err[-1] }}</div>{% endif %}
+        {% if succ %}<div style="background:#dfd;padding:10px;border-radius:4px">{{ succ[-1] }}</div>
+        {% elif err %}<div style="background:#fdd;padding:10px;border-radius:4px">{{ err[-1] }}</div>{% endif %}
         {% if session.get('tiktok_open_id') %}
           <p>✅ Połączono jako <code>{{ session.tiktok_open_id }}</code></p>
           <a href="{{ url_for('tiktok_auth.logout') }}" class="login-link">Wyloguj się</a>
@@ -109,18 +110,16 @@ def automation_tiktok_plan():
         flash("Dodano wpis.", "success")
         return redirect(url_for('automation.automation_tiktok_plan'))
 
-    posts = ScheduledPost.query.filter_by(user_id=uid)\
-             .order_by(ScheduledPost.date.asc(), ScheduledPost.time.asc()).all()
+    posts = (ScheduledPost.query
+             .filter_by(user_id=uid)
+             .order_by(ScheduledPost.date.asc(), ScheduledPost.time.asc())
+             .all())
     tpl = '''
     <!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8"><title>Plan treści TikTok</title>
       <style>body{font-family:Arial,sans-serif;padding:20px}</style>
     </head><body>
       <h1>Plan treści TikTok</h1>
-      <ul>
-        {% for p in posts %}
-          <li>{{ p.date }} {{ p.time }} – {{ p.topic }}</li>
-        {% endfor %}
-      </ul>
+      <ul>{% for p in posts %}<li>{{ p.date }} {{ p.time }} – {{ p.topic }}</li>{% endfor %}</ul>
       <form method="post">
         <label>Data: <input type="date" name="post_date" required></label><br>
         <label>Czas: <input type="time" name="post_time" required></label><br>
@@ -139,14 +138,11 @@ def tiktok_events():
     uid = session.get('tiktok_open_id')
     if not uid:
         return jsonify([])
-
-    evts = []
-    for p in ScheduledPost.query.filter_by(user_id=uid).all():
-        evts.append({
-            "title": p.topic,
-            "start": f"{p.date.isoformat()}T{p.time.strftime('%H:%M:%S')}",
-            "url": url_for('automation.automation_tiktok_plan')
-        })
+    evts = [{
+        "title": p.topic,
+        "start": f"{p.date}T{p.time}",
+        "url": url_for('automation.automation_tiktok_plan')
+    } for p in ScheduledPost.query.filter_by(user_id=uid)]
     return jsonify(evts)
 
 
@@ -157,9 +153,8 @@ def automation_tiktok_timeline():
       <title>Timeline TikTok</title>
       <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet">
       <style>body{font-family:Arial,sans-serif;background:#f2f2f2;padding:20px}
-        .card{max-width:900px;margin:20px auto;background:#fff;padding:20px;border-radius:8px;box-shadow:0 2px 5px rgba(0,0,0,0.1);}
+        .card{max-width:900px;margin:20px auto;background:#fff;padding:20px;border-radius:8px;}
         nav a{margin:0 10px;color:#1f8ef1;text-decoration:none;}
-        nav a:hover{text-decoration:underline;}
       </style>
     </head><body>
       <div class="card">
@@ -177,13 +172,10 @@ def automation_tiktok_timeline():
       <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
       <script>
         document.addEventListener('DOMContentLoaded', function() {
-          var calendarEl = document.getElementById('calendar');
-          var calendar = new FullCalendar.Calendar(calendarEl, {
-            initialView: 'dayGridMonth',
-            locale: 'pl',
+          new FullCalendar.Calendar(document.getElementById('calendar'), {
+            initialView: 'dayGridMonth', locale:'pl',
             events: '{{ url_for("automation.tiktok_events") }}'
-          });
-          calendar.render();
+          }).render();
         });
       </script>
     </body></html>
@@ -199,8 +191,7 @@ def automation_tiktok_rodzaje():
       <h1>Rodzaje wideo na TikToku</h1>
       <p>Poradniki, Q&A, kulisy pracy itp.</p>
       <p><a href="{{ url_for('automation.automation_tiktok') }}">← Powrót</a></p>
-    </body></html>
-    '''
+    </body></html>'''
     return render_template_string(tpl)
 
 
@@ -212,12 +203,11 @@ def automation_tiktok_scenariusze():
       <h1>Scenariusze Postów i Wytyczne</h1>
       <p>Przykładowe schematy i wytyczne.</p>
       <p><a href="{{ url_for('automation.automation_tiktok') }}">← Powrót</a></p>
-    </body></html>
-    '''
+    </body></html>'''
     return render_template_string(tpl)
 
 
-@automation_bp.route('/tiktok/video', methods=['GET', 'POST'])
+@automation_bp.route('/tiktok/video', methods=['GET','POST'])
 def automation_tiktok_video():
     if 'tiktok_open_id' not in session:
         flash("Musisz się połączyć z TikTok.", "error")
@@ -225,7 +215,11 @@ def automation_tiktok_video():
 
     tpl = '''
     <!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8"><title>Wideo TikTok</title>
-      <style>/* ... */</style>
+      <style>body{font-family:Arial,sans-serif;padding:20px}
+             form{margin-top:20px;}
+             input[type=file]{display:block;margin-bottom:10px;}
+             .back{display:block;margin-top:20px;}
+      </style>
     </head><body>
       <h1>Wyślij wideo do TikTok Sandbox</h1>
       {% if session.get('tiktok_access_token') %}
@@ -247,26 +241,22 @@ def automation_tiktok_video():
             return redirect(url_for('automation.automation_tiktok_video'))
 
         access_token = session['tiktok_access_token']
-        files = {
-            'video_file': (vid.filename, vid.stream.read(), 'application/octet-stream')
-        }
-        headers = {
-            'Authorization': f'Bearer {access_token}'
-        }
+        files = {'video_file': (vid.filename, vid.read(), 'application/octet-stream')}
+        headers = {'Authorization': f'Bearer {access_token}'}
 
+        # log przed wysyłką
+        current_app.logger.info("[TikTok upload] POST %s, file=%s", UPLOAD_VIDEO_URL, vid.filename)
         resp = requests.post(
             UPLOAD_VIDEO_URL,
             headers=headers,
             files=files,
             data={'open_id': session['tiktok_open_id']}
         )
+        # log odpowiedzi
+        current_app.logger.info("[TikTok upload] status=%s, body=%s", resp.status_code, resp.text)
 
-        # 1) logujemy jako INFO, żeby Heroku to pokazało
-        current_app.logger.info(f"[TikTok upload] status={resp.status_code}, body={resp.text}")
-
-        # 2) flashujemy odpowiedź z kodem i body
         if resp.ok:
-            flash(f"Wideo wysłano pomyślnie. ({resp.status_code})", "success")
+            flash("Wideo wysłano pomyślnie.", "success")
         else:
             flash(f"Błąd wysyłki wideo: {resp.status_code} — {resp.text}", "error")
 

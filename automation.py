@@ -1,17 +1,10 @@
 # automation.py
 from flask import (
-    Blueprint,
-    render_template_string,
-    url_for,
-    request,
-    flash,
-    redirect,
-    session,
-    jsonify,
-    get_flashed_messages,
-    current_app
+    Blueprint, render_template_string, url_for, request,
+    flash, redirect, session, jsonify, get_flashed_messages,
+    current_app   # <-- dodajemy
 )
-import requests
+import requests   # pamiętaj, żeby importować requests jeśli jeszcze nie było
 from datetime import datetime
 from app import db
 from automation_models import ScheduledPost
@@ -232,11 +225,7 @@ def automation_tiktok_video():
 
     tpl = '''
     <!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8"><title>Wideo TikTok</title>
-      <style>body{font-family:Arial,sans-serif;padding:20px}
-             form{margin-top:20px;}
-             input[type=file]{display:block;margin-bottom:10px;}
-             .back{display:block;margin-top:20px;}
-      </style>
+      <style>/* ... */</style>
     </head><body>
       <h1>Wyślij wideo do TikTok Sandbox</h1>
       {% if session.get('tiktok_access_token') %}
@@ -264,6 +253,7 @@ def automation_tiktok_video():
         headers = {
             'Authorization': f'Bearer {access_token}'
         }
+
         resp = requests.post(
             UPLOAD_VIDEO_URL,
             headers=headers,
@@ -271,13 +261,15 @@ def automation_tiktok_video():
             data={'open_id': session['tiktok_open_id']}
         )
 
-        # logujemy jako INFO, żeby Heroku to pokazało
+        # 1) logujemy jako INFO, żeby Heroku to pokazało
         current_app.logger.info(f"[TikTok upload] status={resp.status_code}, body={resp.text}")
 
+        # 2) flashujemy odpowiedź z kodem i body
         if resp.ok:
             flash(f"Wideo wysłano pomyślnie. ({resp.status_code})", "success")
         else:
             flash(f"Błąd wysyłki wideo: {resp.status_code} — {resp.text}", "error")
+
         return redirect(url_for('automation.automation_tiktok_video'))
 
     return render_template_string(tpl)

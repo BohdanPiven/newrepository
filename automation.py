@@ -1,6 +1,7 @@
 # automation.py
-import requests
+
 import logging
+import requests
 from flask import (
     Blueprint,
     render_template_string,
@@ -17,12 +18,15 @@ from datetime import datetime
 from app import db
 from automation_models import ScheduledPost
 from selenium_facebook_post import publish_post_to_facebook
-from tiktok_auth import UPLOAD_VIDEO_URL
+from tiktok_auth import VIDEO_INIT_URL, UPLOAD_VIDEO_URL
 
+# Blueprint
 automation_bp = Blueprint('automation', __name__, url_prefix='/automation')
 
-# Ustaw logowanie INFO, żeby widzieć nasze "[TikTok upload]" w heroku logs
+# Podnieś logowanie Werkzeug do INFO, żeby w heroku logs pojawiały się nasze wpisy
 logging.getLogger('werkzeug').setLevel(logging.INFO)
+# Możesz też ustawić poziom samego current_app.logger w app.py:
+# app.logger.setLevel(logging.INFO)
 
 
 @automation_bp.route('/', endpoint='automation_home')
@@ -57,7 +61,11 @@ def automation_tiktok():
       <hr>
       {% set succ = get_flashed_messages(category_filter=['success']) %}
       {% set err  = get_flashed_messages(category_filter=['error']) %}
-      {% if succ %}<div style="background:#dfd;padding:10px;border-radius:4px">{{ succ[-1] }}</div>{% elif err %}<div style="background:#fdd;padding:10px;border-radius:4px">{{ err[-1] }}</div>{% endif %}
+      {% if succ %}
+        <div style="background:#dfd;padding:10px;border-radius:4px">{{ succ[-1] }}</div>
+      {% elif err %}
+        <div style="background:#fdd;padding:10px;border-radius:4px">{{ err[-1] }}</div>
+      {% endif %}
       {% if session.get('tiktok_open_id') %}
         <p>✅ Połączono jako <code>{{ session.tiktok_open_id }}</code></p>
         <p><a href="{{ url_for('tiktok_auth.logout') }}">Wyloguj się</a></p>
@@ -79,10 +87,13 @@ def automation_tiktok_plan():
     if request.method == 'POST':
         d = datetime.strptime(request.form['post_date'], "%Y-%m-%d").date()
         t = datetime.strptime(request.form['post_time'], "%H:%M").time()
-        new = ScheduledPost(date=d, time=t,
-                            topic=request.form['topic'],
-                            description=request.form['description'],
-                            user_id=uid)
+        new = ScheduledPost(
+            date=d,
+            time=t,
+            topic=request.form['topic'],
+            description=request.form['description'],
+            user_id=uid
+        )
         db.session.add(new)
         db.session.commit()
         flash("Dodano wpis.", "success")
@@ -96,7 +107,11 @@ def automation_tiktok_plan():
     <!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8"><title>Plan treści TikTok</title></head>
     <body>
       <h1>Plan treści TikTok</h1>
-      <ul>{% for p in posts %}<li>{{ p.date }} {{ p.time }} – {{ p.topic }}</li>{% endfor %}</ul>
+      <ul>
+        {% for p in posts %}
+          <li>{{ p.date }} {{ p.time }} – {{ p.topic }}</li>
+        {% endfor %}
+      </ul>
       <form method="post">
         <label>Data: <input type="date" name="post_date" required></label><br>
         <label>Czas: <input type="time" name="post_time" required></label><br>
@@ -137,7 +152,11 @@ def automation_tiktok_timeline():
         document.addEventListener('DOMContentLoaded', function() {
           new FullCalendar.Calendar(
             document.getElementById('calendar'),
-            { initialView:'dayGridMonth', locale:'pl', events:'{{ url_for("automation.tiktok_events") }}' }
+            {
+              initialView:'dayGridMonth',
+              locale:'pl',
+              events:'{{ url_for("automation.tiktok_events") }}'
+            }
           ).render();
         });
       </script>
@@ -149,7 +168,7 @@ def automation_tiktok_timeline():
 @automation_bp.route('/tiktok/rodzaje')
 def automation_tiktok_rodzaje():
     tpl = '''
-    <!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8"><title>Rodzaje wideo</title></head>
+    <!DOCTYPE html><html lang="pl"><meta charset="UTF-8"><title>Rodzaje wideo</title></head>
     <body>
       <h1>Rodzaje wideo na TikToku</h1>
       <p>Poradniki, Q&A, kulisy pracy itp.</p>
@@ -162,7 +181,7 @@ def automation_tiktok_rodzaje():
 @automation_bp.route('/tiktok/scenariusze')
 def automation_tiktok_scenariusze():
     tpl = '''
-    <!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8"><title>Scenariusze</title></head>
+    <!DOCTYPE html><html lang="pl"><meta charset="UTF-8"><title>Scenariusze</title></head>
     <body>
       <h1>Scenariusze Postów i Wytyczne</h1>
       <p>Przykładowe schematy i wytyczne.</p>
@@ -174,41 +193,69 @@ def automation_tiktok_scenariusze():
 
 @automation_bp.route('/tiktok/video', methods=['GET','POST'])
 def automation_tiktok_video():
-    # … walidacja sesji …
-    if request.method == 'POST':
-        f = request.files['video_file']
-        headers = {'Authorization': f"Bearer {session['tiktok_access_token']}"}
-        init_payload = {
-            "open_id": session['tiktok_open_id'],
-            "upload_type": "UPLOAD_BY_FILE",
-            "file_name": f.filename,
-            "file_size": len(f.read())
-        }
-        f.stream.seek(0)  # cofnij czytanie po wyliczeniu rozmiaru
+    # 1) upewnij się, że mamy token i open_id
+    if 'tiktok_open_id' not in session or 'tiktok_access_token' not in session:
+        flash("Musisz najpierw zalogować się przez TikTok.", "error")
+        return redirect(url_for('automation.automation_tiktok'))
 
-        # 1) INIT
+    # szablon formularza
+    tpl = '''
+    <!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8"><title>Wideo TikTok</title></head>
+    <body>
+      <h1>Wyślij wideo do TikTok Sandbox</h1>
+      <form method="post" enctype="multipart/form-data">
+        <label>Plik (mp4/mov): <input type="file" name="video_file" accept=".mp4,.mov" required></label><br>
+        <button type="submit">Wyślij do sandbox</button>
+      </form>
+      <p><a href="{{ url_for('automation.automation_tiktok') }}">← Powrót</a></p>
+    </body></html>
+    '''
+
+    if request.method == 'POST':
+        vid = request.files.get('video_file')
+        if not vid:
+            flash("Nie wybrano pliku.", "error")
+            return redirect(url_for('automation.automation_tiktok_video'))
+
+        headers = {'Authorization': f"Bearer {session['tiktok_access_token']}"}
+        content = vid.read()
+        size = len(content)
+        vid.stream.seek(0)
+
+        # Krok 1: INIT
+        init_payload = {
+            "open_id":     session['tiktok_open_id'],
+            "upload_type": "UPLOAD_BY_FILE",
+            "file_name":   vid.filename,
+            "file_size":   size
+        }
+        current_app.logger.info("[TikTok upload] INIT %s", vid.filename)
         r1 = requests.post(VIDEO_INIT_URL, headers=headers, json=init_payload)
         r1.raise_for_status()
         data = r1.json()['data']
         upload_address = data['upload_address']
         video_id       = data['video_id']
 
-        # 2) UPLOAD
-        files = {'file': (f.filename, f.read(), 'application/octet-stream')}
-        f.stream.seek(0)
+        # Krok 2: UPLOAD
+        current_app.logger.info("[TikTok upload] UPLOAD %s → %s", vid.filename, upload_address)
+        files = {'file': (vid.filename, content, 'application/octet-stream')}
         r2 = requests.post(upload_address, files=files)
         r2.raise_for_status()
 
-        # 3) PUBLISH
+        # Krok 3: PUBLISH
         publish_payload = {
-            "open_id": session['tiktok_open_id'],
+            "open_id":  session['tiktok_open_id'],
             "video_id": video_id
         }
+        current_app.logger.info("[TikTok upload] PUBLISH video_id=%s", video_id)
         r3 = requests.post(UPLOAD_VIDEO_URL, headers=headers, json=publish_payload)
         r3.raise_for_status()
 
         flash("Wideo wysłano i opublikowano pomyślnie.", "success")
         return redirect(url_for('automation.automation_tiktok_video'))
+
+    # GET: pokaż formularz
+    return render_template_string(tpl)
 
 
 @automation_bp.route('/facebook')
@@ -228,15 +275,13 @@ def automation_facebook():
 def automation_facebook_publish():
     if request.method == 'GET':
         return render_template_string('''
-          <!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8"><title>Publish FB</title></head>
-          <body>
-            <h1>Publikuj na Facebooku</h1>
-            <form method="post">
-              <textarea name="content"></textarea><br>
-              <button type="submit">Publikuj</button>
-            </form>
-            <p><a href="{{ url_for('automation.automation_facebook') }}">← Powrót</a></p>
-          </body></html>
+        <!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8"><title>Publikuj na FB</title></head>
+        <body>
+          <h1>Publikuj na Facebooku</h1>
+          <form method="post"><textarea name="content"></textarea><br>
+          <button type="submit">Publikuj</button></form>
+          <p><a href="{{ url_for('automation.automation_facebook') }}">← Powrót</a></p>
+        </body></html>
         ''')
     publish_post_to_facebook(request.form['content'])
     flash("Opublikowano na Facebooku.", "success")

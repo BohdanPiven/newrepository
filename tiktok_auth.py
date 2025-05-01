@@ -19,30 +19,35 @@ tiktok_auth_bp = Blueprint(
     url_prefix="/tiktok_auth"
 )
 
-# -- Środowiskowe zmienne (Heroku: Config Vars) --
+# ————————————
+# Konfiguracja z Heroku Config Vars
+# ————————————
 TIKTOK_CLIENT_KEY    = os.getenv("TIKTOK_CLIENT_KEY")
 TIKTOK_CLIENT_SECRET = os.getenv("TIKTOK_CLIENT_SECRET")
 TIKTOK_REDIRECT_URI  = os.getenv("TIKTOK_REDIRECT_URI")
 
-# -- TikTok OAuth Sandbox Endpoints --
+# ————————————
+# Sandbox OAuth Endpoints
+# ————————————
 AUTH_URL         = "https://open.tiktokapis.com/v2/auth/authorize/"
 TOKEN_URL        = "https://open.tiktokapis.com/v2/oauth/token/"
 USER_INFO_URL    = "https://open.tiktokapis.com/v2/user/info/"
 VIDEO_INIT_URL   = "https://open.tiktokapis.com/v2/post/publish/video/init/"
 UPLOAD_VIDEO_URL = "https://open.tiktokapis.com/v2/post/publish/video/upload/"
 
-# Potrzebne scope’y:
-#  - user.info.basic  — do pobrania open_id i access_token
-#  - video.upload      — do inicjacji uploadu pliku
-#  - video.list        — (opcjonalnie) do listowania wstawionych filmów
-SCOPES = "user.info.basic video.upload video.list"
+# ————————————
+# Scope’y wymagane przez sandbox:
+#  • user.info.basic – dostęp do open_id + basic profile
+#  • video.upload     – inicjacja uploadu
+#  • video.list       – (opcjonalnie) pobieranie listy wgranych filmów
+# ————————————
+SCOPES = "user.info.basic,video.upload,video.list"
 
 
 @tiktok_auth_bp.route("/login")
 def login():
     """
-    Przekierowuje użytkownika do TikTok OAuth Sandbox
-    z odpowiednimi parametrami i scope’ami.
+    Kieruje do TikTok OAuth Sandbox z odpowiednimi parametrami.
     """
     params = {
         "client_key":    TIKTOK_CLIENT_KEY,
@@ -51,18 +56,15 @@ def login():
         "response_type": "code",
         "state":         "xyz123",
     }
-    # składamy query-string
-    query = "&".join(f"{k}={quote_plus(v)}" for k, v in params.items())
-    return redirect(f"{AUTH_URL}?{query}")
+    qs = "&".join(f"{k}={quote_plus(v)}" for k, v in params.items())
+    return redirect(f"{AUTH_URL}?{qs}")
 
 
 @tiktok_auth_bp.route("/callback")
 def callback():
     """
-    Obsługa callbacku OAuth:
-     1) odbiór parametru 'code'
-     2) wymiana na access_token + open_id
-     3) zapis w sesji Flask
+    Odbiera 'code', wymienia na access_token + open_id,
+    zapisuje je w sesji lub pokazuje błąd.
     """
     if err := request.args.get("error"):
         flash(f"TikTok error: {err}", "error")
@@ -83,8 +85,11 @@ def callback():
                 "grant_type":    "authorization_code",
                 "redirect_uri":  TIKTOK_REDIRECT_URI,
             },
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-            timeout=10,
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept":       "application/json",
+            },
+            timeout=10
         )
         resp.raise_for_status()
     except requests.RequestException as e:
@@ -92,11 +97,12 @@ def callback():
         flash("Nie udało się wymienić kodu na token.", "error")
         return redirect(url_for("automation.automation_tiktok"))
 
-    data = resp.json().get("data", resp.json())
+    payload = resp.json()
+    data = payload.get("data", payload)
     open_id      = data.get("open_id")
     access_token = data.get("access_token")
 
-    if not open_id or not access_token:
+    if not (open_id and access_token):
         msg = data.get("description") or data.get("message") or "Nieznany błąd"
         flash(f"Błąd przy pobieraniu tokena: {msg}", "error")
         return redirect(url_for("automation.automation_tiktok"))
@@ -110,7 +116,7 @@ def callback():
 @tiktok_auth_bp.route("/logout")
 def logout():
     """
-    Wylogowanie – czyszczenie sesji OAuth.
+    Wylogowuje użytkownika z TikTok Sandbox (czyści sesję).
     """
     session.pop("tiktok_open_id", None)
     session.pop("tiktok_access_token", None)

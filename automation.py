@@ -230,26 +230,7 @@ def automation_tiktok_video():
         flash("Musisz się połączyć z TikTok.", "error")
         return redirect(url_for('automation.automation_tiktok'))
 
-    tpl = '''
-    <!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8"><title>Wideo TikTok</title>
-      <style>body{font-family:Arial,sans-serif;padding:20px}
-             form{margin-top:20px;}
-             input[type=file]{display:block;margin-bottom:10px;}
-             .back{display:block;margin-top:20px;}
-      </style>
-    </head><body>
-      <h1>Wyślij wideo do TikTok Sandbox</h1>
-      {% if session.get('tiktok_access_token') %}
-        <form method="post" enctype="multipart/form-data">
-          <label>Plik (mp4/mov): <input type="file" name="video_file" accept=".mp4,.mov" required></label><br>
-          <button type="submit">Wyślij do sandbox</button>
-        </form>
-      {% else %}
-        <p style="color:red;">Musisz być zalogowany przez TikTok, aby wysłać wideo.</p>
-      {% endif %}
-      <p><a href="{{ url_for('automation.automation_tiktok') }}" class="back">← Powrót</a></p>
-    </body></html>
-    '''
+    tpl = '''…'''  # Twój szablon formularza
 
     if request.method == 'POST':
         vid = request.files.get('video_file')
@@ -258,23 +239,20 @@ def automation_tiktok_video():
             return redirect(url_for('automation.automation_tiktok_video'))
 
         access_token = session['tiktok_access_token']
-        files = {
-            'video_file': (vid.filename, vid.read(), 'application/octet-stream')
-        }
-        headers = {
-            'Authorization': f'Bearer {access_token}'
-        }
+        files = {'video_file': (vid.filename, vid.read(), 'application/octet-stream')}
+        headers = {'Authorization': f'Bearer {access_token}'}
 
-        # log before upload
-        current_app.logger.info("[TikTok upload] POST %s, file=%s", UPLOAD_VIDEO_URL, vid.filename)
+        # DEBUG: używamy WARNING żeby na pewno się pojawiło  
+        current_app.logger.warning("[TikTok upload] POST %s, file=%s",
+                                   UPLOAD_VIDEO_URL, vid.filename)
         resp = requests.post(
             UPLOAD_VIDEO_URL,
             headers=headers,
             files=files,
             data={'open_id': session['tiktok_open_id']}
         )
-        # log after upload
-        current_app.logger.info("[TikTok upload] status=%s, body=%s", resp.status_code, resp.text)
+        current_app.logger.warning("[TikTok upload] status=%s, body=%s",
+                                   resp.status_code, resp.text)
 
         if resp.ok:
             flash("Wideo wysłano pomyślnie.", "success")

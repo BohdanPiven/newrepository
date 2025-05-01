@@ -66,6 +66,7 @@ sys.path.append(os.path.abspath(os.getcwd()))
 
 # Inicjalizacja aplikacji Flask
 app = Flask(__name__)
+app.logger.setLevel(logging.INFO)
 basedir = os.path.abspath(os.path.dirname(__file__))
 
 # Konfiguracja bazy danych (Heroku/Postgres lub SQLite)

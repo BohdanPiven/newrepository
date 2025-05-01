@@ -29,6 +29,7 @@ AUTH_URL         = "https://www.tiktok.com/v2/auth/authorize"
 TOKEN_URL        = "https://open.tiktokapis.com/v2/oauth/token/"
 USER_INFO_URL    = "https://open.tiktokapis.com/v2/user/info/"
 UPLOAD_VIDEO_URL = "https://open.tiktokapis.com/v2/post/publish/video/upload/"
+VIDEO_INIT_URL   = "https://open.tiktokapis.com/v2/post/publish/video/init/"
 
 SCOPES = "user.info.basic"
 

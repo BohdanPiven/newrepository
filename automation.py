@@ -174,60 +174,41 @@ def automation_tiktok_scenariusze():
 
 @automation_bp.route('/tiktok/video', methods=['GET','POST'])
 def automation_tiktok_video():
-    if 'tiktok_open_id' not in session or 'tiktok_access_token' not in session:
-        flash("Musisz się zalogować przez TikTok, aby wysłać wideo.", "error")
-        return redirect(url_for('automation.automation_tiktok'))
-
-    tpl = '''
-    <!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8"><title>Wideo TikTok</title></head>
-    <body>
-      <h1>Wyślij wideo do TikTok Sandbox</h1>
-      {% for msg in get_flashed_messages(category_filter=['success']) %}
-        <div style="color:green">{{ msg }}</div>
-      {% endfor %}
-      {% for msg in get_flashed_messages(category_filter=['error']) %}
-        <div style="color:red">{{ msg }}</div>
-      {% endfor %}
-      <form method="post" enctype="multipart/form-data">
-        <label>Plik MP4/MOV:
-          <input type="file" name="video_file" accept=".mp4,.mov" required>
-        </label><br><br>
-        <button type="submit">Wyślij do sandbox</button>
-      </form>
-      <p><a href="{{ url_for('automation.automation_tiktok') }}">← Powrót</a></p>
-    </body></html>
-    '''
-
+    # … walidacja sesji …
     if request.method == 'POST':
-        f = request.files.get('video_file')
-        if not f:
-            flash("Nie wybrano pliku.", "error")
-            return redirect(url_for('automation.automation_tiktok_video'))
-
-        files = {
-            'video_file': (f.filename, f.read(), 'application/octet-stream')
+        f = request.files['video_file']
+        headers = {'Authorization': f"Bearer {session['tiktok_access_token']}"}
+        init_payload = {
+            "open_id": session['tiktok_open_id'],
+            "upload_type": "UPLOAD_BY_FILE",
+            "file_name": f.filename,
+            "file_size": len(f.read())
         }
-        headers = {
-            'Authorization': f"Bearer {session['tiktok_access_token']}"
+        f.stream.seek(0)  # cofnij czytanie po wyliczeniu rozmiaru
+
+        # 1) INIT
+        r1 = requests.post(VIDEO_INIT_URL, headers=headers, json=init_payload)
+        r1.raise_for_status()
+        data = r1.json()['data']
+        upload_address = data['upload_address']
+        video_id       = data['video_id']
+
+        # 2) UPLOAD
+        files = {'file': (f.filename, f.read(), 'application/octet-stream')}
+        f.stream.seek(0)
+        r2 = requests.post(upload_address, files=files)
+        r2.raise_for_status()
+
+        # 3) PUBLISH
+        publish_payload = {
+            "open_id": session['tiktok_open_id'],
+            "video_id": video_id
         }
+        r3 = requests.post(UPLOAD_VIDEO_URL, headers=headers, json=publish_payload)
+        r3.raise_for_status()
 
-        current_app.logger.info("[TikTok upload] POST %s file=%s", UPLOAD_VIDEO_URL, f.filename)
-        resp = requests.post(
-            UPLOAD_VIDEO_URL,
-            headers=headers,
-            files=files,
-            data={'open_id': session['tiktok_open_id']}
-        )
-        current_app.logger.info("[TikTok upload] status=%s body=%s", resp.status_code, resp.text)
-
-        if resp.ok:
-            flash("Wideo wysłano pomyślnie.", "success")
-        else:
-            flash(f"Błąd wysyłki wideo: {resp.status_code} – {resp.text}", "error")
-
+        flash("Wideo wysłano i opublikowano pomyślnie.", "success")
         return redirect(url_for('automation.automation_tiktok_video'))
-
-    return render_template_string(tpl)
 
 
 @automation_bp.route('/facebook')

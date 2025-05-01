@@ -24,24 +24,25 @@ TIKTOK_CLIENT_KEY    = os.getenv("TIKTOK_CLIENT_KEY")
 TIKTOK_CLIENT_SECRET = os.getenv("TIKTOK_CLIENT_SECRET")
 TIKTOK_REDIRECT_URI  = os.getenv("TIKTOK_REDIRECT_URI")
 
-# -- TikTok OAuth Endpoints (Sandbox) --
-AUTH_URL            = "https://open.tiktokapis.com/v2/auth/authorize/"
-TOKEN_URL           = "https://open.tiktokapis.com/v2/oauth/token/"
-USER_INFO_URL       = "https://open.tiktokapis.com/v2/user/info/"
-VIDEO_INIT_URL      = "https://open.tiktokapis.com/v2/post/publish/video/init/"
-UPLOAD_VIDEO_URL    = "https://open.tiktokapis.com/v2/post/publish/video/upload/"
+# -- TikTok OAuth Sandbox Endpoints --
+AUTH_URL         = "https://open.tiktokapis.com/v2/auth/authorize/"
+TOKEN_URL        = "https://open.tiktokapis.com/v2/oauth/token/"
+USER_INFO_URL    = "https://open.tiktokapis.com/v2/user/info/"
+VIDEO_INIT_URL   = "https://open.tiktokapis.com/v2/post/publish/video/init/"
+UPLOAD_VIDEO_URL = "https://open.tiktokapis.com/v2/post/publish/video/upload/"
 
 # Potrzebne scope’y:
-#  - user.info.basic   — pobranie open_id i access_token
-#  - video.upload       — inicjacja uploadu wideo
-#  - video.list         — (opcjonalnie) lista wgranych filmów
+#  - user.info.basic  — do pobrania open_id i access_token
+#  - video.upload      — do inicjacji uploadu pliku
+#  - video.list        — (opcjonalnie) do listowania wstawionych filmów
 SCOPES = "user.info.basic video.upload video.list"
 
 
 @tiktok_auth_bp.route("/login")
 def login():
     """
-    Przekierowuje użytkownika do TikTok OAuth Sandbox.
+    Przekierowuje użytkownika do TikTok OAuth Sandbox
+    z odpowiednimi parametrami i scope’ami.
     """
     params = {
         "client_key":    TIKTOK_CLIENT_KEY,
@@ -50,6 +51,7 @@ def login():
         "response_type": "code",
         "state":         "xyz123",
     }
+    # składamy query-string
     query = "&".join(f"{k}={quote_plus(v)}" for k, v in params.items())
     return redirect(f"{AUTH_URL}?{query}")
 
@@ -57,7 +59,10 @@ def login():
 @tiktok_auth_bp.route("/callback")
 def callback():
     """
-    Odbiór kodu, wymiana na token + open_id, zapis w sesji.
+    Obsługa callbacku OAuth:
+     1) odbiór parametru 'code'
+     2) wymiana na access_token + open_id
+     3) zapis w sesji Flask
     """
     if err := request.args.get("error"):
         flash(f"TikTok error: {err}", "error")
@@ -65,7 +70,7 @@ def callback():
 
     code = request.args.get("code")
     if not code:
-        flash("Missing code from TikTok.", "error")
+        flash("Brak kodu autoryzacyjnego od TikToka.", "error")
         return redirect(url_for("automation.automation_tiktok"))
 
     try:
@@ -83,31 +88,29 @@ def callback():
         )
         resp.raise_for_status()
     except requests.RequestException as e:
-        current_app.logger.error("Token request failed: %s", e)
-        flash("TikTok token request failed.", "error")
+        current_app.logger.error("Token exchange failed: %s", e)
+        flash("Nie udało się wymienić kodu na token.", "error")
         return redirect(url_for("automation.automation_tiktok"))
 
-    result = resp.json()
-    current_app.logger.debug("🎯 Token response JSON: %r", result)
-
-    open_id      = result.get("open_id")      or result.get("data", {}).get("open_id")
-    access_token = result.get("access_token") or result.get("data", {}).get("access_token")
+    data = resp.json().get("data", resp.json())
+    open_id      = data.get("open_id")
+    access_token = data.get("access_token")
 
     if not open_id or not access_token:
-        desc = result.get("description") or result.get("message") or "Unknown error"
-        flash(f"TikTok token error: {desc}", "error")
+        msg = data.get("description") or data.get("message") or "Nieznany błąd"
+        flash(f"Błąd przy pobieraniu tokena: {msg}", "error")
         return redirect(url_for("automation.automation_tiktok"))
 
     session["tiktok_open_id"]      = open_id
     session["tiktok_access_token"] = access_token
-    flash("Zalogowano pomyślnie z nowymi scope’ami!", "success")
+    flash("Zalogowano pomyślnie z pełnymi uprawnieniami.", "success")
     return redirect(url_for("automation.automation_tiktok"))
 
 
 @tiktok_auth_bp.route("/logout")
 def logout():
     """
-    Wylogowanie (czyszczenie sesji OAuth).
+    Wylogowanie – czyszczenie sesji OAuth.
     """
     session.pop("tiktok_open_id", None)
     session.pop("tiktok_access_token", None)

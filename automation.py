@@ -271,13 +271,13 @@ def automation_tiktok_video():
             data={'open_id': session['tiktok_open_id']}
         )
 
-        # debug w logach
-        current_app.logger.debug(f"[TikTok upload] status={resp.status_code}, body={resp.text}")
+        # logujemy jako INFO, żeby Heroku to pokazało
+        current_app.logger.info(f"[TikTok upload] status={resp.status_code}, body={resp.text}")
 
         if resp.ok:
-            flash("Wideo wysłano pomyślnie.", "success")
+            flash(f"Wideo wysłano pomyślnie. ({resp.status_code})", "success")
         else:
-            flash(f"Błąd wysyłki wideo: {resp.status_code} {resp.text}", "error")
+            flash(f"Błąd wysyłki wideo: {resp.status_code} — {resp.text}", "error")
         return redirect(url_for('automation.automation_tiktok_video'))
 
     return render_template_string(tpl)

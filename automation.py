@@ -223,7 +223,7 @@ def automation_tiktok_video():
     try:
         # 1) INIT
         init_resp = requests.post(
-            "https://open.tiktokapis.com/v2/post/publish/video/init/",
+            "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/",
             headers={
                 "Authorization": f"Bearer {session['tiktok_access_token']}",
                 "Accept": "application/json",

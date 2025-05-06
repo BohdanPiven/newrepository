@@ -30,7 +30,7 @@ TOKEN_URL        = "https://open.tiktokapis.com/v2/oauth/token/"
 USER_INFO_URL    = "https://open.tiktokapis.com/v2/user/info/"
 UPLOAD_VIDEO_URL = "https://open.tiktokapis.com/v2/post/publish/video/upload/"
 
-SCOPES = "user.info.basic"
+SCOPES = "user.info.basic video.upload video.list"
 
 
 @tiktok_auth_bp.route("/login")

@@ -166,7 +166,8 @@ def automation_tiktok_timeline():
           <a href="{{ url_for('automation.automation_tiktok_plan') }}">Plan treści</a> |
           <a href="{{ url_for('automation.automation_tiktok_rodzaje') }}">Rodzaje</a> |
           <a href="{{ url_for('automation.automation_tiktok_scenariusze') }}">Scenariusze</a> |
-          <a href="{{ url_for('automation.automation_tiktok_timeline') }}">Timeline</a>
+          <a href="{{ url_for('automation.automation_tiktok_timeline') }}">Timeline</a> |
+          <a href="{{ url_for('automation.automation_tiktok_video') }}">Wideo</a>
         </nav>
         <div id="calendar" style="margin-top:20px"></div>
         <p><a href="{{ url_for('automation.automation_tiktok') }}">← Powrót</a></p>
@@ -201,6 +202,89 @@ def automation_tiktok_rodzaje():
     '''
     return render_template_string(tpl)
 
+@automation_bp.route('/tiktok/video', methods=['GET', 'POST'])
+def automation_tiktok_video():
+    if 'tiktok_open_id' not in session:
+        flash("Musisz się połączyć z TikTok.", "error")
+        return redirect(url_for('automation.automation_tiktok'))
+
+    if request.method == 'GET':
+        return render_template_string('''<!DOCTYPE html><html lang="pl"><head>
+          <meta charset="UTF-8"><title>Upload wideo TikTok</title></head>
+          <body style="font-family:Arial,sans-serif;padding:20px">
+            <h1>Upload wideo – TikTok Sandbox</h1>
+            <form method="post" enctype="multipart/form-data">
+              <input type="file" name="video_file" accept="video/*" required><br><br>
+              <button type="submit">Wyślij</button>
+            </form>
+            <p><a href="{{ url_for('automation.automation_tiktok') }}">← Powrót</a></p>
+          </body></html>''')
+
+    # --- POST: obsługa 3‑etapowego uploadu --------------------------
+    f = request.files.get('video_file')
+    if not f:
+        flash("Nie wybrano pliku.", "error")
+        return redirect(url_for('automation.automation_tiktok_video'))
+
+    try:
+        # 1) INIT
+        init_resp = requests.post(
+            "https://open.tiktokapis.com/v2/post/publish/video/init/",
+            headers={
+                "Authorization": f"Bearer {session['tiktok_access_token']}",
+                "Accept": "application/json",
+            },
+            json={
+                "open_id": session['tiktok_open_id'],
+                "upload_type": "UPLOAD_BY_FILE",
+                "file_name": f.filename,
+                "file_size": f.content_length,
+            },
+            timeout=15,
+        )
+        init_resp.raise_for_status()
+        data = init_resp.json().get("data", {})
+        video_id = data["video_id"]
+        upload_addr = data["upload_address"]
+
+        # 2) UPLOAD binary (PUT bez tokenu w URL)
+        put = requests.put(
+            upload_addr,
+            headers={"Content-Type": "application/octet-stream"},
+            data=f.stream,
+            timeout=60,
+        )
+        put.raise_for_status()
+
+        # 3) PUBLISH
+        publish_resp = requests.post(
+            "https://open.tiktokapis.com/v2/post/publish/video/upload/",
+            headers={
+                "Authorization": f"Bearer {session['tiktok_access_token']}",
+                "Accept": "application/json",
+            },
+            json={"video_id": video_id},
+            timeout=15,
+        )
+        publish_resp.raise_for_status()
+
+    except requests.HTTPError as e:
+        # obsłuż 401/403 osobno, resztę ogólnie
+        if e.response.status_code in (401, 403):
+            flash("Brak uprawnienia video.upload – wyloguj się i zautoryzuj ponownie.", "error")
+        else:
+            flash(f"Błąd TikTok API ({e.response.status_code}).", "error")
+        current_app.logger.error("[TikTok upload] %s", e)
+        return redirect(url_for('automation.automation_tiktok_video'))
+
+    except Exception as ex:
+        flash(f"Nieoczekiwany błąd: {ex}", "error")
+        current_app.logger.exception("Upload crash")
+        return redirect(url_for('automation.automation_tiktok_video'))
+
+    flash("🎉 Wideo wysłane pomyślnie!", "success")
+    return redirect(url_for('automation.automation_tiktok_video'))
+
 
 @automation_bp.route('/tiktok/scenariusze')
 def automation_tiktok_scenariusze():
@@ -214,6 +298,10 @@ def automation_tiktok_scenariusze():
     '''
     return render_template_string(tpl)
 
+# pomocniczy alias, żeby url_for('automation.automation_tiktok_video') działał
+automation_bp.add_url_rule(
+    '/tiktok/video', endpoint='automation_tiktok_video',
+    view_func=automation_tiktok_video, methods=['GET', 'POST'])
 
 @automation_bp.route('/facebook')
 def automation_facebook():

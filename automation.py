@@ -1,22 +1,21 @@
 # automation.py
 import requests
 from datetime import datetime
+from os import getenv
 from flask import (
     Blueprint, render_template_string, url_for, request,
     flash, redirect, session, jsonify, get_flashed_messages, current_app
 )
+
 from app import db
 from automation_models import ScheduledPost
 from selenium_facebook_post import publish_post_to_facebook
-from os import getenv
 
 TIKTOK_CLIENT_KEY = getenv("TIKTOK_CLIENT_KEY")  # do nagłówka X‑Client‑Id
 
 automation_bp = Blueprint("automation", __name__, url_prefix="/automation")
 
-# ────────────────────────────────────────────────────────────────────
-# GŁÓWNA STRONA PANELU
-# ────────────────────────────────────────────────────────────────────
+# ─────────────────────────  PANEL HOME  ────────────────────────────
 @automation_bp.route("/", endpoint="automation_home")
 def automation_home():
     tpl = """<!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8">
@@ -40,13 +39,10 @@ def automation_home():
           <a href="{{ url_for('automation.automation_tiktok') }}">TikTok</a>
           <a href="{{ url_for('automation.automation_facebook') }}">Facebook</a>
         </div>
-      </div>
-    </body></html>"""
+      </div></body></html>"""
     return render_template_string(tpl)
 
-# ────────────────────────────────────────────────────────────────────
-# SEKCJA TIKTOK – panel główny
-# ────────────────────────────────────────────────────────────────────
+# ───────────────────────  TIKTOK GŁÓWNA  ──────────────────────────
 @automation_bp.route("/tiktok")
 def automation_tiktok():
     tpl = """<!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8">
@@ -83,9 +79,7 @@ def automation_tiktok():
       </div></body></html>"""
     return render_template_string(tpl)
 
-# ────────────────────────────────────────────────────────────────────
-# PLAN TREŚCI – dodawanie/wyświetlanie postów
-# ────────────────────────────────────────────────────────────────────
+# ─────────────────────────  PLAN TREŚCI  ────────────────────────────
 @automation_bp.route("/tiktok/plan", methods=["GET", "POST"])
 def automation_tiktok_plan():
     if "tiktok_open_id" not in session:
@@ -108,11 +102,9 @@ def automation_tiktok_plan():
         flash("Dodano wpis.", "success")
         return redirect(url_for("automation.automation_tiktok_plan"))
 
-    posts = (
-        ScheduledPost.query.filter_by(user_id=uid)
-        .order_by(ScheduledPost.date.asc(), ScheduledPost.time.asc())
-        .all()
-    )
+    posts = (ScheduledPost.query.filter_by(user_id=uid)
+             .order_by(ScheduledPost.date.asc(), ScheduledPost.time.asc())
+             .all())
     tpl = """<!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8">
     <title>Plan treści TikTok</title><style>body{font-family:Arial,sans-serif;padding:20px}</style>
     </head><body>
@@ -129,27 +121,19 @@ def automation_tiktok_plan():
     </body></html>"""
     return render_template_string(tpl, posts=posts)
 
-# ────────────────────────────────────────────────────────────────────
-# FULLCALENDAR – wydarzenia JSON
-# ────────────────────────────────────────────────────────────────────
+# ───────────────────  FULLCALENDAR EVENTS  ──────────────────────────
 @automation_bp.route("/tiktok/events")
 def tiktok_events():
     uid = session.get("tiktok_open_id")
     if not uid:
         return jsonify([])
-    events = [
-        {
-            "title": p.topic,
-            "start": f"{p.date.isoformat()}T{p.time.strftime('%H:%M:%S')}",
-            "url": url_for("automation.automation_tiktok_plan"),
-        }
-        for p in ScheduledPost.query.filter_by(user_id=uid).all()
-    ]
-    return jsonify(events)
+    return jsonify([{
+        "title": p.topic,
+        "start": f"{p.date.isoformat()}T{p.time.strftime('%H:%M:%S')}",
+        "url": url_for("automation.automation_tiktok_plan"),
+    } for p in ScheduledPost.query.filter_by(user_id=uid).all()])
 
-# ────────────────────────────────────────────────────────────────────
-# TIMELINE (FullCalendar)
-# ────────────────────────────────────────────────────────────────────
+# ───────────────────  TIMELINE (FULLCALENDAR)  ─────────────────────
 @automation_bp.route("/tiktok/timeline")
 def automation_tiktok_timeline():
     tpl = """<!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8">
@@ -186,56 +170,46 @@ def automation_tiktok_timeline():
       </script></body></html>"""
     return render_template_string(tpl)
 
-# ────────────────────────────────────────────────────────────────────
-# ROUTES STATYCZNE
-# ────────────────────────────────────────────────────────────────────
+# ───────────────────  ROUTES STATYCZNE  ────────────────────────────
 @automation_bp.route("/tiktok/rodzaje")
 def automation_tiktok_rodzaje():
-    return render_template_string(
-        """<!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8">
-        <title>Rodzaje wideo</title></head>
-        <body style="font-family:Arial,sans-serif;padding:20px">
-          <h1>Rodzaje wideo na TikToku</h1><p>Poradniki, Q&A, kulisy pracy itp.</p>
+    return render_template_string("""<!DOCTYPE html><html lang="pl"><head>
+        <meta charset="UTF-8"><title>Rodzaje wideo</title></head><body
+        style="font-family:Arial,sans-serif;padding:20px">
+          <h1>Rodzaje wideo na TikToku</h1>
+          <p>Poradniki, Q&A, kulisy pracy itp.</p>
           <p><a href="{{ url_for('automation.automation_tiktok') }}">← Powrót</a></p>
-        </body></html>"""
-    )
+        </body></html>""")
 
 @automation_bp.route("/tiktok/scenariusze")
 def automation_tiktok_scenariusze():
-    return render_template_string(
-        """<!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8">
-        <title>Scenariusze</title></head>
-        <body style="font-family:Arial,sans-serif;padding:20px">
-          <h1>Scenariusze Postów i Wytyczne</h1><p>Przykładowe schematy i wytyczne.</p>
-          <p><a href="{{ url_for('automation.automation_tiktok') }}">← Powrót</a></p>
-        </body></html>"""
-    )
+    return render_template_string("""<!DOCTYPE html><html lang="pl"><head>
+      <meta charset="UTF-8"><title>Scenariusze</title></head><body
+      style="font-family:Arial,sans-serif;padding:20px">
+        <h1>Scenariusze Postów i Wytyczne</h1>
+        <p>Przykładowe schematy i wytyczne.</p>
+        <p><a href="{{ url_for('automation.automation_tiktok') }}">← Powrót</a></p>
+      </body></html>""")
 
-# ────────────────────────────────────────────────────────────────────
-# UPLOAD WIDEO – 3‑etapowy flow
-# ────────────────────────────────────────────────────────────────────
+# ───────────────────  UPLOAD WIDEO  ────────────────────────────────
 @automation_bp.route("/tiktok/video", methods=["GET", "POST"])
 def automation_tiktok_video():
     if "tiktok_open_id" not in session:
-        flash("Musisz się połączyć z TikTok.", "error")
+        flash("Musisz się połączyć z TikTok.", "error")
         return redirect(url_for("automation.automation_tiktok"))
 
-    # ---------- formularz ----------
     if request.method == "GET":
-        return render_template_string(
-            """<!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8">
-            <title>Upload wideo TikTok</title></head>
-            <body style="font-family:Arial,sans-serif;padding:20px">
+        return render_template_string("""<!DOCTYPE html><html lang="pl"><head>
+            <meta charset="UTF-8"><title>Upload wideo TikTok</title></head><body
+            style="font-family:Arial,sans-serif;padding:20px">
               <h1>Upload wideo – TikTok Sandbox</h1>
               <form method="post" enctype="multipart/form-data">
                 <input type="file" name="video_file" accept="video/*" required><br><br>
                 <button type="submit">Wyślij</button>
               </form>
               <p><a href="{{ url_for('automation.automation_tiktok') }}">← Powrót</a></p>
-            </body></html>"""
-        )
+            </body></html>""")
 
-    # ---------- POST – 3‑etapowy upload ----------
     f = request.files.get("video_file")
     if not f:
         flash("Nie wybrano pliku.", "error")
@@ -252,9 +226,11 @@ def automation_tiktok_video():
             },
             json={
                 "open_id": session["tiktok_open_id"],
-                "upload_type": "UPLOAD_BY_FILE",
-                "file_name": f.filename,
-                "file_size": f.content_length,
+                "upload_param": {
+                    "upload_type": "UPLOAD_BY_FILE",
+                    "video_name": f.filename,
+                    "video_size": f.content_length,
+                },
             },
             timeout=15,
         )
@@ -262,7 +238,7 @@ def automation_tiktok_video():
         data = init_resp.json()["data"]
         video_id, upload_addr = data["video_id"], data["upload_address"]
 
-        # 2) UPLOAD
+        # 2) UPLOAD binary
         put_resp = requests.put(
             upload_addr,
             headers={"Content-Type": "application/octet-stream"},
@@ -286,11 +262,9 @@ def automation_tiktok_video():
         status = publish_resp.json().get("data", {}).get("status", "PENDING")
 
     except requests.HTTPError as e:
-        # pobierz dokładny komunikat z odpowiedzi API
         try:
-            err_json = e.response.json()
-            detail = err_json.get("message") or err_json.get("description") or err_json
-        except ValueError:
+            detail = e.response.json().get("message")
+        except Exception:
             detail = e.response.text[:200]
         flash(f"Błąd TikTok API ({e.response.status_code}): {detail}", "error")
         current_app.logger.error("[TikTok upload] %s | %s", e, detail)
@@ -304,9 +278,6 @@ def automation_tiktok_video():
     flash(f"🎉 Wideo {video_id} wysłane (status: {status})!", "success")
     return redirect(url_for("automation.automation_tiktok_video"))
 
-# ────────────────────────────────────────────────────────────────────
-# ALIAS (ułatwia url_for w szablonach)
-# ────────────────────────────────────────────────────────────────────
 automation_bp.add_url_rule(
     "/tiktok/video",
     endpoint="automation_tiktok_video",
@@ -314,33 +285,27 @@ automation_bp.add_url_rule(
     methods=["GET", "POST"],
 )
 
-# ────────────────────────────────────────────────────────────────────
-# FACEBOOK – placeholder
-# ────────────────────────────────────────────────────────────────────
+# ─────────────────────────  FACEBOOK PLACEHOLDER  ──────────────────
 @automation_bp.route("/facebook")
 def automation_facebook():
-    return render_template_string(
-        """<!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8">
-        <title>Facebook</title></head>
-        <body style="font-family:Arial,sans-serif;padding:20px">
+    return render_template_string("""<!DOCTYPE html><html lang="pl"><head>
+        <meta charset="UTF-8"><title>Facebook</title></head><body
+        style="font-family:Arial,sans-serif;padding:20px">
           <h1>Automatyzacja Facebook</h1><p>Placeholder...</p>
           <p><a href="{{ url_for('automation.automation_home') }}">← Powrót</a></p>
-        </body></html>"""
-    )
+        </body></html>""")
 
 @automation_bp.route("/facebook/publish", methods=["GET", "POST"])
 def automation_facebook_publish():
     if request.method == "GET":
-        return render_template_string(
-            """<!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8">
-              <title>Publikuj na FB</title></head>
-              <body style="font-family:Arial,sans-serif;padding:20px">
+        return render_template_string("""<!DOCTYPE html><html lang="pl"><head>
+              <meta charset="UTF-8"><title>Publikuj na FB</title></head><body
+              style="font-family:Arial,sans-serif;padding:20px">
                 <h1>Publikuj na Facebooku</h1>
                 <form method="post"><textarea name="content"></textarea><br>
                   <button type="submit">Publikuj</button></form>
                 <p><a href="{{ url_for('automation.automation_facebook') }}">← Powrót</a></p>
-              </body></html>"""
-        )
+              </body></html>""")
     publish_post_to_facebook(request.form["content"])
     flash("Opublikowano na Facebooku.", "success")
     return redirect(url_for("automation.automation_facebook"))

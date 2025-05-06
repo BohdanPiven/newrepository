@@ -134,12 +134,58 @@ def tiktok_events():
 def automation_tiktok_timeline():
     tpl = """<!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8">
       <title>Timeline TikTok</title>
-      … (bez zmian – skrócone dla czytelności) …
-    </body></html>"""
+      <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet">
+      <style>
+        body{font-family:Arial,sans-serif;background:#f2f2f2;padding:20px}
+        .card{max-width:900px;margin:20px auto;background:#fff;padding:20px;border-radius:8px;
+          box-shadow:0 2px 5px rgba(0,0,0,0.1);}
+        nav a{margin:0 10px;color:#1f8ef1;text-decoration:none;}
+        nav a:hover{text-decoration:underline;}
+      </style></head><body>
+      <div class="card">
+        <h1>Timeline TikTok</h1>
+        <nav>
+          <a href="{{ url_for('automation.automation_home') }}">Główna</a> |
+          <a href="{{ url_for('automation.automation_tiktok_plan') }}">Plan treści</a> |
+          <a href="{{ url_for('automation.automation_tiktok_rodzaje') }}">Rodzaje</a> |
+          <a href="{{ url_for('automation.automation_tiktok_scenariusze') }}">Scenariusze</a> |
+          <a href="{{ url_for('automation.automation_tiktok_timeline') }}">Timeline</a> |
+          <a href="{{ url_for('automation.automation_tiktok_video') }}">Wideo</a>
+        </nav>
+        <div id="calendar" style="margin-top:20px"></div>
+        <p><a href="{{ url_for('automation.automation_tiktok') }}">← Powrót</a></p>
+      </div>
+      <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+      <script>
+        document.addEventListener('DOMContentLoaded', function() {
+          new FullCalendar.Calendar(
+            document.getElementById('calendar'),
+            { initialView:'dayGridMonth', locale:'pl',
+              events:'{{ url_for(\"automation.tiktok_events\") }}' }).render();
+        });
+      </script></body></html>"""
     return render_template_string(tpl)
 
-# ───────────────────  ROUTES STATYCZNE (rodzaje, scenariusze)  ─────
-# … (bez zmian) …
+# ──────────  ROUTES STATYCZNE — RODZAJE & SCENARIUSZE  ─────────────
+@automation_bp.route("/tiktok/rodzaje")
+def automation_tiktok_rodzaje():
+    return render_template_string("""<!DOCTYPE html><html lang="pl"><head>
+        <meta charset="UTF-8"><title>Rodzaje wideo</title></head><body
+        style="font-family:Arial,sans-serif;padding:20px">
+          <h1>Rodzaje wideo na TikToku</h1>
+          <p>Poradniki, Q&A, kulisy pracy itp.</p>
+          <p><a href="{{ url_for('automation.automation_tiktok') }}">← Powrót</a></p>
+        </body></html>""")
+
+@automation_bp.route("/tiktok/scenariusze")
+def automation_tiktok_scenariusze():
+    return render_template_string("""<!DOCTYPE html><html lang="pl"><head>
+      <meta charset="UTF-8"><title>Scenariusze</title></head><body
+      style="font-family:Arial,sans-serif;padding:20px">
+        <h1>Scenariusze Postów i Wytyczne</h1>
+        <p>Przykładowe schematy i wytyczne.</p>
+        <p><a href="{{ url_for('automation.automation_tiktok') }}">← Powrót</a></p>
+      </body></html>""")
 
 # ───────────────────  UPLOAD WIDEO  ────────────────────────────────
 @automation_bp.route("/tiktok/video", methods=["GET", "POST"])
@@ -166,10 +212,10 @@ def automation_tiktok_video():
         return redirect(url_for("automation.automation_tiktok_video"))
 
     try:
-        # 1) INIT  – source_info z chunkowaniem ≤ 5 MB
+        # 1) INIT
         size        = f.content_length
         chunk_size  = min(size, 5 * 1024 * 1024)
-        chunk_count = -(-size // chunk_size)   # ceil
+        chunk_count = -(-size // chunk_size)
 
         init_resp = requests.post(
             "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/",
@@ -189,12 +235,12 @@ def automation_tiktok_video():
             },
             timeout=15,
         )
-        current_app.logger.debug("INIT raw response: %s", init_resp.text)
+        current_app.logger.debug("INIT raw: %s", init_resp.text)
         init_resp.raise_for_status()
         data = init_resp.json()["data"]
         video_id, upload_addr = data["video_id"], data["upload_address"]
 
-        # 2) UPLOAD  – jeden chunk
+        # 2) UPLOAD
         put_resp = requests.put(
             upload_addr,
             headers={"Content-Type": "application/octet-stream"},
@@ -214,13 +260,11 @@ def automation_tiktok_video():
             json={"video_id": video_id},
             timeout=15,
         )
-        current_app.logger.debug("PUBLISH raw response: %s", publish_resp.text)
+        current_app.logger.debug("PUBLISH raw: %s", publish_resp.text)
         publish_resp.raise_for_status()
         status = publish_resp.json().get("data", {}).get("status", "PENDING")
 
     except requests.HTTPError as e:
-        # pokaż dokładny błąd
-        detail = None
         try:
             detail = e.response.json()
         except Exception:

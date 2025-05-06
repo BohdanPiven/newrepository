@@ -29,7 +29,7 @@ AUTH_URL  = "https://www.tiktok.com/v2/auth/authorize"
 TOKEN_URL = "https://open.tiktokapis.com/v2/oauth/token/"
 
 # ⚠️ Pełny zakres – user info + upload wideo
-SCOPES = "user.info.basic video.upload video.list"
+SCOPES = "user.info.basic,video.upload,video.list"
 
 # -------------------------------------------------------------------
 

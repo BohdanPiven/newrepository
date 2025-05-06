@@ -11,7 +11,7 @@ from app import db
 from automation_models import ScheduledPost
 from selenium_facebook_post import publish_post_to_facebook
 
-TIKTOK_CLIENT_KEY = getenv("TIKTOK_CLIENT_KEY")  # do nagłówka X‑Client‑Id
+TIKTOK_CLIENT_KEY = getenv("TIKTOK_CLIENT_KEY")      # do nagłówka X‑Client‑Id
 
 automation_bp = Blueprint("automation", __name__, url_prefix="/automation")
 
@@ -90,15 +90,11 @@ def automation_tiktok_plan():
     if request.method == "POST":
         d = datetime.strptime(request.form["post_date"], "%Y-%m-%d").date()
         t = datetime.strptime(request.form["post_time"], "%H:%M").time()
-        new = ScheduledPost(
-            date=d,
-            time=t,
-            topic=request.form["topic"],
-            description=request.form["description"],
-            user_id=uid,
-        )
-        db.session.add(new)
-        db.session.commit()
+        new = ScheduledPost(date=d, time=t,
+                            topic=request.form["topic"],
+                            description=request.form["description"],
+                            user_id=uid)
+        db.session.add(new); db.session.commit()
         flash("Dodano wpis.", "success")
         return redirect(url_for("automation.automation_tiktok_plan"))
 
@@ -216,7 +212,8 @@ def automation_tiktok_video():
         return redirect(url_for("automation.automation_tiktok_video"))
 
     try:
-        # 1) INIT
+        # 1) INIT  – prawidłowy payload z source_info
+        size = f.content_length
         init_resp = requests.post(
             "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/",
             headers={
@@ -226,11 +223,12 @@ def automation_tiktok_video():
             },
             json={
                 "open_id": session["tiktok_open_id"],
-                "upload_param": {
-                    "upload_type": "UPLOAD_BY_FILE",
-                    "video_name": f.filename,
-                    "video_size": f.content_length,
-                },
+                "source_info": {
+                    "source": "FILE_UPLOAD",
+                    "video_size": size,
+                    "chunk_size": size,
+                    "total_chunk_count": 1
+                }
             },
             timeout=15,
         )

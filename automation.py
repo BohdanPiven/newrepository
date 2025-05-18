@@ -174,7 +174,6 @@ def automation_tiktok_video():
         flash("Musisz się połączyć z TikTok.", "error")
         return redirect(url_for("automation.automation_tiktok"))
 
-    # ---------- formularz ----------
     if request.method == "GET":
         return render_template_string("""<!DOCTYPE html><html lang="pl"><head>
           <meta charset="UTF-8"><title>Upload wideo TikTok</title></head><body style="font-family:Arial;padding:20px">
@@ -192,7 +191,7 @@ def automation_tiktok_video():
         return redirect(url_for("automation.automation_tiktok_video"))
 
     try:
-        # 1) INIT
+        # ---------- 1) INIT ----------
         size = f.content_length or 0
         if size == 0:
             pos = f.stream.tell(); f.stream.seek(0, 2); size = f.stream.tell(); f.stream.seek(pos)
@@ -202,75 +201,75 @@ def automation_tiktok_video():
         chunk_size  = min(size, 5 * 1024 * 1024)
         chunk_count = math.ceil(size / chunk_size)
 
-        init_body = {
-            "open_id": session["tiktok_open_id"],
-            "source_info": {
-                "source": "FILE_UPLOAD",
-                "video_size": size,
-                "chunk_size": chunk_size,
-                "total_chunk_count": chunk_count
-            }
-        }
         init = requests.post(
             "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/",
-            headers={"Authorization": f"Bearer {session['tiktok_access_token']}",
-                     "Accept": "application/json", "X-Client-Id": TIKTOK_CLIENT_KEY},
-            json=init_body, timeout=15)
+            headers={
+                "Authorization": f"Bearer {session['tiktok_access_token']}",
+                "Accept": "application/json",
+                "X-Client-Id": TIKTOK_CLIENT_KEY},
+            json={
+                "open_id": session["tiktok_open_id"],
+                "source_info": {
+                    "source": "FILE_UPLOAD",
+                    "video_size": size,
+                    "chunk_size": chunk_size,
+                    "total_chunk_count": chunk_count}},
+            timeout=15)
         init.raise_for_status()
-        logger.debug("INIT raw: %s", init.text)
-        d = init.json()["data"]
-        video_id  = d.get("video_id") or d.get("publish_id")
-        base_url  = d.get("upload_address") or d.get("upload_url")
-        if not (video_id and base_url):
-            raise RuntimeError(f"Błędna odpowiedź INIT: {d}")
+        log.debug("INIT raw: %s", init.text)
+        data = init.json()["data"]
+        video_id   = data.get("video_id") or data.get("publish_id")
+        upload_url = data.get("upload_address") or data.get("upload_url")
+        if not (video_id and upload_url):
+            raise RuntimeError(f"INIT bez wymaganych pól: {data}")
 
         mime = mimetypes.guess_type(f.filename)[0] or "video/mp4"
 
-        # 2) UPLOAD (≤5 MB → pojedynczy PUT; >5 MB → pętla PUT part_number=0..n-1)
-        def put_chunk(url, data_bytes):
-            headers = {"Content-Type": mime, "Content-Length": str(len(data_bytes))}
-            r = requests.put(url, headers=headers, data=data_bytes, timeout=120)
-            if r.status_code == 404:  # fallback do POST multipart (starszy sandbox)
-                files = {"file": (f.filename, io.BytesIO(data_bytes), mime)}
-                r = requests.post(url, files=files, timeout=120)
-            r.raise_for_status()
+        # ---------- 2) UPLOAD ----------
+        f.stream.seek(0)
+        body = f.stream.read()
 
-        if chunk_count == 1:
-            f.stream.seek(0); blob = f.stream.read()
-            put_chunk(base_url, blob)
-        else:
-            for idx in range(chunk_count):
-                f.stream.seek(idx * chunk_size)
-                blob = f.stream.read(chunk_size)
-                put_chunk(f"{base_url}&part_number={idx}", blob)
+        # 2a) próbuj POST raw (reżim sandboxu maj-25)
+        r = requests.post(upload_url, data=body,
+                          headers={"Content-Type": mime,
+                                   "Content-Length": str(len(body))},
+                          timeout=120)
+        if r.status_code == 404:
+            # 2b) fallback: PUT raw
+            r = requests.put(upload_url, data=body,
+                             headers={"Content-Type": mime,
+                                      "Content-Length": str(len(body))},
+                             timeout=120)
+        r.raise_for_status()
+        log.debug("UPLOAD %s %s", r.request.method, r.status_code)
 
-        # 3) PUBLISH
-        pub_endpoint = ("https://open.tiktokapis.com/v2/post/publish/video/upload/"
-                        if "video_id" in d else
-                        "https://open.tiktokapis.com/v2/post/publish/inbox/video/upload/")
-        pub_payload  = {"video_id": video_id} if "video_id" in d else {"publish_id": video_id}
-        pub = requests.post(
-            pub_endpoint,
+        # ---------- 3) PUBLISH ----------
+        pub_ep = ("https://open.tiktokapis.com/v2/post/publish/video/upload/"
+                  if "video_id" in data else
+                  "https://open.tiktokapis.com/v2/post/publish/inbox/video/upload/")
+        pub_pl = {"video_id": video_id} if "video_id" in data else {"publish_id": video_id}
+        pub = requests.post(pub_ep,
             headers={"Authorization": f"Bearer {session['tiktok_access_token']}",
-                     "Accept": "application/json", "X-Client-Id": TIKTOK_CLIENT_KEY},
-            json=pub_payload, timeout=15)
-        logger.debug("PUBLISH raw: %s", pub.text)
+                     "Accept": "application/json",
+                     "X-Client-Id": TIKTOK_CLIENT_KEY},
+            json=pub_pl, timeout=15)
         pub.raise_for_status()
         status = pub.json().get("data", {}).get("status", "PENDING")
+        log.debug("PUBLISH raw: %s", pub.text)
 
     except requests.HTTPError as e:
         flash(f"Błąd TikTok API {e.response.status_code}: {e.response.text[:300]}", "error")
-        logger.error("HTTPError upload: %s | %s", e, e.response.text)
+        log.error("HTTPError upload: %s | %s", e, e.response.text)
         return redirect(url_for("automation.automation_tiktok_video"))
     except Exception as ex:
         flash(f"Upload error: {ex}", "error")
-        logger.exception("Upload crash")
+        log.exception("Upload crash")
         return redirect(url_for("automation.automation_tiktok_video"))
 
     flash(f"🎉 Wideo {video_id} wysłane (status: {status})!", "success")
     return redirect(url_for("automation.automation_tiktok_video"))
 
-# ─────────────────────────  FACEBOOK PLACEHOLDER  ──────────────────
+# -------------------  FACEBOOK PLACEHOLDER  ------------------------
 @automation_bp.route("/facebook", endpoint="automation_facebook")
 def automation_facebook():
     return render_template_string("""<!DOCTYPE html><html lang="pl"><head>

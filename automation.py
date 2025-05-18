@@ -1,20 +1,20 @@
 # automation.py
-import math, mimetypes, requests, logging, io
+import math, mimetypes, requests, io, logging
 from datetime import datetime
 from os import getenv
 from flask import (
     Blueprint, render_template_string, url_for, request,
     flash, redirect, session, jsonify, get_flashed_messages, current_app
 )
-
 from app import db
 from automation_models import ScheduledPost
 from selenium_facebook_post import publish_post_to_facebook
 
 TIKTOK_CLIENT_KEY = getenv("TIKTOK_CLIENT_KEY", "")
-
 automation_bp = Blueprint("automation", __name__, url_prefix="/automation")
+
 logger = logging.getLogger(__name__)
+log = logger          # <── alias, żeby „log.” działało
 
 # ─────────────────────────  PANEL HOME  ────────────────────────────
 @automation_bp.route("/", endpoint="automation_home")
@@ -191,7 +191,7 @@ def automation_tiktok_video():
         return redirect(url_for("automation.automation_tiktok_video"))
 
     try:
-        # ---------- 1) INIT ----------
+        # 1) INIT
         size = f.content_length or 0
         if size == 0:
             pos = f.stream.tell(); f.stream.seek(0, 2); size = f.stream.tell(); f.stream.seek(pos)
@@ -216,7 +216,7 @@ def automation_tiktok_video():
                     "total_chunk_count": chunk_count}},
             timeout=15)
         init.raise_for_status()
-        log.debug("INIT raw: %s", init.text)
+        log.debug("INIT raw: %s", init.text)   # <── teraz działa
         data = init.json()["data"]
         video_id   = data.get("video_id") or data.get("publish_id")
         upload_url = data.get("upload_address") or data.get("upload_url")
@@ -225,25 +225,19 @@ def automation_tiktok_video():
 
         mime = mimetypes.guess_type(f.filename)[0] or "video/mp4"
 
-        # ---------- 2) UPLOAD ----------
-        f.stream.seek(0)
-        body = f.stream.read()
-
-        # 2a) próbuj POST raw (reżim sandboxu maj-25)
+        # 2) UPLOAD  ─ pojedynczy POST raw, fallback PUT
+        f.stream.seek(0); body = f.stream.read()
         r = requests.post(upload_url, data=body,
-                          headers={"Content-Type": mime,
-                                   "Content-Length": str(len(body))},
+                          headers={"Content-Type": mime, "Content-Length": str(len(body))},
                           timeout=120)
         if r.status_code == 404:
-            # 2b) fallback: PUT raw
             r = requests.put(upload_url, data=body,
-                             headers={"Content-Type": mime,
-                                      "Content-Length": str(len(body))},
+                             headers={"Content-Type": mime, "Content-Length": str(len(body))},
                              timeout=120)
         r.raise_for_status()
         log.debug("UPLOAD %s %s", r.request.method, r.status_code)
 
-        # ---------- 3) PUBLISH ----------
+        # 3) PUBLISH
         pub_ep = ("https://open.tiktokapis.com/v2/post/publish/video/upload/"
                   if "video_id" in data else
                   "https://open.tiktokapis.com/v2/post/publish/inbox/video/upload/")
@@ -268,6 +262,7 @@ def automation_tiktok_video():
 
     flash(f"🎉 Wideo {video_id} wysłane (status: {status})!", "success")
     return redirect(url_for("automation.automation_tiktok_video"))
+
 
 # -------------------  FACEBOOK PLACEHOLDER  ------------------------
 @automation_bp.route("/facebook", endpoint="automation_facebook")
